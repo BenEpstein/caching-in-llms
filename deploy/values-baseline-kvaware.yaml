@@ -13,10 +13,12 @@ servingEngineSpec:
   modelSpec:
     - name: "llm"
       repository: "lmcache/vllm-openai"
-      # IMPORTANT: engine lmcache version must match the router image's lmcache
-      # (controller<->worker ZMQ schema skew breaks registration SILENTLY).
-      # v0.3.9post2 ships lmcache 0.3.9.post2 but lmstack-router:latest has 0.3.11.
-      tag: "v0.5.1rc2"
+      # IMPORTANT: engine lmcache version must stay protocol-compatible with the
+      # router image's lmcache (controller<->worker ZMQ schema skew breaks
+      # registration SILENTLY). lmstack-router:latest carries lmcache 0.3.11;
+      # v0.5.1rc2 (lmcache 0.5.1rc2) is too far ahead — v0.3.9post2 is the
+      # closest official engine release to the router's 0.3.11.
+      tag: "v0.3.9post2"
       modelURL: "Qwen/Qwen2.5-3B-Instruct"  # ungated — no HF token needed
       replicaCount: 2               # one per GPU node
       # GPU workers are heavily over-requested by idle platform pods (worker0: only ~5Gi
