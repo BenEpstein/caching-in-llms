@@ -10,6 +10,17 @@ with a pointer to the evidence — those matter as much as code.
 
 ## 2026-07-04 (later) — Baseline VALIDATED end-to-end
 
+### Added (post-validation polish)
+- **External Routes — no port-forward needed** (VPN required, documented in `deploy/README.md`):
+  model API `https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1` (OpenAI-compatible,
+  no key), Grafana `https://grafana-cache-llm.apps.gapu-2.customers.k8s.co.il`
+  (admin / cache-llm, password set in values — fine for VPN-only cluster) (Eliad).
+
+### Fixed (post-validation polish)
+- LMCache/vLLM dashboards showed "datasource not found": the shipped dashboard JSONs
+  hardcode datasource uid `prometheus`; pinned our provisioned datasource to that uid in
+  values. Verified: dashboards load, all 3 Prometheus targets up (Eliad).
+
 ### Fixed
 - **Found the working official image pairing:** router `lmstack-router:0.1.9.dev9-g37bafbcf5.d20260107`
   + engines `vllm-openai:v0.3.9post2` — both lmcache 0.3.9post2 (pin-history archaeology:
