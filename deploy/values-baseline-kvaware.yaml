@@ -6,6 +6,10 @@
 
 servingEngineSpec:
   runtimeClassName: ""
+  # Both GPUs are always fully occupied -> RollingUpdate deadlocks (new pods
+  # Pending on GPU, old pods not killed until new ready). Recreate avoids it.
+  strategy:
+    type: Recreate
   modelSpec:
     - name: "llm"
       repository: "lmcache/vllm-openai"
