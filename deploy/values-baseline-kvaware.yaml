@@ -73,3 +73,13 @@ routerSpec:
   lmcacheControllerHeartbeatPort: 9002
   sessionKey: "x-user-id"
   engineScrapeInterval: 5
+
+  # kvaware router init (LMCache controller + transformers imports) takes ~20s;
+  # the default startup probe (5s delay, 3x5s failures) kills it mid-boot.
+  startupProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30    # up to ~160s to come up
+    httpGet:
+      path: /health
+      port: router-port
