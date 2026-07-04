@@ -60,6 +60,16 @@ parallel stack.
 Two people work on this repo. **Always `git pull` from the remote before starting work** so you're
 building on the latest code, and pull again before pushing to avoid conflicts.
 
+## Changelog discipline
+
+`CHANGELOG.md` is the project's shared memory. **Update it in the same commit as the work** (or at
+minimum once per session): add to the current date's entry, newest entry on top, using
+**Added / Changed / Decided / Fixed** subsections. `Decided` is mandatory for any
+project-direction decision and must point at the evidence (doc, report, or benchmark) behind it —
+decisions without recorded rationale get re-litigated. Keep entries one or two lines each; the
+changelog indexes the work, it doesn't duplicate it. Before starting a session, read the top entry
+to catch up on what the other collaborator did.
+
 ## Reference material
 
 - `docs/references/Final Project Guidelines.pdf` — the spec. Authoritative.
