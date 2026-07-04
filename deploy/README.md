@@ -46,6 +46,22 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
 
 ## Operational gotchas (learned the hard way)
 
+0. **UPSTREAM CHART BUG — router Service missing controller ports.** The chart's
+   `service-router.yaml` exposes only 9000 (pull), but LMCache workers register on the
+   **reply port 9001** and heartbeat on 9002. Result: registration hangs silently,
+   `registered_workers_count` stays 0, all KV-admit events are rejected, every lookup
+   misses, and kvaware degrades to QPS routing with **no error anywhere**. Diagnose via
+   the router's `/metrics`: `lmcache:cache_controller_registered_workers_count`.
+   Fix (re-apply after every `helm upgrade` — helm reverts it):
+
+   ```bash
+   oc patch svc stack-router-service -n cache-llm --type=json -p '[
+    {"op":"add","path":"/spec/ports/-","value":{"name":"lmcache-reply","port":9001,"targetPort":9001,"protocol":"TCP"}},
+    {"op":"add","path":"/spec/ports/-","value":{"name":"lmcache-heartbeat","port":9002,"targetPort":9002,"protocol":"TCP"}}]'
+   ```
+
+   Then restart the engines (gotcha #1). → Good candidate for an upstream PR.
+
 1. **Router restart ⇒ engine restart.** LMCache workers register with the router's
    controller once at engine startup and never re-register. If the router pod restarts
    (crash, redeploy of our loadaware image, probe kill), its worker registry comes back
