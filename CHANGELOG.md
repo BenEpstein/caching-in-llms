@@ -8,6 +8,23 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-07-04 (later) — Baseline VALIDATED end-to-end
+
+### Fixed
+- **Found the working official image pairing:** router `lmstack-router:0.1.9.dev9-g37bafbcf5.d20260107`
+  + engines `vllm-openai:v0.3.9post2` — both lmcache 0.3.9post2 (pin-history archaeology:
+  production-stack pinned 0.3.9post2 until 2026-01-14; no official engine image carries the
+  0.3.11 that `:latest` needs). Older router = single controller socket on 9000, so the chart's
+  stock Service suffices; reply/heartbeat flags removed from routerSpec (Eliad).
+
+### Added
+- **Prefix-affinity validation PASSED:** both workers registered
+  (`Registered instance-worker` ×2 in router logs); 3 requests sharing a 1200-token prefix —
+  first falls back (cold), second and third log `found by kvaware router` and land on the same
+  instance, latency 0.83s → 0.39s from the KV hit. Ecosystem fully operational: 2×A10 engines,
+  kvaware router, Grafana dashboards, Prometheus, benchmark harness. Next: agree on the
+  optimization design (Eliad).
+
 ## 2026-07-04 — Direction pivot, deep-research verdict, baseline decision, first benchmark code
 
 ### Decided
