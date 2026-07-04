@@ -145,6 +145,10 @@ kube-prometheus-stack:
         apiVersion: 1
         datasources:
           - name: Prometheus
+            # the shipped vLLM/LMCache dashboards hardcode datasource uid
+            # "prometheus" — without this pin Grafana assigns a random uid
+            # and the dashboards show "datasource not found"
+            uid: prometheus
             type: prometheus
             url: http://stack-prometheus:9090
             isDefault: true
