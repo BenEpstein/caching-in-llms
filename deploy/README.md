@@ -44,6 +44,24 @@ curl -s localhost:8000/v1/completions -H 'Content-Type: application/json' -d '{
 oc logs deploy/stack-router -n cache-llm | grep -i "routing"
 ```
 
+## Operational gotchas (learned the hard way)
+
+1. **Router restart ⇒ engine restart.** LMCache workers register with the router's
+   controller once at engine startup and never re-register. If the router pod restarts
+   (crash, redeploy of our loadaware image, probe kill), its worker registry comes back
+   empty, every KV lookup misses, and kvaware silently degrades to QPS routing —
+   requests alternate between instances. Fix:
+   `oc rollout restart deployment/stack-llm-deployment-vllm -n cache-llm`
+   after every router restart. Symptom to check: router logs show
+   `Routing request ... with session id None` alternating, and no
+   `found by kvaware router` lines.
+2. **RollingUpdate deadlocks on full GPUs** — values set `strategy: Recreate`.
+3. **Arbitrary UID:** `HOME=/` is not writable; values set `HOME=/tmp` or flashinfer
+   crashes the engine core at import.
+4. **Router startup probe:** kvaware init takes ~20s+; chart default kills it. Values
+   relax `failureThreshold`.
+5. **Shared model PVC across nodes needs RWX** (CephFS), not the default ceph-rbd RWO.
+
 ## OpenShift notes
 
 - The `lmcache/vllm-openai` image runs as non-root; if pods fail with SCC errors, grant
