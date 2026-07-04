@@ -43,6 +43,16 @@ servingEngineSpec:
         workerHeartbeatTime: "30"
         logLevel: "INFO"
 
+      # OpenShift runs containers with an arbitrary UID and HOME=/ (not writable):
+      # flashinfer/vllm/triton try to mkdir ~/.cache at startup and crash.
+      # Point HOME at /tmp (writable at any UID). Model weights still go to the
+      # PVC via HF_HOME=/data (set by the chart).
+      env:
+        - name: HOME
+          value: "/tmp"
+        - name: XDG_CACHE_HOME
+          value: "/tmp/.cache"
+
 routerSpec:
   repository: "lmcache/lmstack-router"
   tag: "latest"                     # baseline; our loadaware build will pin its own tag
