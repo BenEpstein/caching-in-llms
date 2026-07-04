@@ -18,6 +18,11 @@ with a pointer to the evidence — those matter as much as code.
   stock Service suffices; reply/heartbeat flags removed from routerSpec (Eliad).
 
 ### Added
+- `docs/upstream-findings.md` — the four control-plane findings written up for the final
+  report + upstream issues/PRs: one-shot worker registration (router restart silently kills
+  kvaware), chart Service missing controller ports, the image-pairing incompatibility matrix
+  (incl. broken official tutorial), and the silent-failure design critique; includes the
+  reusable affinity-probe snippet (Eliad).
 - **Prefix-affinity validation PASSED:** both workers registered
   (`Registered instance-worker` ×2 in router logs); 3 requests sharing a 1200-token prefix —
   first falls back (cold), second and third log `found by kvaware router` and land on the same
