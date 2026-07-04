@@ -10,12 +10,21 @@ servingEngineSpec:
     - name: "llm"
       repository: "lmcache/vllm-openai"
       tag: "v0.3.9post2"            # pinned; do not use :latest
-      modelURL: "PLACEHOLDER_MODEL" # set via --set, see README
+      modelURL: "Qwen/Qwen2.5-3B-Instruct"  # ungated — no HF token needed
       replicaCount: 2               # one per GPU node
-      requestCPU: 8
-      requestMemory: "24Gi"
+      # GPU workers are heavily over-requested by idle platform pods (worker0: only ~5Gi
+      # requestable) but actual free RAM is ~22Gi+. Small requests for schedulability,
+      # NO memory limit so the pod can burst. Keep both replicas identical.
+      requestCPU: 6
+      requestMemory: "4Gi"
       requestGPU: 1
-      pvcStorage: "50Gi"            # default SC: ocs-external-storagecluster-ceph-rbd
+      shmSize: "4Gi"
+      pvcStorage: "50Gi"
+      # 2 replicas on different nodes share the model PVC -> must be RWX (CephFS).
+      # Default ceph-rbd is RWO and would strand the second replica in Pending.
+      storageClass: "ocs-external-storagecluster-cephfs"
+      pvcAccessMode:
+        - ReadWriteMany
 
       vllmConfig:
         enablePrefixCaching: true
@@ -24,7 +33,7 @@ servingEngineSpec:
 
       lmcacheConfig:
         enabled: true
-        cpuOffloadingBufferSize: "16"   # GB of CPU RAM for KV offload
+        cpuOffloadingBufferSize: "4"    # GB of CPU RAM for KV offload (node RAM is tight)
         enableController: true
         controllerPort: 9000
         controllerReplyPort: 9001
@@ -33,10 +42,6 @@ servingEngineSpec:
         p2pInitPorts: "30081"
         workerHeartbeatTime: "30"
         logLevel: "INFO"
-
-      env:
-        - name: HF_HOME
-          value: "/data"
 
 routerSpec:
   repository: "lmcache/lmstack-router"
