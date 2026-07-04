@@ -38,6 +38,12 @@ servingEngineSpec:
         maxModelLen: 16384
         gpuMemoryUtilization: "0.90"
 
+      # Prometheus scraping of engine /metrics (vllm:num_requests_running etc.)
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          app.kubernetes.io/part-of: vllm-stack
+
       lmcacheConfig:
         enabled: true
         cpuOffloadingBufferSize: "4"    # GB of CPU RAM for KV offload (node RAM is tight)
@@ -86,3 +92,64 @@ routerSpec:
     httpGet:
       path: /health
       port: router-port
+
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      app.kubernetes.io/part-of: vllm-stack
+
+# ---------------------------------------------------------------------------
+# Observability: Prometheus + Grafana with the 3 shipped dashboards
+# (vllm, lmcache, model metrics). Lean footprint — cluster memory is tight.
+# ---------------------------------------------------------------------------
+grafanaDashboards:
+  enabled: true
+
+kube-prometheus-stack:
+  enabled: true
+  defaultRules:
+    create: false          # skip the k8s alert-rule zoo
+  alertmanager:
+    enabled: false
+  nodeExporter:
+    enabled: false
+  kubeStateMetrics:
+    enabled: false
+  # The cluster has an OLDER prometheus-operator CRD (owned by the Run:AI install);
+  # the subchart's Prometheus CR uses fields that CRD doesn't know
+  # (.spec.enableOTLPReceiver) -> server-side apply fails. CRDs are cluster-scoped,
+  # not ours to upgrade. So: no operator, no Prometheus CR — we run a plain
+  # single-pod Prometheus instead (deploy/prometheus.yaml) and keep only Grafana
+  # + the dashboard configmaps from this subchart.
+  prometheusOperator:
+    enabled: false
+    admissionWebhooks:
+      enabled: false
+      patch:
+        enabled: false
+    tls:
+      enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://stack-prometheus:9090
+            isDefault: true
+    enabled: true
+    adminPassword: cache-llm
+    securityContext: null
+    initChownData:
+      enabled: false
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+      securityContext: null

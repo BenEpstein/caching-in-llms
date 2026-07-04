@@ -1,0 +1,112 @@
+# Plain single-pod Prometheus (no operator, no CRDs) for the cache-llm namespace.
+# Why not kube-prometheus-stack's Prometheus: the cluster carries an older
+# prometheus-operator CRD owned by another install; our CR fails server-side apply.
+# Storage is an emptyDir — experiment truth lives in exported CSVs, not TSDB history.
+#
+# Scrapes:
+#   - vLLM engine pods  (label model=llm, port 8000, /metrics)
+#   - router            (via service DNS,  port 80,  /metrics — includes
+#                        lmcache cache_controller_* gauges)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stack-prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stack-prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stack-prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stack-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: stack-prometheus
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stack-prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 30s
+    scrape_configs:
+      - job_name: vllm-engines
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_model]
+            regex: llm
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: $1:8000
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      - job_name: router
+        static_configs:
+          - targets: ["stack-router-service:80"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stack-prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stack-prometheus
+  template:
+    metadata:
+      labels:
+        app: stack-prometheus
+    spec:
+      serviceAccountName: stack-prometheus
+      containers:
+        - name: prometheus
+          image: quay.io/prometheus/prometheus:v2.53.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+          ports:
+            - containerPort: 9090
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: stack-prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stack-prometheus
+spec:
+  selector:
+    app: stack-prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
