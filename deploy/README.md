@@ -96,3 +96,16 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
 - PVCs use the default StorageClass (`ocs-external-storagecluster-ceph-rbd`).
 - Router discovers engines via the K8s API — the chart's RBAC handles this; verify with
   `oc auth can-i list pods --as=system:serviceaccount:cache-llm:stack-router-service-account`.
+
+## Access (no port-forward needed, VPN required)
+
+```bash
+oc create route edge llm --service=stack-router-service --port=router-sport -n cache-llm
+oc create route edge grafana --service=stack-grafana --port=http-web -n cache-llm
+```
+
+- Model API: https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1 (OpenAI-compatible, no key)
+- Grafana:   https://grafana-cache-llm.apps.gapu-2.customers.k8s.co.il (admin / cache-llm)
+
+Self-signed cert → `curl -k` / disable TLS verify in clients. Anyone on the cluster
+VPN can reach both.
