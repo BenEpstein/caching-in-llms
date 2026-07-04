@@ -11,6 +11,16 @@ with a pointer to the evidence — those matter as much as code.
 ## 2026-07-04 — Direction pivot, deep-research verdict, baseline decision, first benchmark code
 
 ### Decided
+- **No modifications to any production-stack component until the optimization design is agreed**
+  (Eliad, during deployment session). Official images only; the in-progress custom router-image
+  build (needed to align lmcache versions) was cancelled and its BuildConfig removed. Consequence:
+  baseline runs on `lmstack-router:latest` (lmcache 0.3.11) + `vllm-openai:v0.3.9post2`
+  (lmcache 0.3.9.post2) — the closest official pairing; kvaware registration with this pairing
+  is being validated now that the service-port fix is in.
+- Router-image builds, when we get to them, are additionally blocked by a cluster-level
+  QuayIntegration admission webhook (defunct Quay install never provisioned the builder SA in
+  `cache-llm`). Unblock options recorded in the session log; needs a cluster-scoped denylist
+  patch or local container tooling.
 - **Pivot from the May direction (fork SGLang + GDSF eviction) to KV-cache infrastructure.**
   A full-tier deep-research run (~180 sources, 6 depth investigations, adversarial review)
   compared KV offload/onload vs. KV-aware routing head-to-head for our rubric and hardware.
@@ -40,8 +50,11 @@ with a pointer to the evidence — those matter as much as code.
 - **Upstream chart bug (PR candidate):** router Service omits LMCache controller ports
   9001/9002 → worker registration hangs silently → kvaware degrades to QPS routing.
   Patched the Service; diagnose via router `/metrics` `registered_workers_count` (Eliad).
-- **lmcache version skew router↔engine** (0.3.11 vs 0.3.9.post2) silently breaks the
-  controller↔worker ZMQ protocol; engines moved to `vllm-openai:v0.5.1rc2` (Eliad).
+- **lmcache version skew router↔engine breaks the controller↔worker ZMQ protocol silently.**
+  Tried `vllm-openai:v0.5.1rc2` — its lmcache is 0.5.1rc2, a *major* jump past the router's
+  0.3.11 (register messages arrive post-port-fix but fail to decode; `reply_socket_message_count`
+  grows while `registered_workers_count` stays 0). Reverted to `v0.3.9post2`, the closest
+  official engine release; first fair compatibility test with ports fixed is in progress (Eliad).
 - OpenShift arbitrary-UID crash (`HOME=/` unwritable → flashinfer dies): `HOME=/tmp`;
   GPU rolling-update deadlock: `strategy: Recreate`; router startup-probe kill during
   ~20s kvaware init: relaxed threshold; Grafana default-datasource collision:
