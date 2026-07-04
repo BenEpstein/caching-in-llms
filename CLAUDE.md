@@ -55,15 +55,14 @@ utilization, throughput (queries/tokens per second). Any benchmark harness built
 these, and the vanilla-vs-extended comparison must hold the workload constant so differences are
 attributable to the policy alone.
 
-## Open decision: baseline framework (do this first)
+## Baseline framework: DECIDED (2026-07-04)
 
-§2 is the first real task and nothing else can proceed without it. Selection criteria from the PDF:
-maturity/community support and **ease of modification** (clear structure, tests, docs — because you
-must extend its eviction policy and ship unit tests). The PDF cites "KV cache" as a maturity example
-and the candidate extensions (cost-aware eviction, hierarchical RAM+disk cache, approximate/semantic
-matching) all point toward a request/response-level cache with a pluggable eviction policy rather than
-an attention-level KV cache that is hard to modify. **This choice is not yet made** — surface
-candidates and trade-offs to the user; do not silently assume one.
+Baseline = **vLLM Production Stack + LMCache** (KV-cache layer + its router). The project:
+extend LMCache's controller lookup to per-instance match info, add a `loadaware` routing
+strategy scoring cache-hit benefit vs. live instance load, and (stretch) hot-prefix KV
+replication. Full design: `docs/project-brief.md`. Code-level feasibility evidence with
+file/line references: `docs/feasibility-verification.md` (also the raw material for the
+§2 justification deliverable). Deployment configs for the 2×A10 OpenShift cluster: `deploy/`.
 
 ## Expected tooling (specified by the PDF, not yet present)
 

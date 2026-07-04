@@ -1,0 +1,56 @@
+# Baseline deployment: 2 vLLM replicas (1 per A10 GPU) + kvaware router.
+# Cluster: gapu-2 (OpenShift), 2x NVIDIA A10 23GB.
+# Derived from production-stack tutorials/assets/values-17-kv-aware.yaml.
+#
+# NOTE: model + hf_token secret are set at install time; see deploy/README.md.
+
+servingEngineSpec:
+  runtimeClassName: ""
+  modelSpec:
+    - name: "llm"
+      repository: "lmcache/vllm-openai"
+      tag: "v0.3.9post2"            # pinned; do not use :latest
+      modelURL: "PLACEHOLDER_MODEL" # set via --set, see README
+      replicaCount: 2               # one per GPU node
+      requestCPU: 8
+      requestMemory: "24Gi"
+      requestGPU: 1
+      pvcStorage: "50Gi"            # default SC: ocs-external-storagecluster-ceph-rbd
+
+      vllmConfig:
+        enablePrefixCaching: true
+        maxModelLen: 16384
+        gpuMemoryUtilization: "0.90"
+
+      lmcacheConfig:
+        enabled: true
+        cpuOffloadingBufferSize: "16"   # GB of CPU RAM for KV offload
+        enableController: true
+        controllerPort: 9000
+        controllerReplyPort: 9001
+        workerPorts: "8001"
+        p2pHost: "localhost"
+        p2pInitPorts: "30081"
+        workerHeartbeatTime: "30"
+        logLevel: "INFO"
+
+      env:
+        - name: HF_HOME
+          value: "/data"
+
+routerSpec:
+  repository: "lmcache/lmstack-router"
+  tag: "latest"                     # baseline; our loadaware build will pin its own tag
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4G"
+    limits:
+      cpu: "2"
+      memory: "4G"
+  routingLogic: "kvaware"
+  lmcacheControllerPort: 9000
+  lmcacheControllerReplyPort: 9001
+  lmcacheControllerHeartbeatPort: 9002
+  sessionKey: "x-user-id"
+  engineScrapeInterval: 5
