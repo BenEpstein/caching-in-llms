@@ -152,4 +152,9 @@ kube-prometheus-stack:
       dashboards:
         enabled: true
         label: grafana_dashboard
+      datasources:
+        # subchart injects its own default datasource (pointing at the disabled
+        # operator Prometheus) which collides with ours -> Grafana crashloops
+        # with "Only one datasource per organization can be marked as default"
+        defaultDatasourceEnabled: false
       securityContext: null

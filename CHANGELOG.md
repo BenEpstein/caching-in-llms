@@ -31,6 +31,21 @@ with a pointer to the evidence — those matter as much as code.
   emitting TTFT/E2E/token metrics to CSV (Eliad).
 - `deploy/` — OpenShift configs fit to cluster reality: RWX CephFS model PVC, burstable memory,
   `values-baseline-kvaware.yaml` (Eliad).
+- Observability on the cluster: Grafana (via kube-prometheus-stack subchart, operator/CR
+  disabled) + plain single-pod Prometheus (`deploy/prometheus.yaml`, 5s pod-SD scrape of
+  engines + router) with the shipped vLLM/LMCache dashboards preloaded (Eliad).
+- Stack deployed to `cache-llm` on gapu-2: router + 2× Qwen2.5-3B replicas, one per A10 (Eliad).
+
+### Fixed (deployment debugging — all documented in `deploy/README.md` gotchas)
+- **Upstream chart bug (PR candidate):** router Service omits LMCache controller ports
+  9001/9002 → worker registration hangs silently → kvaware degrades to QPS routing.
+  Patched the Service; diagnose via router `/metrics` `registered_workers_count` (Eliad).
+- **lmcache version skew router↔engine** (0.3.11 vs 0.3.9.post2) silently breaks the
+  controller↔worker ZMQ protocol; engines moved to `vllm-openai:v0.5.1rc2` (Eliad).
+- OpenShift arbitrary-UID crash (`HOME=/` unwritable → flashinfer dies): `HOME=/tmp`;
+  GPU rolling-update deadlock: `strategy: Recreate`; router startup-probe kill during
+  ~20s kvaware init: relaxed threshold; Grafana default-datasource collision:
+  `defaultDatasourceEnabled: false` (Eliad).
 - `docs/project-brief.md`, `docs/feasibility-verification.md` (Eliad).
 - `CHANGELOG.md` (this file) + changelog discipline in `CLAUDE.md`.
 - NotebookLM notebooks for grounded Q&A over the research corpora: `d5a7565e` (offload-vs-routing
