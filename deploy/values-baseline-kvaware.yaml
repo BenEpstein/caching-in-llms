@@ -70,7 +70,12 @@ servingEngineSpec:
 
 routerSpec:
   repository: "lmcache/lmstack-router"
-  tag: "latest"                     # baseline; our loadaware build will pin its own tag
+  # Pinned to the newest router built while production-stack pinned
+  # lmcache==0.3.9post2 (2025-11-14..2026-01-14 window, commit 37bafbcf) so the
+  # controller protocol EXACTLY matches the v0.3.9post2 engines. ":latest"
+  # carries lmcache 0.3.11 whose controller cannot decode 0.3.9post2 workers
+  # (and no official engine image carries 0.3.11 — they leapfrog each other).
+  tag: "0.1.9.dev9-g37bafbcf5.d20260107"
   resources:
     requests:
       cpu: "2"
@@ -80,8 +85,9 @@ routerSpec:
       memory: "4G"
   routingLogic: "kvaware"
   lmcacheControllerPort: 9000
-  lmcacheControllerReplyPort: 9001
-  lmcacheControllerHeartbeatPort: 9002
+  # NOTE: no lmcacheControllerReplyPort / HeartbeatPort — the 0.1.9-era router
+  # predates those flags (single-socket controller on 9000; registration and
+  # KV events all flow through the pull port, which the chart Service exposes).
   sessionKey: "x-user-id"
   engineScrapeInterval: 5
 
