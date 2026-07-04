@@ -61,6 +61,16 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
    ```
 
    Then restart the engines (gotcha #1). → Good candidate for an upstream PR.
+   (In practice helm's 3-way merge preserves the added ports across upgrades;
+   re-check with `oc get svc stack-router-service -o yaml` after chart-version bumps.)
+
+0b. **UPSTREAM PITFALL — lmcache version skew router↔engine.** The controller (router)
+   and workers (engines) speak msgspec-tagged ZMQ structs; schema drift between lmcache
+   versions makes registration fail **silently** (message stuck on the socket, zero
+   errors logged). We hit it with `lmstack-router:latest` (lmcache 0.3.11) vs
+   `vllm-openai:v0.3.9post2` (lmcache 0.3.9.post2). Rule: pin engine + router images
+   so both carry the same lmcache minor version. Check with:
+   `oc exec <pod> -- /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`
 
 1. **Router restart ⇒ engine restart.** LMCache workers register with the router's
    controller once at engine startup and never re-register. If the router pod restarts
