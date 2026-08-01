@@ -8,6 +8,22 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 — Fresh optimization-idea survey of production-stack `main`
+
+### Added
+- `docs/router-optimization-ideas.md` — survey of `main` @ `3314ee6` for second-optimization
+  candidates beyond the 2026-07-05 menu: F fast-path/tokenization (blocking event-loop work
+  in `KvawareRouter`, strongest new find), G work-left load signal (roadmap P2 "predictive
+  routing"), H tier-aware benefit discount (gated on a ½-day spike), I queuing policy
+  (Discussion/RFC-comment only), plus a prefixaware micro-PR for the upstream track.
+
+### Decided
+- **Adaptive β stays the second optimization** — upstream barely moved since the pin
+  (18 commits, no routing-logic changes; #876/#905 still open with the locality-vs-fairness
+  question still deferred), so the 2026-07-05 memo's evidence holds. New ideas slot in as:
+  G folded into the load-signal definition, F as low-risk third rung / first upstream PR.
+  Evidence: `docs/router-optimization-ideas.md`.
+
 ## 2026-07-05 (later) — Second-optimization deep-dive
 
 ### Decided
