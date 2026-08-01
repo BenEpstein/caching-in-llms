@@ -8,6 +8,17 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (docs consolidation) - Ticket #12 resolved
+
+### Changed
+- Deleted superseded exploration docs: `caching-landscape.md`, `router-optimization-ideas.md`,
+  `handoff-second-optimization.md` (git history keeps them). Remaining five docs carry
+  `status: live | frozen` headers; `handoff-core-implementation.md` header-only (in use by #4).
+
+### Decided
+- **Docs discipline (issue #12)**: decisions land in tickets + CHANGELOG only; `docs/` holds
+  artifacts, never rationale; `docs/decisions/` closed to new entries. Recorded in CLAUDE.md.
+
 ## 2026-08-01 (later still) - Ticket #2 resolved: repo cleanup + CI skeleton
 
 ### Added

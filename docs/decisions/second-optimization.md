@@ -1,5 +1,7 @@
 # Decision: Second Optimization = Adaptive β (feedback-controlled load weight)
 
+> status: frozen · 2026-08-01 · historical rationale record - do not base new decisions on it; verify against tickets + CHANGELOG. Last entry in `docs/decisions/`: new decisions land in tickets + CHANGELOG only.
+
 > **SUPERSEDED 2026-08-01 — flipped to runner-up E (core-only).** The flip condition this
 > memo pre-registered ("if the core is not landed and validated with most of the schedule
 > still ahead") triggered: the project sat idle 2026-07-05 → 08-01, the submission deadline

@@ -1,4 +1,6 @@
-# Feasibility Verification — Code-Level Findings
+# Feasibility Verification - Code-Level Findings
+
+> status: live · 2026-08-01 · raw material for the §2 baseline-justification deliverable; re-verify line refs against current upstream before citing
 
 > Verified 2026-07-04 against `vllm-project/production-stack` @ `1e973a3` (2026-06-26)
 > and `LMCache/LMCache` @ `bf20f51` (2026-07-04). All file/line references are to those commits.

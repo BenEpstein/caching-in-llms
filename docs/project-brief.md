@@ -1,5 +1,7 @@
 # Project: Load-Aware Prefix Routing for vLLM Production Stack
 
+> status: live · 2026-08-01 · design source of truth; decisions made after this date live in tickets + CHANGELOG, not here
+
 > Handoff brief for Claude Code. This document is the source of truth for the project.
 > Read it fully before writing code. Where it says "verify against current docs," do that —
 > versions of the Production Stack, LMCache, and vLLM change often.

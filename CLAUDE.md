@@ -70,6 +70,14 @@ decisions without recorded rationale get re-litigated. Keep entries one or two l
 changelog indexes the work, it doesn't duplicate it. Before starting a session, read the top entry
 to catch up on what the other collaborator did.
 
+## Docs discipline
+
+Decisions live in **GitHub issues + CHANGELOG only**; `docs/` holds artifacts (briefs,
+deliverable drafts, findings), never rationale. `docs/decisions/` is closed - no new entries.
+Every doc carries a status header (`> status: live | frozen · date · one-line trust note`).
+`frozen` means historical record: verify against tickets/CHANGELOG before relying on it,
+never base new decisions on it.
+
 ## Reference material
 
 - `docs/references/Final Project Guidelines.pdf` - the spec. Authoritative.
