@@ -8,6 +8,44 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 — Restart after 4-week pause; upstream re-verification
+
+### Decided
+- **Sequencing: core first, second optimization deferred.** Build and validate the core
+  (multi-instance lookup extension + `loadaware` static β) before committing to adaptive β.
+  Adaptive β remains the intended rung 4 but is no longer a precondition for a complete
+  project — it collapses to the α/β sensitivity sweep §5 requires anyway (Eliad).
+- **Upstream-PR target moves off LMCache v1 `cache_controller`.** LMCache Q3 roadmap
+  (LMCache#4025, opened 2026-07-06) begins deprecating non-MP mode this quarter, so a
+  lookup-extension PR into v1 is unlikely to be accepted. The PR portfolio retargets to
+  production-stack (router Service ports 9001/9002, one-shot registration, image matrix)
+  plus production-stack#1016. Evidence: upstream re-verification, this session.
+- **Contribution reframed:** the novelty is the *placement policy*, not the lookup itself —
+  LMCache#4275 (merged 2026-07-28) added a fleet-wide key directory with per-instance
+  placement lists in the new `mp_coordinator`. Still novel for the path production-stack
+  actually uses; cite #4275/#4226 as concurrent related work.
+
+### Changed
+- Report must cite the **configured** `--engine-stats-interval 5` (deployed value), not the
+  15 s chart / 30 s CLI defaults, when arguing load-signal staleness for adaptive β.
+
+### Fixed
+- Baseline restored: engines were externally scaled to 0 for ~11 days and one A10 was held
+  by another namespace. Both GPUs reclaimed, `stack-llm-deployment-vllm` back to 2 replicas,
+  both workers re-registered with the controller, end-to-end completion verified via the
+  public Route (needs `curl -k` — self-signed cert in the ingress chain).
+
+### Verified (upstream, still true at 2026-08-01)
+- LMCache v1 `lookup()` is still first-instance-only (`kv_controller.py:380-387` TODO;
+  `utils.py:580` `find_kv()` returns on first hit) and **unclaimed by any PR**;
+  production-stack's `KvawareRouter` still takes `[0]` from `layout_info`.
+- No `loadaware`/priority/hybrid strategy in production-stack's `RoutingLogic`;
+  router-queuing PRs #876/#905 still open, nothing merged.
+- Pinned image tags `lmstack-router:0.1.9.dev9-g37bafbcf5.d20260107` and
+  `vllm-openai:v0.3.9post2` both still active on Docker Hub.
+- Correction to the 2026-07-05 memo: the `:402` TODO is on `batched_p2p_lookup`; the one
+  that matters is the block at lines 380-387 above `async def lookup()`.
+
 ## 2026-07-05 (later) — Second-optimization deep-dive
 
 ### Decided
