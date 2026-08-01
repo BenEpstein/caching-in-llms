@@ -8,6 +8,22 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+### Open for next session (planning + reconciliation)
+- **Benchmark plan is deliberately undecided** — workload data/shape, sweep grid, run
+  lengths, and stats methodology to be finalized as their own decision (a proposal was
+  discussed 2026-08-01, nothing locked).
+- **Reconcile two parallel 2026-08-01 streams** (Ben's planning session and Eliad's
+  implementation session ran the same day; entries for both below, partially conflicting):
+  1. *LMCache lookup PR:* the scope-lock entry says file it early into LMCache; the
+     upstream re-verification retargets PRs **off** LMCache v1 (MP-mode deprecation,
+     LMCache#4025) toward production-stack. The re-verification evidence is newer;
+     needs joint sign-off.
+  2. *PR portfolio breadth:* scope-lock says the two required PRs only, no drive-by
+     fixes; the re-verification portfolio still lists ports/registration/image-matrix
+     + production-stack#1016.
+  3. *Next session's goal:* the implementation handoff says start coding Change 1;
+     Ben wants a final implementation-planning session first.
+
 ## 2026-08-01 (end of session) — Implementation handoff
 
 ### Added
@@ -91,6 +107,59 @@ Implement Change 1 (multi-instance `lookup()`), observe two instances in a singl
   `vllm-openai:v0.3.9post2` both still active on Docker Hub.
 - Correction to the 2026-07-05 memo: the `:402` TODO is on `batched_p2p_lookup`; the one
   that matters is the block at lines 380-387 above `async def lookup()`.
+## 2026-08-01 (evening, parallel planning session) — Scope lock: PRs and load signal
+
+### Decided
+- **Upstream-PR scope narrowed to the two the project requires** (Ben): LMCache
+  per-instance lookup (core dependency, filed early) and production-stack loadaware
+  router (filed after benchmarks). Ports fix stays a documented deploy workaround;
+  re-registration stays a gotcha note. No drive-by fixes/PRs.
+- **Core locked with G folded in** (Ben): loadaware score's load term is a tunable
+  signal — `count` (in-flight requests, default/baseline) vs `work-left` (estimated
+  remaining tokens from existing RequestStats; the G idea) — compared as one ablation
+  rung. F dropped (partially fixed upstream by #1025; residual value not worth a rung).
+  Ladder: kvaware → +per-instance lookup → +load(count) → +work-left → +adaptive β.
+
+## 2026-08-01 (later still) — FullLookup overlap verified
+
+### Decided
+- **Lookup extension proceeds unchanged; cite + build on LMCache #1420.** "FullLookup"
+  (= LMCache PR #1420, feeding production-stack #670) is functionally the same
+  per-instance lookup capability we're building, but was auto-closed stale 2025-12-25,
+  unmerged, no design objections. Verified at LMCache HEAD `0427938a`: no FullLookup in
+  code/history, `kv_controller.py` identical to our pin, multi-results TODO still open.
+  Our PR = revive the capability with the benchmarks both dead attempts (#1420, #884)
+  lacked. Evidence: `docs/router-optimization-ideas.md` (FullLookup section).
+
+## 2026-08-01 (later) — Prior-art check on the core idea + F correction
+
+### Added
+- Prior-art section in `docs/router-optimization-ideas.md`: core blended-score idea still
+  unclaimed upstream, but warm — #884 (switch-based load+kvaware combo, died 2026-06 for
+  lack of benchmarks; citable prior art), #852 (least-QPS only, stalled), #670 (TTFT
+  routing draft, dormant, closest to idea G; uses LMCache "FullLookup" — **verify overlap
+  with our lookup extension**). Urgency reinforced: file the lookup-extension PR early.
+
+### Changed
+- Idea F corrected: upstream #1016/#1025 (2026-07-29) already fix the event-loop-blocking
+  half (thread offload only, explicitly no tokenization caching) — F narrows to
+  prefix-cached tokenization + the overhead benchmark; upstream angle = extend #1025.
+
+## 2026-08-01 — Fresh optimization-idea survey of production-stack `main`
+
+### Added
+- `docs/router-optimization-ideas.md` — survey of `main` @ `3314ee6` for second-optimization
+  candidates beyond the 2026-07-05 menu: F fast-path/tokenization (blocking event-loop work
+  in `KvawareRouter`, strongest new find), G work-left load signal (roadmap P2 "predictive
+  routing"), H tier-aware benefit discount (gated on a ½-day spike), I queuing policy
+  (Discussion/RFC-comment only), plus a prefixaware micro-PR for the upstream track.
+
+### Decided
+- **Adaptive β stays the second optimization** — upstream barely moved since the pin
+  (18 commits, no routing-logic changes; #876/#905 still open with the locality-vs-fairness
+  question still deferred), so the 2026-07-05 memo's evidence holds. New ideas slot in as:
+  G folded into the load-signal definition, F as low-risk third rung / first upstream PR.
+  Evidence: `docs/router-optimization-ideas.md`.
 
 ## 2026-07-05 (later) — Second-optimization deep-dive
 
