@@ -26,6 +26,10 @@ routerSpec:
   repository: "quay.io/rhl193000/lmstack-router-loadaware"
   # tag: supplied per-deploy via --set routerSpec.tag=<short-sha>
 
-  # α/β come from LOADAWARE_ALPHA/LOADAWARE_BETA env vars (defaults 1.0/0.1) - set them
-  # per sweep cell with --set routerSpec.env, see routing_logic.py.
+  # α/β come from LOADAWARE_ALPHA/LOADAWARE_BETA env vars (defaults 1.0/0.1).
+  # Chart 0.1.11 IGNORES `routerSpec.env` (hardcoded env list in
+  # deployment-router.yaml, verified 2026-08-01) - set them after the upgrade:
+  #   oc set env deploy/stack-deployment-router LOADAWARE_ALPHA=1.0 LOADAWARE_BETA=0.1
+  # benchmarks/run_cell.sh does this per sweep cell (and removes them on
+  # baseline cells so a stale β cannot leak through the three-way merge).
   routingLogic: "loadaware"

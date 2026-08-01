@@ -33,9 +33,14 @@ METRICS = [
     "vllm:kv_cache_usage_perc",
     "lmcache:num_hit_tokens_total",
     "lmcache:lookup_hit_rate",
-    "lmcache:request_cache_hit_rate",
+    # request_cache_hit_rate is a HISTOGRAM in this lmcache build (verified on
+    # gapu-2 2026-08-01) - there is no plain gauge under the bare name
+    "lmcache:request_cache_hit_rate_sum",
+    "lmcache:request_cache_hit_rate_count",
     "process_cpu_seconds_total",
     "process_resident_memory_bytes",
+    "router_cpu_usage_percent",
+    "router_memory_usage_percent",
 ]
 
 

@@ -24,6 +24,19 @@ with a pointer to the evidence — those matter as much as code.
   wall-clock epoch (aligns rows with Prometheus/DCGM windows), optional `--summary-json`,
   and `--insecure` opt-in TLS flag (gapu-2 self-signed route) instead of implicit trust.
 
+### Fixed
+- **Live verification on gapu-2 falsified four harness assumptions** (issue #6, PR #20):
+  (1) chart 0.1.11 silently ignores `routerSpec.env` - α/β now travel via `oc set env`
+  per cell, removed on baseline cells so a stale β can't leak through the three-way merge;
+  (2) the pinned router exposes NO `registered_workers_count` gauge - registration gate is
+  now the router's `Registered instance-worker` log lines (deploy/README diagnostic
+  corrected too); (3) `lmcache:request_cache_hit_rate` is a histogram, prom_dump now pulls
+  `_sum`/`_count`; (4) DCGM is a DaemonSet and a Service port-forward pins to ONE pod - now one port-forward per exporter pod, poller takes multiple `--url`s (verified rows
+  from both workers). Also: `helm upgrade` now pins `--version 0.1.11` (0.1.12 has schema
+  drift), and a mounted dev overlay (`router-patch` ConfigMap - found live!) is
+  auto-reverted before measuring. Driver, warm-up gate line, registry probe, prom_dump,
+  and DCGM poller all exercised against the real cluster.
+
 ### Decided
 - **Workload JSONLs are not committed; the manifest is** (issue #6): 6×~6 MB of synthetic
   filler would bloat the submission repo, and generation is deterministic - the committed

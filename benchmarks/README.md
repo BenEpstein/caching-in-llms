@@ -67,14 +67,19 @@ python3 benchmarks/analyze.py summary results/*
 python3 benchmarks/analyze.py compare results/<...loadaware-b0.1> results/<...kvaware>
 ```
 
-Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values →
-router-Service controller-port patch (deploy/README gotcha #0) → **engine restart** so
-every cell starts from identical empty caches (#13) → wait for both workers to register →
-`registry-probe.sh` with a fresh seed (#13 gate; skipped on roundrobin, whose routing
-ignores the registry) → warm-up passes gated on non-empty `layout_info` (router log must
-show `found by … router` cache-path routings) → 6 seeds replayed back-to-back, no reset
-between seeds (steady-state) → Prometheus dump + DCGM CSV + `run.json` manifest →
-validity check.
+Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values (chart
+**pinned to 0.1.11** - the installed version; 0.1.12+ has schema drift) → dev-overlay
+check (a mounted `router-patch` ConfigMap is auto-reverted - validity rule 2) → α/β via
+`oc set env` (chart 0.1.11 ignores `routerSpec.env`; baselines get the vars *removed* so
+a stale β can't leak through the three-way merge) → router-Service controller-port patch
+(deploy/README gotcha #0) → **engine restart** so every cell starts from identical empty
+caches (#13) → wait for 2 `Registered instance-worker` router-log lines since the restart
+(this router build exposes no registered-workers gauge) → `registry-probe.sh` with a
+fresh seed (#13 gate; skipped on roundrobin, whose routing ignores the registry) →
+warm-up passes gated on non-empty `layout_info` (router log must show `found by … router`
+cache-path routings) → 6 seeds replayed back-to-back, no reset between seeds
+(steady-state) → Prometheus dump + DCGM CSV (one port-forward **per exporter pod** - the
+DaemonSet Service would pin to one node's GPU) + `run.json` manifest → validity check.
 
 ## What a run directory contains
 

@@ -15,8 +15,14 @@
 #   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, ~75% of the knee)
 #
 # Environment overrides (defaults match deploy/README.md on gapu-2):
-#   NS, RELEASE, CHART, BASE_URL, MODEL, ROUTER_DEPLOY, ENGINE_DEPLOY,
-#   LOADAWARE_TAG (REQUIRED for loadaware cells: git short SHA of the CI image)
+#   NS, RELEASE, CHART, CHART_VERSION, BASE_URL, MODEL, ROUTER_DEPLOY,
+#   ENGINE_DEPLOY, LOADAWARE_TAG (REQUIRED for loadaware cells: git short SHA
+#   of the CI image)
+#
+# Verified live on gapu-2 2026-08-01: chart 0.1.11 ignores `routerSpec.env`
+# (hardcoded env list), so α/β travel via `oc set env` after the upgrade; the
+# router exposes NO registered-workers gauge in this build, so registration is
+# gated on the router's "Registered instance-worker" log lines instead.
 set -euo pipefail
 
 CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
@@ -29,6 +35,9 @@ REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
 NS="${NS:-cache-llm}"
 RELEASE="${RELEASE:-stack}"
 CHART="${CHART:-vllm/vllm-stack}"
+# Pin the chart: the cluster runs 0.1.11 and 0.1.12+ has schema drift - an
+# unpinned upgrade would silently migrate the stack mid-experiment.
+CHART_VERSION="${CHART_VERSION:-0.1.11}"
 BASE_URL="${BASE_URL:-https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 ROUTER_DEPLOY="${ROUTER_DEPLOY:-stack-deployment-router}"
@@ -53,10 +62,6 @@ case "$CELL" in
     HELM_ARGS+=(
       -f "$REPO_ROOT/deploy/values-loadaware-image.yaml"
       --set routerSpec.tag="$LOADAWARE_TAG"
-      --set "routerSpec.env[0].name=LOADAWARE_ALPHA"
-      --set-string "routerSpec.env[0].value=$ALPHA"
-      --set "routerSpec.env[1].name=LOADAWARE_BETA"
-      --set-string "routerSpec.env[1].value=$BETA"
     ) ;;
   *)
     echo "unknown cell: $CELL" >&2; exit 2 ;;
@@ -74,7 +79,25 @@ trap cleanup EXIT
 python3 "$BENCH_DIR/freeze_workloads.py"
 
 # ---- 1. deploy the arm ------------------------------------------------------
-helm upgrade --install "$RELEASE" "$CHART" -n "$NS" "${HELM_ARGS[@]}"
+helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" "${HELM_ARGS[@]}"
+
+# validity rule 2: a mounted dev overlay would invalidate every number - strip it
+if oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
+    -o jsonpath='{.spec.template.spec.volumes[*].name}' | grep -q router-patch; then
+  echo "==> dev overlay mounted on the router - reverting before measuring"
+  NS="$NS" "$REPO_ROOT/deploy/dev/revert-router-patch.sh"
+fi
+
+# α/β travel by env var; chart 0.1.11 has no routerSpec.env passthrough. Set
+# them explicitly on loadaware cells and REMOVE them on baselines - the
+# three-way merge preserves out-of-band env across upgrades, so a stale β
+# would otherwise leak between cells.
+if [ "$ARM" = "loadaware" ]; then
+  oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
+    "LOADAWARE_ALPHA=$ALPHA" "LOADAWARE_BETA=$BETA"
+else
+  oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" LOADAWARE_ALPHA- LOADAWARE_BETA-
+fi
 
 # ---- 2. router Service controller ports (deploy/README.md gotcha #0) --------
 if ! oc get svc "$RELEASE-router-service" -n "$NS" -o jsonpath='{.spec.ports[*].name}' \
@@ -86,18 +109,24 @@ fi
 
 # ---- 3. cold start: restart engines so every cell begins with empty caches --
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
+ENGINE_RESTART_TS=$(date +%s)
 oc rollout restart "deploy/$ENGINE_DEPLOY" -n "$NS"
 oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
 
-# ---- 4. wait until both workers are registered ------------------------------
-echo "==> waiting for 2 registered workers"
+# ---- 4. wait until both workers re-registered (post engine restart) ---------
+# This router build exposes no registered-workers gauge; the router logs
+# "Registered instance-worker" per registration (same signal
+# revert-router-patch.sh relies on).
+echo "==> waiting for 2 worker registrations since engine restart"
+registered=0
 for _ in $(seq 60); do
-  count=$(curl -ks -m 10 "$BASE_URL/metrics" \
-    | awk '/^lmcache:cache_controller_registered_workers_count/ {print $2}' | head -1)
-  [ "${count%%.*}" = "2" ] && break
+  since=$(( $(date +%s) - ENGINE_RESTART_TS + 5 ))
+  registered=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
+    | grep -c "Registered instance-worker" || true)
+  [ "$registered" -ge 2 ] && break
   sleep 5
 done
-[ "${count%%.*}" = "2" ] || { echo "workers never registered (count=$count)" >&2; exit 1; }
+[ "$registered" -ge 2 ] || { echo "workers never re-registered (saw $registered)" >&2; exit 1; }
 
 # ---- 5. registry probe (#13) - skip on roundrobin (routing ignores the registry)
 if [ "$ARM" != "roundrobin" ]; then
@@ -121,11 +150,19 @@ fi
 # ---- 7. collectors ----------------------------------------------------------
 oc port-forward -n "$NS" svc/stack-prometheus "$PROM_PORT:9090" >/dev/null 2>&1 &
 PIDS+=($!)
-oc port-forward -n nvidia-gpu-operator svc/nvidia-dcgm-exporter "$DCGM_PORT:9400" >/dev/null 2>&1 &
-PIDS+=($!)
+# DCGM is a DaemonSet: forward each pod on its own port, or one node's GPU is lost
+DCGM_URLS=()
+port="$DCGM_PORT"
+for pod in $(oc get pods -n nvidia-gpu-operator -l app=nvidia-dcgm-exporter \
+    -o jsonpath='{.items[*].metadata.name}'); do
+  oc port-forward -n nvidia-gpu-operator "pod/$pod" "$port:9400" >/dev/null 2>&1 &
+  PIDS+=($!)
+  DCGM_URLS+=(--url "http://localhost:$port/metrics")
+  port=$((port + 1))
+done
 sleep 3
 python3 "$BENCH_DIR/collectors/dcgm_poll.py" \
-  --url "http://localhost:$DCGM_PORT/metrics" --out "$OUT/dcgm.csv" &
+  "${DCGM_URLS[@]}" --out "$OUT/dcgm.csv" &
 PIDS+=($!)
 
 # ---- 8. measured replay: 6 frozen seeds back-to-back ------------------------

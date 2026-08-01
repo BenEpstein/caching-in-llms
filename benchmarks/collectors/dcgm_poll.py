@@ -1,8 +1,10 @@
 """Poll the DCGM exporter into a CSV (issue #3: GPU util / power / mem-copy).
 
 The stack's Prometheus does NOT scrape DCGM (no ServiceMonitor added - no
-cluster mutation), so this polls the exporter directly through a port-forward:
-  oc port-forward -n nvidia-gpu-operator svc/nvidia-dcgm-exporter 9400:9400
+cluster mutation), so this polls the exporter directly through port-forwards.
+The exporter is a DaemonSet (one pod per GPU node) and a Service port-forward
+pins to ONE pod, silently dropping the other node's GPU - so pass one --url
+per exporter POD (run_cell.sh forwards each pod on its own local port).
 
 Runs until SIGINT/SIGTERM (run_cell.sh starts it in the background and kills it
 when the cell ends) or for --duration seconds. Appends one row per GPU per
@@ -42,7 +44,12 @@ def parse(text: str):
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--url", default="http://localhost:9400/metrics")
+    p.add_argument(
+        "--url",
+        action="append",
+        required=True,
+        help="exporter /metrics URL; repeat once per exporter pod",
+    )
     p.add_argument("--interval", type=float, default=5.0)
     p.add_argument("--duration", type=float, help="stop after N seconds (default: run until signal)")
     p.add_argument("--out", required=True, help="CSV path (appended)")
@@ -63,15 +70,16 @@ def main() -> int:
         if f.tell() == 0:
             w.writerow(["ts", "metric", "gpu", "hostname", "value"])
         while not stop and (t_end is None or time.time() < t_end):
-            try:
-                with urllib.request.urlopen(a.url, timeout=10) as r:
-                    text = r.read().decode()
-                ts = round(time.time(), 3)
-                for metric, gpu, host, value in parse(text):
-                    w.writerow([ts, metric, gpu, host, value])
-                f.flush()
-            except Exception as e:  # noqa: BLE001 - keep polling through blips
-                print(f"poll error: {e}", file=sys.stderr)
+            for url in a.url:
+                try:
+                    with urllib.request.urlopen(url, timeout=10) as r:
+                        text = r.read().decode()
+                    ts = round(time.time(), 3)
+                    for metric, gpu, host, value in parse(text):
+                        w.writerow([ts, metric, gpu, host, value])
+                except Exception as e:  # noqa: BLE001 - keep polling through blips
+                    print(f"poll error ({url}): {e}", file=sys.stderr)
+            f.flush()
             time.sleep(a.interval)
     return 0
 
