@@ -8,6 +8,43 @@
 > **Expected outcome of the next session:** rung 2 of the ablation ladder landed and observed
 > live — `layout_info` reporting *all* instances that hold a prefix, not just the first.
 
+## ⏱ DEADLINE — 9 days from 2026-08-01, i.e. **~2026-08-10** (confirm exact date with Eliad)
+
+This dominates every other consideration in this document. Consequences, decided 2026-08-01:
+
+- **Adaptive β is OUT.** `docs/decisions/second-optimization.md` pre-registered the flip to
+  runner-up E ("core-only, invest in evaluation + upstream PRs") *if the core is not landed
+  with most of the schedule still ahead*. Zero implementation code exists on day 1 of 9, so
+  the condition has triggered. Do not start a `BetaPolicy`. The α/β **sensitivity sweep** §5
+  requires anyway is what remains of it, and it is enough.
+- **Rubric math backs this:** correctness 40 + reproducibility 30 = **70%**; performance gain
+  is only 15%. A second optimization buys at most a slice of 15 while putting the 70 at risk.
+  A modest, rock-solid, reproducible gain wins.
+- **Scope is now:** multi-instance lookup → `loadaware` (static α/β) → benchmark harness →
+  evaluation → report. Upstream PRs are opportunistic, only from work already done.
+
+### Indicative schedule (no slack — treat slippage as a scope signal, not a reason to work later)
+
+| Day | Work |
+|---|---|
+| 1-2 | Change 1 (lookup) + Change 2 (`loadaware`) + unit tests, via the dev loop |
+| 3 | Benchmark harness: hit rate, p95/p99, throughput to CSV. **Solve the §6 image path today** |
+| 4-5 | Evaluation runs: Zipf-s × QPS grid, kvaware vs loadaware, α/β sweep. Mostly machine time |
+| 6-7 | Report (8-12 pp) + plots |
+| 8 | Buffer, repo hygiene, reproducibility check from a clean clone, upstream PRs if time |
+| 9 | Submit |
+
+**The §6 image path is a day-3 item, not a day-8 item.** Reproducibility is 30% of the grade
+and the image is its load-bearing artifact; see "Open, not yet solved" below. Eliad deferred
+the decision to the next session — raise it early, do not let it drift.
+
+> Note on notation: `§2`…`§6` in this document always mean sections of the **assignment PDF**
+> (§4 Extension, §5 Evaluation, §6 Report), never sections of this file.
+
+**If day 3 arrives without Change 1 + Change 2 landed**, cut to: `loadaware` measured against
+`kvaware` at a single well-chosen α/β, no sweep, and spend the recovered time on the report.
+Correctness and clarity of a small claim beat an unfinished big one.
+
 ## 0. Read first, in this order
 
 1. This file.
@@ -28,9 +65,9 @@ Skip `docs/handoff-second-optimization.md` (its job is done — the decision it 
   added a fleet-wide key directory with per-instance placements in the new `mp_coordinator`.
   Cite it as concurrent related work; our work is still novel for the path production-stack
   actually uses (`v1/cache_controller`).
-- **Second optimization (adaptive β) is deferred.** Build and measure the static-β core first.
-  It is a complete project on its own; adaptive β is upside. See
-  `docs/decisions/second-optimization.md`.
+- **Second optimization (adaptive β) is OUT** — flipped to runner-up E on 2026-08-01 under the
+  condition pre-registered in `docs/decisions/second-optimization.md` (see the deadline section
+  above). The static-β core is the whole project; it is complete and defensible on its own.
 - **Upstream PRs do not target LMCache `v1/cache_controller`** — it is being deprecated
   (LMCache#4025, Q3). Target production-stack instead.
 
@@ -215,14 +252,20 @@ is still an open §3 deliverable.
 
 ## 7. Definition of done for the next session
 
+With a 9-day budget the next session must clear **all** of this — it is day 1 of the
+2-day implementation block, not an exploratory sitting:
+
 1. `kv_controller.lookup()` returns per-instance match info; unit tests green.
 2. Applied via `deploy/dev/apply-router-patch.sh` and observed live: a `layout_info` log
    showing **two** instances for a prefix both hold.
-3. `CHANGELOG.md` updated (**mandatory** — see the discipline section in `CLAUDE.md`).
-4. Reverted to stock, baseline confirmed serving.
+3. `LOADAWARE` enum + factory branch + the α/β argmax, with unit tests. `kvaware` left
+   byte-identical as the baseline arm.
+4. `CHANGELOG.md` updated (**mandatory** — see the discipline section in `CLAUDE.md`).
+5. Reverted to stock, baseline confirmed serving.
+6. The §6 image-path decision raised with Eliad (runtime + registry) — needed by day 3.
 
-Stretch, only if 1-3 land comfortably: the `LOADAWARE` enum + factory + argmax skeleton
-behind a static α/β, with tests but no measurement claims yet.
+If (1) and (2) prove harder than expected, land them properly and push (3) to the next day
+rather than half-landing both. Do not start anything not on this list.
 
 ## 8. Open, not yet solved — do not let these surprise you late
 

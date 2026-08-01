@@ -11,18 +11,48 @@ with a pointer to the evidence — those matter as much as code.
 ### Open for next session (planning + reconciliation)
 - **Benchmark plan is deliberately undecided** — workload data/shape, sweep grid, run
   lengths, and stats methodology to be finalized as their own decision (a proposal was
-  discussed 2026-08-01, nothing locked).
+  discussed 2026-08-01, nothing locked). *Deadline note: this is now day-3 work at the
+  latest; it gates the evaluation runs on days 4-5.*
 - **Reconcile two parallel 2026-08-01 streams** (Ben's planning session and Eliad's
   implementation session ran the same day; entries for both below, partially conflicting):
   1. *LMCache lookup PR:* the scope-lock entry says file it early into LMCache; the
      upstream re-verification retargets PRs **off** LMCache v1 (MP-mode deprecation,
      LMCache#4025) toward production-stack. The re-verification evidence is newer;
-     needs joint sign-off.
+     needs joint sign-off. *Deadline note: with 9 days, all upstream PRs are opportunistic
+     — this does not block the graded deliverables either way.*
   2. *PR portfolio breadth:* scope-lock says the two required PRs only, no drive-by
      fixes; the re-verification portfolio still lists ports/registration/image-matrix
-     + production-stack#1016.
+     + production-stack#1016. *Deadline note: the narrower "two PRs only" position is the
+     one the schedule supports.*
   3. *Next session's goal:* the implementation handoff says start coding Change 1;
      Ben wants a final implementation-planning session first.
+     **⚠ STILL OPEN — Eliad + Ben must settle this before the next session starts.**
+     Not resolved by the deadline: it argues both ways (less time to plan, but also less
+     time to recover from building the wrong thing).
+  4. *Second optimization:* `docs/router-optimization-ideas.md` Recommendation #1 says keep
+     adaptive β — written before the deadline was known. The deadline entry below cuts to
+     core-only. That survey's own escape hatch makes the live question **F (kvaware fast
+     path) vs. nothing**, since F strengthens the 70%-weighted axes rather than the
+     15%-weighted one. **⚠ Needs joint sign-off; banner added at the top of that file.**
+
+## 2026-08-01 (end of session) — Deadline known: scope cut to core-only
+
+### Decided
+- **Submission deadline is ~2026-08-10** (9 days, stated by Eliad 2026-08-01).
+- **Adaptive β is OUT; flipped to runner-up E (core-only + evaluation + upstream PRs).**
+  This executes the flip condition `docs/decisions/second-optimization.md` pre-registered —
+  "core not landed with most of the schedule still ahead" — which triggered because the
+  project was idle 2026-07-05 → 08-01 and no implementation code exists on day 1 of 9.
+  Rubric backs it: correctness 40 + reproducibility 30 = 70% vs performance gain 15%.
+  What survives of adaptive β is the α/β sensitivity sweep §5 requires anyway.
+- Remaining scope, in order: multi-instance lookup → `loadaware` (static α/β) → benchmark
+  harness → evaluation → report. Upstream PRs are opportunistic only.
+
+### Changed
+- `docs/decisions/second-optimization.md` marked SUPERSEDED with the trigger recorded; its
+  load-signal-staleness analysis stays load-bearing for the report's motivation.
+- `docs/handoff-core-implementation.md` — added the deadline, a day-by-day schedule with no
+  slack, a cut-scope trigger for day 3, and a hardened definition of done.
 
 ## 2026-08-01 (end of session) — Implementation handoff
 

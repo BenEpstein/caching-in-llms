@@ -1,5 +1,15 @@
 # Decision: Second Optimization = Adaptive β (feedback-controlled load weight)
 
+> **SUPERSEDED 2026-08-01 — flipped to runner-up E (core-only).** The flip condition this
+> memo pre-registered ("if the core is not landed and validated with most of the schedule
+> still ahead") triggered: the project sat idle 2026-07-05 → 08-01, the submission deadline
+> is ~2026-08-10, and no implementation code existed on day 1 of 9. Adaptive β is not being
+> built; what survives of it is the α/β sensitivity sweep §5 requires anyway — exactly the
+> graceful off-ramp described under "Runner-up 2" below. **The analysis in this memo is still
+> the record of *why* adaptive β was the right second optimization, and the load-signal
+> staleness finding in §1-2 remains load-bearing for the report's motivation.** See
+> `docs/handoff-core-implementation.md` for the revised scope and schedule.
+
 > Decided 2026-07-05, deep-dive session per `docs/handoff-second-optimization.md`.
 > Survey basis: `vllm-project/production-stack` @ `1e973a3`, `LMCache/LMCache` @ `bf20f51`
 > (fresh clones), both projects' 2026 roadmaps/issue trackers, and one live read-only
