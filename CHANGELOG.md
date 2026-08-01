@@ -8,6 +8,20 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (later) — Prior-art check on the core idea + F correction
+
+### Added
+- Prior-art section in `docs/router-optimization-ideas.md`: core blended-score idea still
+  unclaimed upstream, but warm — #884 (switch-based load+kvaware combo, died 2026-06 for
+  lack of benchmarks; citable prior art), #852 (least-QPS only, stalled), #670 (TTFT
+  routing draft, dormant, closest to idea G; uses LMCache "FullLookup" — **verify overlap
+  with our lookup extension**). Urgency reinforced: file the lookup-extension PR early.
+
+### Changed
+- Idea F corrected: upstream #1016/#1025 (2026-07-29) already fix the event-loop-blocking
+  half (thread offload only, explicitly no tokenization caching) — F narrows to
+  prefix-cached tokenization + the overhead benchmark; upstream angle = extend #1025.
+
 ## 2026-08-01 — Fresh optimization-idea survey of production-stack `main`
 
 ### Added

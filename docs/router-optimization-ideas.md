@@ -19,6 +19,46 @@
   **P2 predictive routing for future workloads**, **P2 priority-based routing**,
   **P2 router performance improvements**.
 
+## Prior-art check (added 2026-08-01, later session) — is the core idea claimed upstream?
+
+Targeted issue/PR search for anything combining cache affinity with load. Verdict: **the
+core (blended per-instance score α·cache_benefit − β·load) is still unclaimed**, but the
+area is warm — three independent attempts orbit it, all stalled or dead:
+
+- **#884 "load-balanced KV-aware routing" (closed 2026-06-16, unmerged)** — the closest
+  prior attempt. Design was a *switch*, not a blend: if queue imbalance > threshold →
+  least-loaded, else plain kvaware (`--imbalanced-threshold`, default ∞). No per-instance
+  match info, no scoring tradeoff. **Died because maintainers asked for benchmark
+  comparisons vs kvaware and the author never delivered.** Consequences for us: (a) cite as
+  prior art in the report; (b) proof the maintainers want this and gate it on benchmarks —
+  our eval-first design is exactly the price of admission; (c) our PR should lead with the
+  comparison data #884 lacked.
+- **#852 "priority routing" (open, stalled since ~2026-03)** — misleadingly named; it's
+  pure least-QPS routing, no cache awareness. Not overlapping.
+- **#670 "TTFT routing" (draft, stalled since 2025-09)** — conceptually closest to our G
+  idea + the core's spirit: estimates per-instance *prefill workload* (queued work + new
+  request's uncached tokens, trapezoid Q·K estimate) and routes to lowest predicted TTFT;
+  uses an LMCache **"FullLookup"** feature and claims ~17% avg-TTFT win over kvaware in
+  its own benchmark. Blocked on that LMCache dependency; dormant ~10 months. Consequences:
+  cite as related work for G; **⚠ verify whether LMCache's FullLookup overlaps our
+  multi-instance lookup extension** (it may partially cover the same TODO — check what
+  landed in LMCache since `bf20f51` before writing our lookup PR).
+- Overall: field is warming → **file the lookup-extension PR early** (the memo already
+  said this; #884/#670 make it urgent).
+
+### Correction to candidate F: partially claimed upstream (2026-07-29)
+
+Issue **#1016** ("KvawareRouter blocks the event loop per request") and PR **#1025** (open,
+2026-07-29 — two days before this survey) address the blocking-event-loop half of F:
+they move tokenizer *loading* and the sync `/tokenize` fallback to `asyncio.to_thread`
+and cache load-failures. **#1025 explicitly does NOT cache tokenization results**, and the
+per-request hot-path encode cost remains. So F narrows to its bigger half:
+**prefix-cached tokenization** (hot Zipf prefixes tokenize once; the 4–8 ms/request CPU
+cost — measured ~3.7 ms @ 2.4k tok, ~8 ms @ 4.8k tok on an approximated BPE — drops to
+<1 ms for hot requests). Upstream angle shifts from "file the fix" to "extend #1025 +
+contribute the router-overhead benchmark". Independent rediscovery within a month is
+strong validation that the overhead is real.
+
 ## New candidates found this survey
 
 ### F — Zero-overhead kvaware fast path (router lookup-cost optimization) ★ strongest new find
