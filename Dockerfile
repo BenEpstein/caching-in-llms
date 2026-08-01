@@ -18,12 +18,13 @@ FROM docker.io/lmcache/lmstack-router@sha256:23c64ba6f14ac363be30800764f22e3b937
 
 # `patches/` mirrors the layout under site-packages, so the overlay is a straight copy and
 # the image gets byte-identical code to what deploy/dev/apply-router-patch.sh mounts.
-# Add `COPY patches/vllm_router ...` here when Change 2 (issue #5) lands.
 COPY patches/lmcache /opt/venv/lib/python3.12/site-packages/lmcache
+COPY patches/vllm_router /opt/venv/lib/python3.12/site-packages/vllm_router
 
 # OpenShift runs the pod as an arbitrary UID, so the copied files must be world-readable.
 USER root
-RUN chmod -R a+rX /opt/venv/lib/python3.12/site-packages/lmcache
+RUN chmod -R a+rX /opt/venv/lib/python3.12/site-packages/lmcache \
+                  /opt/venv/lib/python3.12/site-packages/vllm_router
 USER 1001
 
 LABEL org.opencontainers.image.title="lmstack-router with loadaware placement" \

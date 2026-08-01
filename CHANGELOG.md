@@ -8,6 +8,24 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (night) - Ticket #16 completed: image pipeline pushes to Quay
+
+### Fixed
+- **Dockerfile was stale vs Change 2:** only `patches/lmcache` was copied into the image, so
+  the "§6 deliverable" would have run stock kvaware routing. Now also copies
+  `patches/vllm_router` (loadaware policy + CLI widening) and the CI verify step greps all
+  three patched files for the `LOADAWARE PATCH` marker before pushing.
+
+### Changed
+- `deploy/values-loadaware-image.yaml`: `CHANGEME` → `quay.io/rhl193000/lmstack-router-loadaware`
+  (public Quay repo, robot-account push from CI); `routingLogic: kvaware` → `loadaware` now
+  that Change 2 is landed.
+
+### Decided
+- **Quay repo is public** (issue #16): cluster pulls with no imagePullSecret and a grader can
+  pull the exact SHA-tagged image cited in the report. Credentials live only in GitHub Actions
+  secrets (`QUAY_USERNAME`/`QUAY_TOKEN`, robot account scoped to this one repo).
+
 ## 2026-08-01 (evening) - Ticket #3 resolved: benchmark methodology locked
 
 ### Decided

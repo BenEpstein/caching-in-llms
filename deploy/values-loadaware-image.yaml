@@ -22,11 +22,10 @@
 #   ./deploy/dev/registry-probe.sh <unused-seed>
 
 routerSpec:
-  # Set to your Quay namespace, e.g. quay.io/<namespace>/lmstack-router-loadaware.
   # Must match the QUAY_IMAGE repo variable used by the build workflow.
-  repository: "quay.io/CHANGEME/lmstack-router-loadaware"
+  repository: "quay.io/rhl193000/lmstack-router-loadaware"
   # tag: supplied per-deploy via --set routerSpec.tag=<short-sha>
 
-  # `loadaware` once Change 2 (issue #5) lands; `kvaware` until then, so this overlay can be
-  # exercised end-to-end — image build, push, pull, deploy — before the policy exists.
-  routingLogic: "kvaware"
+  # α/β come from LOADAWARE_ALPHA/LOADAWARE_BETA env vars (defaults 1.0/0.1) - set them
+  # per sweep cell with --set routerSpec.env, see routing_logic.py.
+  routingLogic: "loadaware"

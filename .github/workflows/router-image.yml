@@ -47,7 +47,11 @@ jobs:
         run: |
           docker run --rm --entrypoint grep router-image:ci -q "LOADAWARE PATCH" \
             /opt/venv/lib/python3.12/site-packages/lmcache/v1/cache_controller/controllers/kv_controller.py
-          echo "patched lookup present in image"
+          docker run --rm --entrypoint grep router-image:ci -q "LOADAWARE PATCH" \
+            /opt/venv/lib/python3.12/site-packages/vllm_router/routers/routing_logic.py
+          docker run --rm --entrypoint grep router-image:ci -q "LOADAWARE PATCH" \
+            /opt/venv/lib/python3.12/site-packages/vllm_router/parsers/parser.py
+          echo "patched lookup + loadaware router + CLI widening present in image"
 
       - name: Check push credentials
         id: creds
