@@ -31,8 +31,10 @@ jobs:
       - name: Verify the overlay actually landed
         # A silently-unpatched image would produce a "no improvement" result that looks
         # like a failed experiment rather than a failed build.
+        # --entrypoint is required: the base image's entrypoint is `vllm-router`, so a bare
+        # command is parsed as router arguments instead of being run.
         run: |
-          docker run --rm router-image:ci grep -q "LOADAWARE PATCH" \
+          docker run --rm --entrypoint grep router-image:ci -q "LOADAWARE PATCH" \
             /opt/venv/lib/python3.12/site-packages/lmcache/v1/cache_controller/controllers/kv_controller.py
           echo "patched lookup present in image"
 
