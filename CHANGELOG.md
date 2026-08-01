@@ -8,6 +8,56 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (implementation) — Change 1 landed: multi-instance lookup (issue #4)
+
+### Added
+- **`patches/` — tracked copies of the router-image Python files we modify**, mirroring their
+  path under `/opt/venv/lib/python3.12/site-packages/`. The dev loop and the future §6 image
+  apply the *same* bytes. Conventions in `patches/README.md`.
+- **Multi-instance lookup** in `patches/lmcache/v1/cache_controller/controllers/kv_controller.py`:
+  `lookup()` now credits **every** instance holding each chunk instead of `kv_pool[key][0]`,
+  so `layout_info` reports per-instance matched-token counts. Wire-compatible — `LookupRetMsg`
+  was already `{instance_id: (location, matched_tokens)}`.
+- **`tests/` — 18 offline unit tests** (`pytest tests/`, no cluster/GPU/lmcache install).
+  `tests/conftest.py` stubs the `lmcache` import surface and loads the *tracked patch file
+  itself* by path, so the bytes under test are the bytes that get mounted. Includes a verbatim
+  reference implementation of the stock lookup for the regression assertions.
+
+### Decided
+- **Prefix credit is contiguous per instance.** An instance stops earning matched tokens at its
+  first missing chunk even if it holds later ones — a cache match is a prefix match, so tokens
+  after a hole are unusable. The upstream global `break` is subsumed: the walk ends when no
+  instance is still contiguous. Evidence: `tests/test_kv_controller_lookup.py`
+  (`test_gap_stops_credit_at_the_gap_not_after_it`). This is a real design decision and belongs
+  in §5 of the report.
+- **`kvaware` is *not* behaviourally invariant under this patch**, even though
+  `routing_logic.py` is untouched: it selects `list(layout_info.keys())[0]`, i.e. by insertion
+  order, and the order changes whenever a chunk has more than one holder. **The baseline arm
+  must be measured with `revert-router-patch.sh` applied**, never with Change 1 mounted.
+  Regression tests pin the single-holder case as byte-equivalent to stock.
+
+### Fixed
+- **`deploy/dev/apply-router-patch.sh` was unrunnable on macOS** — `declare -A` needs bash 4 and
+  macOS ships bash 3.2, which mis-parsed the subscripts as arithmetic and killed the script.
+  Replaced the associative array with a `patch_target()` `case`.
+
+### Verified live (cluster `gapu-2`, patch mounted, both engines)
+- `[LOADAWARE] lookup matched 2 instance(s): {'…-pm79x': ('LocalCPUBackend', 5691),
+  '…-x9dkx': ('LocalCPUBackend', 5691)}` — two instances reported for one prefix, which stock
+  lookup structurally cannot do. Recipe: two *concurrent* cold requests on a fresh >2000-token
+  prefix split across both engines (QPS fallback), then a third request to observe the lookup.
+
+### Found — blocks evaluation (new issue #13)
+- **The controller's `kv_pool` does not survive a router restart, and the engines do not
+  repopulate it**: across three router pods the engines stored new chunks four times
+  (`Storing KV cache for 2048 …`, local hit rate fine) while the controller stayed at
+  `pool_size=0` and logged zero admits. Only an **engine restart** brought admits back.
+  Consequence: the "router-only restart self-heals" claim in `deploy/dev/README.md` is wrong
+  for the KV registry — worker *re-registration* self-heals, KV *admission* does not, and
+  re-registration is what the previous session checked. Every patch iteration and every
+  baseline/measurement run therefore needs an engine restart plus a fresh warm-up, which
+  changes the dev loop from ~60 s to ~7 min. Mechanism not yet isolated.
+
 ## 2026-08-01 (docs consolidation) - Ticket #12 resolved
 
 ### Changed

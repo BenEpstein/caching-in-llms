@@ -18,12 +18,18 @@ CONTAINER=router-container
 CM=router-patch
 SP=/opt/venv/lib/python3.12/site-packages
 
-# basename -> absolute path inside the router image
-declare -A PATCH_TARGETS=(
-  [routing_logic.py]="$SP/vllm_router/routers/routing_logic.py"
-  [kv_controller.py]="$SP/lmcache/v1/cache_controller/controllers/kv_controller.py"
-  [registration_controller.py]="$SP/lmcache/v1/cache_controller/controllers/registration_controller.py"
-)
+# basename -> absolute path inside the router image.
+# A `case` rather than an associative array: macOS ships bash 3.2, which has no
+# `declare -A` (it mis-parses the subscripts as arithmetic and the script dies).
+patch_target() {
+  case "$1" in
+    routing_logic.py)  echo "$SP/vllm_router/routers/routing_logic.py" ;;
+    kv_controller.py)  echo "$SP/lmcache/v1/cache_controller/controllers/kv_controller.py" ;;
+    registration_controller.py)
+                       echo "$SP/lmcache/v1/cache_controller/controllers/registration_controller.py" ;;
+    *)                 return 1 ;;
+  esac
+}
 
 [ $# -gt 0 ] || { echo "usage: $0 <file> [<file> ...]" >&2; exit 1; }
 
@@ -31,10 +37,10 @@ cm_args=(); mounts=()
 for f in "$@"; do
   b=$(basename "$f")
   [ -f "$f" ] || { echo "no such file: $f" >&2; exit 1; }
-  [ -n "${PATCH_TARGETS[$b]:-}" ] || {
-    echo "unknown target '$b' — add it to PATCH_TARGETS first" >&2; exit 1; }
+  target=$(patch_target "$b") || {
+    echo "unknown target '$b' — add it to patch_target() first" >&2; exit 1; }
   cm_args+=(--from-file="$b=$f")
-  mounts+=("{\"name\":\"$CM\",\"mountPath\":\"${PATCH_TARGETS[$b]}\",\"subPath\":\"$b\",\"readOnly\":true}")
+  mounts+=("{\"name\":\"$CM\",\"mountPath\":\"$target\",\"subPath\":\"$b\",\"readOnly\":true}")
 done
 
 echo "==> ConfigMap/$CM"
