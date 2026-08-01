@@ -69,6 +69,43 @@ with a pointer to the evidence — those matter as much as code.
   the KV registry and engines never re-admit), a live `loadaware` run would see `layout_info={}`
   and degenerate to the fallback — the ~7 min engine restart buys nothing until #13 lands.
   Offline tests + PR is the whole of #5.
+## 2026-08-01 (investigation) — Ticket #13 resolved: the KV registry's blind window
+
+### Found — three facts that compose into a silent measurement trap
+- The Controller's `kv_pool` is **in-memory**: a router restart empties it.
+- Admission is **one-shot per chunk** — `LocalCPUBackend.submit_put_task` returns early on
+  `if key in self.hot_cache`, so a chunk is announced exactly once, at first store. Nothing
+  already cached is ever re-announced. (`RegisterMsg`, `HeartbeatMsg` and `KVAdmitMsg` all
+  share one PUSH socket, so this is not a dead-socket problem — re-registration recovers
+  because heartbeats *repeat*; admission never does.)
+- Admits are lost for **~40 s** after a router restart, until both workers re-register
+  (10 s heartbeat delay + 30 s interval).
+- **Composed:** a prefix first stored inside that window is invisible to the Controller for
+  the life of the engine process, while the engine still serves it from its own cache
+  perfectly. Both arms of an experiment then degrade to QPS routing and look identical for
+  the wrong reason.
+
+### Measured (fresh prefix per probe, from rollout completion)
+```
+t+4s … t+30s   requests spread 2/2   → registry empty
+t+42s          requests pinned 4/4   → registry live (both workers re-registered)
+```
+
+### Added
+- `deploy/dev/registry-probe.sh` — no-patch health check for the registry. Sends the same
+  >2000-token prefix N times: `kvaware` pins all N to one Instance when the registry is
+  populated and spreads them when it is empty. Exit 0/1, so it gates a run.
+
+### Decided
+- **Every measurement is gated on `registry-probe.sh` with an unused seed**, run after each
+  `apply-router-patch.sh` and each `revert-router-patch.sh`, before warm-up. Poisoned
+  prefixes are never reused.
+- **No engine restart is required** — this walks back the same-day claim that it was. Waiting
+  ~40 s for re-registration is enough, so the dev loop stays ~60 s + the probe.
+- **Upstream:** the principled fix is for a worker to re-announce its `hot_cache` on
+  (re-)registration, making admission self-healing like registration. That is LMCache
+  `v1/cache_controller` code, which is being deprecated (LMCache#4025) and is off our PR
+  target — so it belongs as an upstream **issue**, per the two-PRs-only rule in #10.
 
 ## 2026-08-01 (implementation) — Change 1 landed: multi-instance lookup (issue #4)
 
@@ -114,16 +151,10 @@ with a pointer to the evidence — those matter as much as code.
   lookup structurally cannot do. Recipe: two *concurrent* cold requests on a fresh >2000-token
   prefix split across both engines (QPS fallback), then a third request to observe the lookup.
 
-### Found — blocks evaluation (new issue #13)
-- **The controller's `kv_pool` does not survive a router restart, and the engines do not
-  repopulate it**: across three router pods the engines stored new chunks four times
-  (`Storing KV cache for 2048 …`, local hit rate fine) while the controller stayed at
-  `pool_size=0` and logged zero admits. Only an **engine restart** brought admits back.
-  Consequence: the "router-only restart self-heals" claim in `deploy/dev/README.md` is wrong
-  for the KV registry — worker *re-registration* self-heals, KV *admission* does not, and
-  re-registration is what the previous session checked. Every patch iteration and every
-  baseline/measurement run therefore needs an engine restart plus a fresh warm-up, which
-  changes the dev loop from ~60 s to ~7 min. Mechanism not yet isolated.
+### Found — blocks evaluation (issue #13, since resolved — see the entry above)
+- **A router restart leaves the Controller's `kv_pool` empty and every `lookup()` returning
+  `{}`**, with nothing in the logs saying so. Cost most of this session's live-verification
+  time. Investigated and characterised in #13.
 
 ## 2026-08-01 (docs consolidation) - Ticket #12 resolved
 

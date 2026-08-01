@@ -18,23 +18,37 @@ possible without building a single image:
 Result: **edit → live on cluster in ~60 s** — but see the KV-registry caveat below before
 you trust a routing observation.
 
-## ⚠️ Re-registration self-heals; the KV registry does not
+## ⚠️ A router restart blinds the KV registry for ~40 s — and poisons whatever you touch
 
-Observed 2026-08-01 (issue #13). The Controller's `kv_pool` is in-memory, so a router
-restart empties it — and the engines never re-announce what they already hold. Across three
-router pods the engines stored new chunks four times while the Controller stayed at
-`pool_size=0` and received zero admits; only an **engine restart** brought admissions back.
+Measured 2026-08-01 (issue #13). Three facts compose into a silent trap:
 
-So after every `apply-router-patch.sh` **and** every `revert-router-patch.sh`:
+1. The Controller's `kv_pool` is **in-memory**, so a router restart empties it.
+2. Admission is **one-shot per chunk** — `LocalCPUBackend.submit_put_task` returns early on
+   `if key in self.hot_cache`, so a chunk is announced to the Controller exactly once, at
+   first store. Nothing already cached is ever re-announced.
+3. For roughly **40 s** after the restart — until both workers re-register on their heartbeat
+   (10 s delay + 30 s interval) — admits do not reach the Controller.
 
-```bash
-oc rollout restart deploy/stack-llm-deployment-vllm -n cache-llm
-oc rollout status  deploy/stack-llm-deployment-vllm -n cache-llm --timeout=600s
+So a prefix first stored inside that window is **invisible to the Controller for the life of
+the engine process**, even though the engine serves it from its own cache perfectly. Measured
+with a fresh prefix per probe, from rollout completion:
+
+```
+t+4s … t+30s   requests spread 2/2   → registry empty
+t+42s          requests pinned 4/4   → registry live   (both workers re-registered)
 ```
 
-then re-warm before you read anything into `layout_info`. In practice the loop is ~7 min,
-not ~60 s, whenever the observation depends on cache-hit info. A `layout_info={}` on a prefix
-you know is cached means the registry is empty, not that the lookup is broken.
+**No engine restart is needed** — waiting is enough. What is *not* optional is refusing to
+reuse a poisoned prefix, and gating every measurement:
+
+```bash
+./registry-probe.sh 12345    # exit 0 = live, 1 = empty; use a seed you have not used before
+```
+
+Run it after every `apply-router-patch.sh` **and** every `revert-router-patch.sh`, before the
+warm-up and before any number you intend to keep. `layout_info={}` on a prefix you know is
+cached means the registry is empty, not that the lookup is broken — and with an empty registry
+*both* arms of an experiment degrade to QPS routing and look identical for the wrong reason.
 
 **Forcing a two-holder prefix** (needed to see multi-instance lookup do anything): fire two
 *concurrent* cold requests with the same >2000-token prefix. With `kv_pool` empty for it,
