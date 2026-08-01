@@ -8,6 +8,31 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (late night) - Ticket #6 completed: benchmark harness built
+
+### Added
+- Benchmark harness implementing the locked methodology (issue #3): `freeze_workloads.py`
+  (6 frozen seeds pinned by SHA-256 manifest), `warmup.py`, `collectors/prom_dump.py` +
+  `collectors/dcgm_poll.py`, `run_cell.sh` per-cell choreography (deploy → #13 gates →
+  warm-up → 6 seeds → collect → `run.json`), `run_sweep.sh`, `rate_pilot.sh`, and
+  `analyze.py` with the pre-registered exact one-sided Wilcoxon + bootstrap CI
+  (stdlib-only). 30 new unit tests; `benchmarks/README.md` pre-registers the validity rules.
+
+### Changed
+- `workload_gen.py`: `pool_seed` split from `seed` so all 6 replay seeds share ONE frozen
+  prefix pool (a single warm-up must cover every seed). `load_driver.py`: `send_ts` is now
+  wall-clock epoch (aligns rows with Prometheus/DCGM windows), optional `--summary-json`,
+  and `--insecure` opt-in TLS flag (gapu-2 self-signed route) instead of implicit trust.
+
+### Decided
+- **Workload JSONLs are not committed; the manifest is** (issue #6): 6×~6 MB of synthetic
+  filler would bloat the submission repo, and generation is deterministic - the committed
+  `workloads/manifest.json` (config + SHA-256 per seed) plus a mandatory
+  regenerate-and-verify in `run_cell.sh` gives the same frozen-dataset guarantee.
+- **Registry probe skipped on the roundrobin cell** (issue #6): roundrobin routing ignores
+  the KV registry, and the probe's pinning signal is meaningless there; the worker
+  registration wait still applies. Documented in `benchmarks/README.md`.
+
 ## 2026-08-01 (night) - Ticket #16 completed: image pipeline pushes to Quay
 
 ### Fixed

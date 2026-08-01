@@ -31,7 +31,7 @@ import httpx
 class Result:
     index: int
     prefix_id: int
-    send_ts: float
+    send_ts: float  # wall-clock epoch seconds - aligns rows with Prometheus/DCGM windows
     ttft_s: Optional[float]
     e2e_s: Optional[float]
     prompt_tokens: Optional[int]
@@ -63,6 +63,7 @@ async def one_request(
         "stream_options": {"include_usage": True},
     }
     t0 = time.perf_counter()
+    wall0 = time.time()
     ttft = None
     prompt_toks = completion_toks = None
     try:
@@ -86,18 +87,18 @@ async def one_request(
         return Result(
             index=req["index"],
             prefix_id=req["prefix_id"],
-            send_ts=t0,
+            send_ts=wall0,
             ttft_s=ttft,
             e2e_s=time.perf_counter() - t0,
             prompt_tokens=prompt_toks,
             completion_tokens=completion_toks,
             status="ok",
         )
-    except Exception as e:  # noqa: BLE001 — record, don't crash the run
+    except Exception as e:  # noqa: BLE001 - record, don't crash the run
         return Result(
             index=req["index"],
             prefix_id=req["prefix_id"],
-            send_ts=t0,
+            send_ts=wall0,
             ttft_s=ttft,
             e2e_s=time.perf_counter() - t0,
             prompt_tokens=None,
@@ -109,7 +110,7 @@ async def one_request(
 
 async def run_open_loop(args, workload) -> List[Result]:
     rng = random.Random(args.seed)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=not args.insecure) as client:
         tasks = []
         for req in workload:
             tasks.append(
@@ -137,7 +138,7 @@ async def run_closed_loop(args, workload) -> List[Result]:
                 await one_request(client, args.base_url, args.model, req, args.max_tokens)
             )
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=not args.insecure) as client:
         await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
     return results
 
@@ -175,16 +176,27 @@ def main():
     mode.add_argument("--concurrency", type=int, help="closed-loop worker count")
     p.add_argument("--max-tokens", type=int, default=64)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument(
+        "--insecure",
+        action="store_true",
+        help="skip TLS verification (gapu-2's edge route serves a self-signed cert)",
+    )
     p.add_argument("--out", required=True, help="per-request CSV path")
+    p.add_argument(
+        "--summary-json",
+        help="optional machine-readable summary (window epochs, counts) for run.json",
+    )
     args = p.parse_args()
 
     workload = load_workload(args.workload)
+    start_ts = time.time()
     t0 = time.perf_counter()
     if args.rate:
         results = asyncio.run(run_open_loop(args, workload))
     else:
         results = asyncio.run(run_closed_loop(args, workload))
     wall = time.perf_counter() - t0
+    end_ts = time.time()
 
     with open(args.out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=[x.name for x in dataclasses.fields(Result)])
@@ -193,6 +205,26 @@ def main():
             w.writerow(dataclasses.asdict(r))
     print(summarize(results, wall))
     print(f"wrote {args.out}")
+
+    if args.summary_json:
+        ok = [r for r in results if r.status == "ok"]
+        with open(args.summary_json, "w") as f:
+            json.dump(
+                {
+                    "workload": args.workload,
+                    "rate": args.rate,
+                    "concurrency": args.concurrency,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "wall_s": wall,
+                    "n": len(results),
+                    "ok": len(ok),
+                    "errors": len(results) - len(ok),
+                },
+                f,
+                indent=2,
+            )
+            f.write("\n")
 
 
 if __name__ == "__main__":
