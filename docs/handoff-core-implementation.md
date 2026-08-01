@@ -109,14 +109,13 @@ oc logs -f deploy/stack-deployment-router -n cache-llm | grep -iE "layout_info|k
 A router-only restart re-registers the workers from their 30 s heartbeat, so the model is
 never reloaded.
 
-> ⚠️ **CORRECTED 2026-08-01 (issue #13) — do not trust the ~60 s figure for anything that
-> reads `layout_info`.** Re-registration self-heals; the **KV registry does not**. The
-> Controller's `kv_pool` is in-memory, a router restart empties it, and the engines never
-> re-admit what they already hold — so every `lookup()` returns `{}` until the **engines** are
-> restarted (~7 min, model reload). Observed across three router pods: engines storing new
-> chunks, controller stuck at `pool_size=0`, zero admits. The old `deploy/README.md` rule
-> "router restart ⇒ engine restart" was declared dead on re-registration evidence alone; it is
-> alive for the KV registry. Procedure and the two-holder warm-up recipe: `deploy/dev/README.md`.
+> ⚠️ **CORRECTED 2026-08-01 (issue #13) — the ~60 s figure holds for the code, not for what
+> the router *knows*.** The Controller's `kv_pool` is in-memory and admission is one-shot per
+> chunk, so for ~40 s after a router restart (until both workers re-register on their
+> heartbeat) admits are lost — and any prefix first stored in that window stays invisible to
+> the Controller for the life of the engine process. No engine restart is needed; waiting is.
+> Gate every observation and every measurement on `deploy/dev/registry-probe.sh` and use a
+> prefix seed you have not used before. Full detail: `deploy/dev/README.md`.
 
 > ⚠️ **`./revert-router-patch.sh` before ANY measurement.** The overlay is invisible to
 > `helm list` and survives restarts. A baseline number measured with a patch mounted is invalid.
