@@ -30,6 +30,7 @@ URL_A = "http://10.0.0.1:8000"
 URL_B = "http://10.0.0.2:8000"
 INST_A = "instance-a"
 INST_B = "instance-b"
+RESTARTED_A = "instance-a2"
 SESSION_KEY = "x-user-id"
 LOCAL = "LocalCPUBackend"
 PROMPT_TOKENS = 2048
@@ -291,6 +292,84 @@ def test_the_instance_map_is_built_once_not_per_request():
     route(router, layout, {})  # no QueryInstRetMsg queued: must not need one
     queries = [m for m in router.kv_manager.messages if isinstance(m, QueryInstMsg)]
     assert len(queries) == 2
+
+
+def test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold():
+    """A restarted engine registers under a **new** instance_id.
+
+    The bridge only ever grows, so a count-of-entries guard would never notice
+    and every holder would read as unmapped — placement silently degenerating
+    to least-loaded for the life of the router, an invalidated run rather than
+    a visible failure.
+    """
+    router = make_router(alpha=1.0, beta=0.1, mapped=False)
+    first_boot = [
+        QueryInstRetMsg(event_id="q", instance_id=INST_A),
+        QueryInstRetMsg(event_id="q", instance_id=INST_B),
+    ]
+    route(router, {INST_A: (LOCAL, PROMPT_TOKENS)}, {}, replies=first_boot)
+
+    restarted = RESTARTED_A
+    after_restart = [
+        QueryInstRetMsg(event_id="q", instance_id=restarted),
+        QueryInstRetMsg(event_id="q", instance_id=INST_B),
+    ]
+    url = route(
+        router,
+        {restarted: (LOCAL, PROMPT_TOKENS)},
+        {URL_B: busy(in_decoding=3)},
+        replies=after_restart,
+    )
+    assert url == URL_A  # warm and idle; a cold read would have picked B anyway
+    assert router.instance_id_to_ip[restarted] == URL_A
+    queries = [m for m in router.kv_manager.messages if isinstance(m, QueryInstMsg)]
+    assert len(queries) == 4  # one round per boot, not one per request
+
+
+def test_the_live_instance_id_wins_when_two_ids_share_a_url():
+    """After a restart the bridge holds both ids; the fresh one carries the credit.
+
+    `refresh_instance_map` appends ids as it learns them, so the last id written
+    for a URL is the live one.
+    """
+    router = make_router(alpha=1.0, beta=0.1)
+    router.instance_id_to_ip = {INST_A: URL_A, RESTARTED_A: URL_A, INST_B: URL_B}
+    layout = {INST_A: (LOCAL, 256), RESTARTED_A: (LOCAL, PROMPT_TOKENS)}
+    assert router.matched_tokens_by_url(layout) == {URL_A: PROMPT_TOKENS}
+    url = router.select_url(endpoints(URL_A, URL_B), {}, layout, PROMPT_TOKENS)
+    assert url == URL_A
+
+
+def test_a_dead_instance_id_earns_no_phantom_credit():
+    """The restarted engine came back with an empty cache.
+
+    The Controller's `kv_pool` only drops an instance on an explicit deregister,
+    so `lookup()` can still name the dead id as a holder of a full prefix. That
+    match no longer exists anywhere — crediting it would route the request to a
+    cold engine on the strength of a cache that died with the old process.
+    """
+    router = make_router(alpha=1.0, beta=0.1)
+    router.instance_id_to_ip = {INST_A: URL_A, RESTARTED_A: URL_A, INST_B: URL_B}
+    layout = {INST_A: (LOCAL, PROMPT_TOKENS)}  # only the dead id reports
+    assert router.matched_tokens_by_url(layout) == {}
+    url = router.select_url(
+        endpoints(URL_A, URL_B), {URL_A: busy(in_decoding=1)}, layout, PROMPT_TOKENS
+    )
+    assert url == URL_B  # both cold; B is the idle one
+
+
+def test_an_unmapped_endpoint_makes_the_bridge_stale():
+    """A URL we cannot translate would score 0 benefit whatever it holds."""
+    router = make_router(mapped=False)
+    router.instance_id_to_ip = {INST_A: URL_A}
+    assert router.instance_map_is_stale(endpoints(URL_A, URL_B), {}) is True
+    assert router.instance_map_is_stale(endpoints(URL_A), {}) is False
+
+
+def test_a_fully_mapped_bridge_with_known_holders_is_not_stale():
+    router = make_router()
+    layout = {INST_A: (LOCAL, PROMPT_TOKENS)}
+    assert router.instance_map_is_stale(endpoints(URL_A, URL_B), layout) is False
 
 
 def test_no_cached_prefix_anywhere_falls_back_to_qps():

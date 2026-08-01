@@ -504,6 +504,29 @@ class LoadAwareRouter(KvawareRouter):
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
         return self.alpha * benefit - self.beta * load
 
+    def matched_tokens_by_url(self, layout_info: Dict) -> Dict[str, int]:
+        """Re-key the Controller's answer from instance_id to engine URL.
+
+        One URL can carry two instance_ids: a restarted engine registers under a
+        fresh id while the dead one lingers both in this bridge and in the
+        Controller's `kv_pool`, which only drops an instance on an explicit
+        deregister — so `lookup()` can still name the dead id as a holder.
+
+        Only the **live** id may be credited: the restarted engine came back with
+        an empty cache, so the dead id's match is phantom. Inverting the bridge
+        resolves it — dicts preserve insertion order and `refresh_instance_map`
+        appends ids as it learns them, so the last id written for a URL is the
+        live one. Credit rides on that id alone; if it reports nothing, the URL
+        scores no benefit, which is exactly right after a restart.
+        """
+        url_to_instance = {url: iid for iid, url in self.instance_id_to_ip.items()}
+        matched = {}
+        for url, instance_id in url_to_instance.items():
+            info = layout_info.get(instance_id)
+            if info is not None:
+                matched[url] = info[1]
+        return matched
+
     def select_url(
         self,
         endpoints: List[EndpointInfo],
@@ -521,37 +544,58 @@ class LoadAwareRouter(KvawareRouter):
         (reproducibility is 30% of the grade); returns None if there is nothing
         to route to, which the caller turns into the upstream fallback.
         """
-        url_to_instance = {url: iid for iid, url in self.instance_id_to_ip.items()}
+        matched_by_url = self.matched_tokens_by_url(layout_info)
         best_url = None
         best_score = -math.inf
         for info in sorted(endpoints, key=lambda e: e.url):
-            instance_id = url_to_instance.get(info.url)
-            matched_tokens = 0
-            if instance_id is not None and instance_id in layout_info:
-                matched_tokens = layout_info[instance_id][1]
-            score = self.score_endpoint(
-                matched_tokens, prompt_tokens, self.load_penalty(request_stats, info.url)
-            )
+            matched_tokens = matched_by_url.get(info.url, 0)
+            load = self.load_penalty(request_stats, info.url)
+            score = self.score_endpoint(matched_tokens, prompt_tokens, load)
             logger.debug(
                 f"loadaware score {info.url}: matched={matched_tokens}/{prompt_tokens} "
-                f"load={self.load_penalty(request_stats, info.url)} score={score:.4f}"
+                f"load={load} score={score:.4f}"
             )
             if score > best_score:
                 best_score = score
                 best_url = info.url
         return best_url
 
-    async def refresh_instance_map(self, endpoints: List[EndpointInfo]) -> None:
-        """Populate instance_id -> URL for every endpoint, once.
+    def instance_map_is_stale(self, endpoints: List[EndpointInfo], layout_info: Dict) -> bool:
+        """Does the instance_id -> URL bridge still cover what we must score?
+
+        Two ways it goes stale, and a count of entries catches neither, because
+        the bridge only ever grows:
+
+        - an **endpoint we cannot score**: some URL is not a value in the map,
+          so its cache credit would read as 0 whatever it actually holds;
+        - an **unknown holder**: `layout_info` names an instance_id the bridge
+          has never seen — what an engine restart looks like, since the new
+          process registers under a fresh id while the old one lingers here.
+
+        Miss the second and placement silently degenerates to least-loaded for
+        the life of the router, with nothing in the logs to say so — an
+        invalidated evaluation run rather than a visible failure.
+        """
+        mapped_urls = set(self.instance_id_to_ip.values())
+        if any(endpoint.url not in mapped_urls for endpoint in endpoints):
+            return True
+        return any(
+            instance_id not in self.instance_id_to_ip for instance_id in layout_info
+        )
+
+    async def refresh_instance_map(
+        self, endpoints: List[EndpointInfo], layout_info: Dict
+    ) -> None:
+        """Populate instance_id -> URL for every endpoint, on demand.
 
         `KvawareRouter` builds this lazily and only far enough to translate the
-        one instance it already picked; scoring needs the whole bridge, so the
-        guard is "have I mapped as many instances as there are endpoints".
-        Each miss costs one awaited round-trip per endpoint to the Controller
+        one instance it already picked; scoring needs the whole bridge.
+        Each rebuild costs one awaited round-trip per endpoint to the Controller
         (production-stack#1016: this path blocks the event loop), so it must
-        stay a once-per-fleet-change cost, not a per-request one.
+        stay a once-per-fleet-change cost, not a per-request one — hence the
+        `instance_map_is_stale` gate rather than an unconditional refresh.
         """
-        if len(self.instance_id_to_ip) >= len(endpoints):
+        if not self.instance_map_is_stale(endpoints, layout_info):
             return
         for endpoint in endpoints:
             event_id = "QueryInst" + str(uuid.uuid4())
@@ -637,7 +681,7 @@ class LoadAwareRouter(KvawareRouter):
             # Nothing cached anywhere — no benefit term to weigh.
             return self.fallback_url(endpoints, request_stats, request, request_json)
 
-        await self.refresh_instance_map(endpoints)
+        await self.refresh_instance_map(endpoints, layout_info)
         url = self.select_url(endpoints, request_stats, layout_info, len(token_ids))
         if url is None:
             return self.fallback_url(endpoints, request_stats, request, request_json)

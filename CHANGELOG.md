@@ -26,11 +26,22 @@ with a pointer to the evidence — those matter as much as code.
   the router would have exited before the factory ran. One-line widening; `apply-router-patch.sh`
   learned the `parser.py` target. An AST-based test asserts `choices` and `RoutingLogic` stay in
   lockstep in both directions.
-- **33 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
-  cluster/GPU/install; suite now 52). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
+- **38 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
+  cluster/GPU/install; suite now 57). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
   `requests`, `fastapi` and `uhashring` import surface and loads the tracked patch file itself.
   Covers the α/β crossover, ties, cold start, the fallbacks, and a regression test that
   `kvaware` still pins to the loaded cache holder.
+
+### Fixed
+- **The instance_id → URL bridge is refreshed when it goes stale, not once.** Review caught two
+  silent failures the first cut had: a count-of-entries guard never notices a restarted engine
+  (it registers under a *fresh* instance_id while the bridge only ever grows), so every holder
+  would read as unmapped and placement would degenerate to least-loaded for the life of the
+  router — an invalidated evaluation run with nothing in the logs. And when two ids share a URL,
+  only the **live** one may be credited: the Controller's `kv_pool` keeps the dead instance's
+  chunks until an explicit deregister, but the restarted engine came back with an empty cache, so
+  that match is phantom. Evidence: `test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold`,
+  `test_a_dead_instance_id_earns_no_phantom_credit`.
 
 ### Decided
 - **Cache-hit benefit is normalized to the fraction of the prompt cached**, not the raw
