@@ -106,9 +106,17 @@ oc exec -n cache-llm deploy/stack-deployment-router -- \
 oc logs -f deploy/stack-deployment-router -n cache-llm | grep -iE "layout_info|kvaware|loadaware"
 ```
 
-A router-only restart self-heals: workers re-register from their 30 s heartbeat, engines are
-never touched. (The old `deploy/README.md` rule "router restart ⇒ engine restart" was **wrong**
-and has been corrected.)
+A router-only restart re-registers the workers from their 30 s heartbeat, so the model is
+never reloaded.
+
+> ⚠️ **CORRECTED 2026-08-01 (issue #13) — do not trust the ~60 s figure for anything that
+> reads `layout_info`.** Re-registration self-heals; the **KV registry does not**. The
+> Controller's `kv_pool` is in-memory, a router restart empties it, and the engines never
+> re-admit what they already hold — so every `lookup()` returns `{}` until the **engines** are
+> restarted (~7 min, model reload). Observed across three router pods: engines storing new
+> chunks, controller stuck at `pool_size=0`, zero admits. The old `deploy/README.md` rule
+> "router restart ⇒ engine restart" was declared dead on re-registration evidence alone; it is
+> alive for the KV registry. Procedure and the two-holder warm-up recipe: `deploy/dev/README.md`.
 
 > ⚠️ **`./revert-router-patch.sh` before ANY measurement.** The overlay is invisible to
 > `helm list` and survives restarts. A baseline number measured with a patch mounted is invalid.
