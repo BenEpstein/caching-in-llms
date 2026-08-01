@@ -65,9 +65,9 @@ still open.**
 1. **Cite #1420** as a prior unmerged attempt (report related-work + PR description) —
    not a novelty problem for coursework, and upstream it's an asset: an acknowledged
    want, twice-requested (#1420, #670), zero design objections.
-2. **Frame our PR as reviving that capability with the missing evidence** — engage
-   #1420's message-schema design (compatibility with #670's consumer is a selling
-   point) and attach the benchmark data that both dead PRs lacked.
+2. **Present the extension as our own design** (decided 2026-08-01: do NOT frame it as
+   a revival of #1420) — cite #1420 only as related work, and attach the benchmark data
+   that both dead PRs lacked.
 3. The stale-bot lesson: when we file, respond fast and keep the PR active — 60 days
    of silence kills it.
 - Overall: field is warming → **file the lookup-extension PR early** (the memo already
