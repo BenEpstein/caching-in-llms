@@ -78,6 +78,14 @@ with a pointer to the evidence — those matter as much as code.
   pull the exact SHA-tagged image cited in the report. Credentials live only in GitHub Actions
   secrets (`QUAY_USERNAME`/`QUAY_TOKEN`, robot account scoped to this one repo).
 
+### Added
+- **Image path verified end to end on gapu-2** (closes #16): first CI push
+  (`:c68ccfc`, digest `sha256:ae5772fe…`) deployed via
+  `helm upgrade --reuse-values -f deploy/values-loadaware-image.yaml` (rev 13); router pod
+  pulled the exact digest from Quay, booted `loadaware` (α=1.0, β=0.1 defaults), and after
+  the expected #13 blind window the registry probe pinned 4/4 - prefix affinity confirmed on
+  the built image, dev-loop overlay uninvolved. #7 unblocked.
+
 ## 2026-08-01 (evening) - Ticket #3 resolved: benchmark methodology locked
 
 ### Decided
