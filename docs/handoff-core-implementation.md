@@ -106,9 +106,16 @@ oc exec -n cache-llm deploy/stack-deployment-router -- \
 oc logs -f deploy/stack-deployment-router -n cache-llm | grep -iE "layout_info|kvaware|loadaware"
 ```
 
-A router-only restart self-heals: workers re-register from their 30 s heartbeat, engines are
-never touched. (The old `deploy/README.md` rule "router restart ⇒ engine restart" was **wrong**
-and has been corrected.)
+A router-only restart re-registers the workers from their 30 s heartbeat, so the model is
+never reloaded.
+
+> ⚠️ **CORRECTED 2026-08-01 (issue #13) — the ~60 s figure holds for the code, not for what
+> the router *knows*.** The Controller's `kv_pool` is in-memory and admission is one-shot per
+> chunk, so for ~40 s after a router restart (until both workers re-register on their
+> heartbeat) admits are lost — and any prefix first stored in that window stays invisible to
+> the Controller for the life of the engine process. No engine restart is needed; waiting is.
+> Gate every observation and every measurement on `deploy/dev/registry-probe.sh` and use a
+> prefix seed you have not used before. Full detail: `deploy/dev/README.md`.
 
 > ⚠️ **`./revert-router-patch.sh` before ANY measurement.** The overlay is invisible to
 > `helm list` and survives restarts. A baseline number measured with a patch mounted is invalid.

@@ -1,0 +1,32 @@
+# Overlay: run the router from OUR built image instead of the stock upstream one.
+#
+# This is the §6 reproducibility path. The dev loop (deploy/dev/apply-router-patch.sh)
+# mounts patched files onto a live pod out-of-band from Helm and is NOT reproducible by a
+# third party — it is a development convenience only. Numbers that go in the report should
+# come from an image a reader can rebuild from the repo's Dockerfile.
+#
+# Usage — layer it on top of the baseline values:
+#
+#   helm upgrade --install vllm vllm/vllm-stack -n cache-llm \
+#     -f deploy/values-baseline-kvaware.yaml \
+#     -f deploy/values-loadaware-image.yaml \
+#     --set routerSpec.tag=<short-sha>
+#
+# The tag is the git short SHA the image was built from (see .github/workflows/
+# router-image.yml). Never `latest`: the router and the engines must carry the same lmcache
+# minor version, and a floating tag makes that impossible to audit after the fact. Cite the
+# exact tag in the report alongside the numbers it produced.
+#
+# ⚠️ Switching the image restarts the router, which blinds the KV registry for ~40 s and
+# poisons any prefix first stored in that window (issue #13). Gate the run:
+#   ./deploy/dev/registry-probe.sh <unused-seed>
+
+routerSpec:
+  # Set to your Quay namespace, e.g. quay.io/<namespace>/lmstack-router-loadaware.
+  # Must match the QUAY_IMAGE repo variable used by the build workflow.
+  repository: "quay.io/CHANGEME/lmstack-router-loadaware"
+  # tag: supplied per-deploy via --set routerSpec.tag=<short-sha>
+
+  # `loadaware` once Change 2 (issue #5) lands; `kvaware` until then, so this overlay can be
+  # exercised end-to-end — image build, push, pull, deploy — before the policy exists.
+  routingLogic: "kvaware"

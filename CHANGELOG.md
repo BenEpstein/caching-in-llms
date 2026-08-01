@@ -29,6 +29,186 @@ with a pointer to the evidence — those matter as much as code.
 - `docs/handoffs/claude-wayfinder-3-e533a3.md` (session log + metric verification) and
   `docs/handoffs/claude-wayfinder-3-e533a3-decisions.md` (workload exploration, D1-D4).
 
+## 2026-08-01 (implementation) — Change 2 landed: `loadaware` placement (issue #5)
+
+### Added
+- **`loadaware` placement policy** in `patches/vllm_router/routers/routing_logic.py`:
+  `LOADAWARE` enum value, a factory branch mirroring `KVAWARE`, and a `LoadAwareRouter`
+  (subclass of `KvawareRouter`) that scores **every** endpoint by
+  `α·(matched_tokens/prompt_tokens) − β·(in_prefill + in_decoding)` and routes to the argmax.
+  The patch is **additions only** — `KvawareRouter` is byte-identical, so the baseline arm of
+  the experiment is untouched. Registered in both `get_routing_logic()` and
+  `cleanup_routing_logic()`.
+- **α/β exposed as tunables** (§4 requires this): `LOADAWARE_ALPHA` / `LOADAWARE_BETA` env
+  vars, defaults 1.0 / 0.1, overridable by kwargs. Documented in `patches/README.md`.
+- **`--routing-logic loadaware` accepted by the CLI**
+  (`patches/vllm_router/parsers/parser.py`): the flag's `choices` are hard-coded literals, not
+  derived from `RoutingLogic`, so the enum value alone would have been rejected by argparse and
+  the router would have exited before the factory ran. One-line widening; `apply-router-patch.sh`
+  learned the `parser.py` target. An AST-based test asserts `choices` and `RoutingLogic` stay in
+  lockstep in both directions.
+- **38 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
+  cluster/GPU/install; suite now 57). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
+  `requests`, `fastapi` and `uhashring` import surface and loads the tracked patch file itself.
+  Covers the α/β crossover, ties, cold start, the fallbacks, and a regression test that
+  `kvaware` still pins to the loaded cache holder.
+
+### Fixed
+- **The instance_id → URL bridge is refreshed when it goes stale, not once.** Review caught two
+  silent failures the first cut had: a count-of-entries guard never notices a restarted engine
+  (it registers under a *fresh* instance_id while the bridge only ever grows), so every holder
+  would read as unmapped and placement would degenerate to least-loaded for the life of the
+  router — an invalidated evaluation run with nothing in the logs. And when two ids share a URL,
+  only the **live** one may be credited: the Controller's `kv_pool` keeps the dead instance's
+  chunks until an explicit deregister, but the restarted engine came back with an empty cache, so
+  that match is phantom. Evidence: `test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold`,
+  `test_a_dead_instance_id_earns_no_phantom_credit`.
+  Known residual window, documented in the docstring: the bridge only learns the fresh id once
+  the restarted engine appears in a `layout_info`, so until its first admit the dead id's match
+  still reads as credit. Closing it means an unconditional Controller round-trip per request on a
+  path that already blocks the event loop (production-stack#1016) — so the operational answer
+  stands: gate runs on `registry-probe.sh`, do not restart engines mid-run. `kvaware` has the
+  same hole and routes purely on that credit; §5 material.
+
+### Decided
+- **Cache-hit benefit is normalized to the fraction of the prompt cached**, not the raw
+  matched-token count the handoff brief sketched. With raw counts the meaningful α:β ratio is
+  ~1:1000 *and* shifts with prompt length, so one (α, β) pair would be a different policy for a
+  500- and a 4000-token prompt — unusable for the §5 sweep. Normalized, `1/β` reads directly as
+  "in-flight requests that cancel a full cache hit". Evidence:
+  `test_benefit_is_normalized_so_the_weights_are_prompt_length_invariant`.
+- **`loadaware` does not apply `kv_aware_threshold`.** Upstream needs that band because kvaware
+  cannot weigh a small match against anything; the argmax can. Keeping it would also route
+  every sub-threshold prompt by QPS in *both* arms, making that slice of the workload an
+  identical no-op comparison. `kvaware` keeps the band (baseline unchanged). Evidence:
+  `test_short_prompts_are_placed_not_dropped_to_the_qps_fallback`.
+- **α/β travel by environment variable, not a CLI flag.** Registering a flag means the parser
+  *and* `app.py` (which builds the `initialize_routing_logic` kwargs), i.e. one more file to
+  mount and keep in sync than the one-line `choices` widening already forced. The factory still forwards `loadaware_alpha`/
+  `loadaware_beta` kwargs, so adding a flag later touches no code here.
+- **Not applied to the cluster in this session.** With issue #13 open (a router restart empties
+  the KV registry and engines never re-admit), a live `loadaware` run would see `layout_info={}`
+  and degenerate to the fallback — the ~7 min engine restart buys nothing until #13 lands.
+  Offline tests + PR is the whole of #5.
+## 2026-08-01 (§6 image path) — Ticket #16: build in CI, not on a laptop
+
+### Added
+- `Dockerfile` — the §6 reproducibility deliverable: the pinned stock router (**by digest**,
+  not just tag — router and engines must carry the same lmcache minor or the controller
+  protocol fails silently) plus a straight copy of `patches/`, which already mirrors the
+  site-packages layout. No compilation, no CUDA, no weights.
+- `.github/workflows/router-image.yml` — builds on every change to `patches/`/`Dockerfile`,
+  **verifies the overlay actually landed** inside the built image (a silently-unpatched image
+  would read as a failed experiment rather than a failed build), then pushes to Quay tagged
+  by git short SHA. Without credentials configured it still builds and verifies, and skips
+  only the push.
+- `deploy/values-loadaware-image.yaml` — Helm overlay pointing `routerSpec` at the built
+  image, layered on top of the baseline values.
+
+### Decided
+- **The image is built in CI, not locally.** The handoff assumed a local build, which needs a
+  container runtime on a laptop (none installed) and a manual registry login. CI has Docker,
+  keeps the credential in repo secrets, and — the part that earns the 30% — means a grader
+  reproduces the image by pushing a commit rather than trusting an artifact one person built
+  by hand.
+- **Tag by commit SHA, never `latest`.** A floating tag makes the router/engine lmcache
+  pairing impossible to audit after the fact; the report cites the exact tag its numbers
+  came from.
+- **Credentials are a Quay robot-account token in GitHub Actions secrets**, never a user
+  password, and the image repository should be public so the cluster needs no pull secret.
+
+### Not done — needs a repo admin
+Quay robot account + `QUAY_USERNAME`/`QUAY_TOKEN` secrets + `QUAY_IMAGE` variable, then a
+first push and a pull test from the cluster. The build path is otherwise complete and is
+exercised by CI on every push.
+
+## 2026-08-01 (investigation) — Ticket #13 resolved: the KV registry's blind window
+
+### Found — three facts that compose into a silent measurement trap
+- The Controller's `kv_pool` is **in-memory**: a router restart empties it.
+- Admission is **one-shot per chunk** — `LocalCPUBackend.submit_put_task` returns early on
+  `if key in self.hot_cache`, so a chunk is announced exactly once, at first store. Nothing
+  already cached is ever re-announced. (`RegisterMsg`, `HeartbeatMsg` and `KVAdmitMsg` all
+  share one PUSH socket, so this is not a dead-socket problem — re-registration recovers
+  because heartbeats *repeat*; admission never does.)
+- Admits are lost for **~40 s** after a router restart, until both workers re-register
+  (10 s heartbeat delay + 30 s interval).
+- **Composed:** a prefix first stored inside that window is invisible to the Controller for
+  the life of the engine process, while the engine still serves it from its own cache
+  perfectly. Both arms of an experiment then degrade to QPS routing and look identical for
+  the wrong reason.
+
+### Measured (fresh prefix per probe, from rollout completion)
+```
+t+4s … t+30s   requests spread 2/2   → registry empty
+t+42s          requests pinned 4/4   → registry live (both workers re-registered)
+```
+
+### Added
+- `deploy/dev/registry-probe.sh` — no-patch health check for the registry. Sends the same
+  >2000-token prefix N times: `kvaware` pins all N to one Instance when the registry is
+  populated and spreads them when it is empty. Exit 0/1, so it gates a run.
+
+### Decided
+- **Every measurement is gated on `registry-probe.sh` with an unused seed**, run after each
+  `apply-router-patch.sh` and each `revert-router-patch.sh`, before warm-up. Poisoned
+  prefixes are never reused.
+- **No engine restart is required** — this walks back the same-day claim that it was. Waiting
+  ~40 s for re-registration is enough, so the dev loop stays ~60 s + the probe.
+- **Upstream:** the principled fix is for a worker to re-announce its `hot_cache` on
+  (re-)registration, making admission self-healing like registration. That is LMCache
+  `v1/cache_controller` code, which is being deprecated (LMCache#4025) and is off our PR
+  target — so it belongs as an upstream **issue**, per the two-PRs-only rule in #10.
+
+## 2026-08-01 (implementation) — Change 1 landed: multi-instance lookup (issue #4)
+
+### Added
+- **`patches/` — tracked copies of the router-image Python files we modify**, mirroring their
+  path under `/opt/venv/lib/python3.12/site-packages/`. The dev loop and the future §6 image
+  apply the *same* bytes. Conventions in `patches/README.md`.
+- **Multi-instance lookup** in `patches/lmcache/v1/cache_controller/controllers/kv_controller.py`:
+  `lookup()` now credits **every** instance holding each chunk instead of `kv_pool[key][0]`,
+  so `layout_info` reports per-instance matched-token counts. Wire-compatible — `LookupRetMsg`
+  was already `{instance_id: (location, matched_tokens)}`.
+- **`tests/` — 18 offline unit tests** (`pytest tests/`, no cluster/GPU/lmcache install).
+  `tests/conftest.py` stubs the `lmcache` import surface and loads the *tracked patch file
+  itself* by path, so the bytes under test are the bytes that get mounted. Includes a verbatim
+  reference implementation of the stock lookup for the regression assertions.
+
+### Decided
+- **Prefix credit is contiguous per instance.** An instance stops earning matched tokens at its
+  first missing chunk even if it holds later ones — a cache match is a prefix match, so tokens
+  after a hole are unusable. The upstream global `break` is subsumed: the walk ends when no
+  instance is still contiguous. Evidence: `tests/test_kv_controller_lookup.py`
+  (`test_gap_stops_credit_at_the_gap_not_after_it`). This is a real design decision and belongs
+  in §5 of the report.
+- **`kvaware` is *not* behaviourally invariant under this patch**, even though
+  `routing_logic.py` is untouched. The *instance* it selects is unchanged — both
+  implementations insert `kv_pool[key0][0]` first and Python keeps a key's original position
+  on re-assignment — but that instance's **`matched_tokens` can grow**, because an instance is
+  now credited on every chunk it holds rather than only on chunks where it happens to be `[0]`.
+  kvaware bands `matched_tokens` against `kv_aware_threshold` (`routing_logic.py:354-369`) to
+  choose the cache path over the QPS fallback, so a larger count can flip that branch.
+  **The baseline arm must be measured with `revert-router-patch.sh` applied**, never with
+  Change 1 mounted. Evidence: `test_selected_instance_is_unchanged_even_with_several_holders`
+  and `test_matched_tokens_of_the_selected_instance_can_grow`.
+
+### Fixed
+- **`deploy/dev/apply-router-patch.sh` was unrunnable on macOS** — `declare -A` needs bash 4 and
+  macOS ships bash 3.2, which mis-parsed the subscripts as arithmetic and killed the script.
+  Replaced the associative array with a `patch_target()` `case`.
+
+### Verified live (cluster `gapu-2`, patch mounted, both engines)
+- `[LOADAWARE] lookup matched 2 instance(s): {'…-pm79x': ('LocalCPUBackend', 5691),
+  '…-x9dkx': ('LocalCPUBackend', 5691)}` — two instances reported for one prefix, which stock
+  lookup structurally cannot do. Recipe: two *concurrent* cold requests on a fresh >2000-token
+  prefix split across both engines (QPS fallback), then a third request to observe the lookup.
+
+### Found — blocks evaluation (issue #13, since resolved — see the entry above)
+- **A router restart leaves the Controller's `kv_pool` empty and every `lookup()` returning
+  `{}`**, with nothing in the logs saying so. Cost most of this session's live-verification
+  time. Investigated and characterised in #13.
+
 ## 2026-08-01 (docs consolidation) - Ticket #12 resolved
 
 ### Changed
