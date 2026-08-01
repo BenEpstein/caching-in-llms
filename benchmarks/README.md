@@ -72,12 +72,14 @@ Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values (ch
 check (a mounted `router-patch` ConfigMap is auto-reverted - validity rule 2) → α/β via
 `oc set env` (chart 0.1.11 ignores `routerSpec.env`; baselines get the vars *removed* so
 a stale β can't leak through the three-way merge) → router-Service controller-port patch
-(deploy/README gotcha #0) → **engine restart** so every cell starts from identical empty
-caches (#13) → wait for 2 `Registered instance-worker` router-log lines since the restart
-(this router build exposes no registered-workers gauge) → `registry-probe.sh` with a
-fresh seed (#13 gate; skipped on roundrobin, whose routing ignores the registry) →
-warm-up passes gated on non-empty `layout_info` (router log must show `found by … router`
-cache-path routings) → 6 seeds replayed back-to-back, no reset between seeds
+(deploy/README gotcha #0) → **router image asserted against the cell's label** (validity
+rule 2) → **engine restart** so every cell starts from identical empty caches (#13) →
+wait for 2 `Registered instance-worker` router-log lines since the restart (this router
+build exposes no registered-workers gauge) → `registry-probe.sh` with a fresh seed (#13
+gate) → warm-up passes gated on non-empty `layout_info` (router log must show
+`found by … router` cache-path routings); both lookup gates are skipped on roundrobin
+(`USES_LOOKUP=0`), whose routing ignores the registry and never emits either signal →
+6 seeds replayed back-to-back, no reset between seeds
 (steady-state) → Prometheus dump + DCGM CSV (one port-forward **per exporter pod** - the
 DaemonSet Service would pin to one node's GPU) + `run.json` manifest → validity check.
 
@@ -85,13 +87,16 @@ DaemonSet Service would pin to one node's GPU) + `run.json` manifest → validit
 
 ```
 results/<ts>-<cell>/
-  driver-seed{1..6}.csv     client-observed per-request TTFT/E2E/tokens (percentile source of truth)
-  summary-seed{1..6}.json   per-seed window epochs + counts
+  driver-seed{1..6}.csv     client-observed per-request TTFT/E2E/tokens (percentile source of
+                            truth; send_ts is wall-clock epoch, so per-seed windows derive from it)
   prom/*.json               vllm:num_requests_running/waiting, request_queue_time, kv_cache_usage,
-                            lmcache hit metrics, process CPU/RSS - per engine, 5 s resolution
+                            lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution
   dcgm.csv                  GPU_UTIL / POWER_USAGE / MEM_COPY_UTIL per GPU, ~5 s samples
-  run.json                  arm, α/β, rate, image + imageID, git commit, workload manifest, windows
+  run.json                  arm, α/β, rate, image + imageID, git commit, workload manifest, window
 ```
+
+`analyze.py compare` refuses to pair two runs whose `run.json` rate or workload manifest
+differ - the methodology's "identical workload across arms" is enforced, not assumed.
 
 Driver CSVs are the only percentile-capable latency source (the router exposes only
 average-latency gauges; engine TTFT histograms start their clock at the engine and miss

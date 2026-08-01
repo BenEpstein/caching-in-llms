@@ -24,6 +24,20 @@ with a pointer to the evidence — those matter as much as code.
   wall-clock epoch (aligns rows with Prometheus/DCGM windows), optional `--summary-json`,
   and `--insecure` opt-in TLS flag (gapu-2 self-signed route) instead of implicit trust.
 
+### Changed
+- **Review + simplify pass over PR #20** (/code-review + /simplify, 4 findings applied,
+  ~90 lines net removed): `percentile` now lives only in `analyze.py` (driver imports it);
+  tautological Wilcoxon brute-force test replaced with a hand-computed midrank-ties case;
+  driver `--summary-json` dropped (windows derive from CSV `send_ts`); unused
+  `prom_dump --metric` dropped; redundant bootstrap sorts removed; DCGM poll sleeps to a
+  deadline. Correctness from review: driver pins OSL via `ignore_eos` (early EOS was
+  leaking output-length variance into E2E/throughput), unbounded httpx connection pool
+  (pool-queueing would count as TTFT past the knee), per-chunk JSON parse removed from the
+  measurement path, `--since` log windows floored at the gate timestamp (probe traffic
+  could satisfy the warm-up gate), router image asserted per cell and
+  `analyze.py compare` refuses runs with differing rate/workload manifests
+  (validity rules now enforced, not recorded).
+
 ### Fixed
 - **Live verification on gapu-2 falsified four harness assumptions** (issue #6, PR #20):
   (1) chart 0.1.11 silently ignores `routerSpec.env` - α/β now travel via `oc set env`

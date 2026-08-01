@@ -25,6 +25,7 @@ import argparse
 import csv
 import glob
 import itertools
+import json
 import os
 import random
 import sys
@@ -123,14 +124,11 @@ def bootstrap_ci_median_rel_reduction(
     """Median relative reduction (base-cand)/base with a percentile bootstrap
     95% CI, resampling the seed PAIRS with replacement."""
     rel = [(b - c) / b for c, b in zip(cand, base)]
-    rel.sort()
     point = percentile(rel, 50)
     rng = random.Random(seed)
     medians = []
     for _ in range(iters):
-        sample = sorted(rng.choice(rel) for _ in rel)
-        medians.append(percentile(sample, 50))
-    medians.sort()
+        medians.append(percentile([rng.choice(rel) for _ in rel], 50))
     return {
         "median_rel_reduction": point,
         "ci95": [percentile(medians, 2.5), percentile(medians, 97.5)],
@@ -159,7 +157,25 @@ def print_summary(run_dir: str) -> None:
         print(f"  ⚠ INVALID  {problem}")
 
 
+def check_comparable(cand_dir: str, base_dir: str) -> None:
+    """Validity: arms are only comparable under an identical workload and rate.
+    Enforced from the run.json manifests when both runs have them."""
+    metas = []
+    for d in (cand_dir, base_dir):
+        path = os.path.join(d, "run.json")
+        metas.append(json.load(open(path)) if os.path.exists(path) else None)
+    a, b = metas
+    if a and b:
+        for key in ("rate_req_s", "workload_manifest"):
+            if a[key] != b[key]:
+                raise SystemExit(
+                    f"runs are not comparable: {key} differs - the methodology "
+                    "requires identical workload and rate across arms"
+                )
+
+
 def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
+    check_comparable(cand_dir, base_dir)
     cand, base = read_run(cand_dir), read_run(base_dir)
     if len(cand) != len(base):
         raise SystemExit(f"seed count mismatch: {len(cand)} vs {len(base)}")

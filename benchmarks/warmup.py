@@ -37,7 +37,6 @@ async def send(client, base_url, model, prompt):
 
 async def run(args) -> int:
     pool = build_prefix_pool(frozen_config(seed=0))
-    errors = 0
     sem = asyncio.Semaphore(args.concurrency)
     async with httpx.AsyncClient(verify=not args.insecure) as client:
         for pass_no in range(1, args.passes + 1):
@@ -63,9 +62,8 @@ async def run(args) -> int:
                 f"pass {pass_no}/{args.passes}: {len(pool) - failed}/{len(pool)} ok "
                 f"in {time.time() - t0:.1f}s"
             )
-            errors = failed
     # only the final pass gates: earlier passes may race cold engines
-    return 1 if errors else 0
+    return 1 if failed else 0
 
 
 def main() -> int:

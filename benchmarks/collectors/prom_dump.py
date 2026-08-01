@@ -59,12 +59,11 @@ def main() -> int:
     p.add_argument("--end", type=float, required=True, help="epoch seconds")
     p.add_argument("--step", default="5s")
     p.add_argument("--out", required=True, help="output directory")
-    p.add_argument("--metric", action="append", default=[], help="extra metric(s)")
     a = p.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
     empty = []
-    for metric in METRICS + a.metric:
+    for metric in METRICS:
         try:
             resp = query_range(a.prom_url, metric, a.start, a.end, a.step)
         except Exception as e:  # noqa: BLE001

@@ -70,6 +70,7 @@ def main() -> int:
         if f.tell() == 0:
             w.writerow(["ts", "metric", "gpu", "hostname", "value"])
         while not stop and (t_end is None or time.time() < t_end):
+            round_start = time.time()
             for url in a.url:
                 try:
                     with urllib.request.urlopen(url, timeout=10) as r:
@@ -80,7 +81,8 @@ def main() -> int:
                 except Exception as e:  # noqa: BLE001 - keep polling through blips
                     print(f"poll error ({url}): {e}", file=sys.stderr)
             f.flush()
-            time.sleep(a.interval)
+            # sleep to the deadline so slow fetches don't stretch the interval
+            time.sleep(max(0.0, a.interval - (time.time() - round_start)))
     return 0
 
 

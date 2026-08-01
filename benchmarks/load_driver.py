@@ -26,6 +26,14 @@ from typing import List, Optional
 
 import httpx
 
+from analyze import percentile
+
+# Unbounded connection pool: past the saturation knee the in-flight count can
+# exceed httpx's default 100, and pool-queueing would be silently counted as
+# TTFT (t0 starts before client.stream) - distorting the very tail the rate
+# pilot measures.
+_LIMITS = httpx.Limits(max_connections=None)
+
 
 @dataclasses.dataclass
 class Result:
@@ -58,6 +66,10 @@ async def one_request(
         "model": model,
         "prompt": req["prompt"],
         "max_tokens": max_tokens,
+        # pin the output length (methodology: OSL is fixed) - without this,
+        # greedy decoding can hit EOS early and output-length variance leaks
+        # into E2E latency and throughput
+        "ignore_eos": True,
         "temperature": 0.0,
         "stream": True,
         "stream_options": {"include_usage": True},
@@ -79,8 +91,11 @@ async def one_request(
                     break
                 if ttft is None:
                     ttft = time.perf_counter() - t0
-                chunk = json.loads(data)
-                usage = chunk.get("usage")
+                # usage arrives only in the final chunk - don't JSON-parse
+                # every token on the measurement path
+                if '"usage"' not in data:
+                    continue
+                usage = json.loads(data).get("usage")
                 if usage:
                     prompt_toks = usage.get("prompt_tokens")
                     completion_toks = usage.get("completion_tokens")
@@ -110,7 +125,7 @@ async def one_request(
 
 async def run_open_loop(args, workload) -> List[Result]:
     rng = random.Random(args.seed)
-    async with httpx.AsyncClient(verify=not args.insecure) as client:
+    async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
         tasks = []
         for req in workload:
             tasks.append(
@@ -138,17 +153,9 @@ async def run_closed_loop(args, workload) -> List[Result]:
                 await one_request(client, args.base_url, args.model, req, args.max_tokens)
             )
 
-    async with httpx.AsyncClient(verify=not args.insecure) as client:
+    async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
         await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
     return results
-
-
-def percentile(xs: List[float], p: float) -> float:
-    if not xs:
-        return float("nan")
-    xs = sorted(xs)
-    i = min(len(xs) - 1, max(0, round(p / 100 * (len(xs) - 1))))
-    return xs[i]
 
 
 def summarize(results: List[Result], wall_s: float) -> str:
@@ -182,21 +189,15 @@ def main():
         help="skip TLS verification (gapu-2's edge route serves a self-signed cert)",
     )
     p.add_argument("--out", required=True, help="per-request CSV path")
-    p.add_argument(
-        "--summary-json",
-        help="optional machine-readable summary (window epochs, counts) for run.json",
-    )
     args = p.parse_args()
 
     workload = load_workload(args.workload)
-    start_ts = time.time()
     t0 = time.perf_counter()
     if args.rate:
         results = asyncio.run(run_open_loop(args, workload))
     else:
         results = asyncio.run(run_closed_loop(args, workload))
     wall = time.perf_counter() - t0
-    end_ts = time.time()
 
     with open(args.out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=[x.name for x in dataclasses.fields(Result)])
@@ -205,26 +206,6 @@ def main():
             w.writerow(dataclasses.asdict(r))
     print(summarize(results, wall))
     print(f"wrote {args.out}")
-
-    if args.summary_json:
-        ok = [r for r in results if r.status == "ok"]
-        with open(args.summary_json, "w") as f:
-            json.dump(
-                {
-                    "workload": args.workload,
-                    "rate": args.rate,
-                    "concurrency": args.concurrency,
-                    "start_ts": start_ts,
-                    "end_ts": end_ts,
-                    "wall_s": wall,
-                    "n": len(results),
-                    "ok": len(ok),
-                    "errors": len(results) - len(ok),
-                },
-                f,
-                indent=2,
-            )
-            f.write("\n")
 
 
 if __name__ == "__main__":

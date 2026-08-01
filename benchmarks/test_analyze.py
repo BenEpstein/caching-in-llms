@@ -6,9 +6,7 @@ cross-check, zero/tie handling.
 """
 
 import csv
-import itertools
 import math
-import random
 
 import pytest
 
@@ -65,33 +63,13 @@ def test_wilcoxon_drops_zeros():
     assert math.isclose(r["p"], 1 / 8)
 
 
-def test_wilcoxon_matches_bruteforce_random_inputs():
-    # independent brute force: enumerate sign assignments over midranks
-    rng = random.Random(7)
-    for _ in range(20):
-        d = [round(rng.uniform(-5, 5), 1) for _ in range(rng.randint(3, 8))]
-        d = [x for x in d if x != 0]
-        if not d:
-            continue
-        r = wilcoxon_exact_one_sided(d)
-        n = len(d)
-        srt = sorted(range(n), key=lambda i: abs(d[i]))
-        ranks = [0.0] * n
-        i = 0
-        while i < n:
-            j = i
-            while j + 1 < n and abs(d[srt[j + 1]]) == abs(d[srt[i]]):
-                j += 1
-            for k in range(i, j + 1):
-                ranks[srt[k]] = (i + j) / 2 + 1
-            i = j + 1
-        w_obs = sum(r_ for r_, x in zip(ranks, d) if x > 0)
-        count = sum(
-            1
-            for signs in itertools.product((0, 1), repeat=n)
-            if sum(r_ for r_, s in zip(ranks, signs) if s) <= w_obs + 1e-9
-        )
-        assert math.isclose(r["p"], count / 2**n), f"diffs={d}"
+def test_wilcoxon_midranks_on_ties():
+    # hand-computed: |d| = 1,1,2 → midranks 1.5,1.5,3; W+ = 3 (the +2).
+    # Over 2^3 sign assignments the rank sums are {0,1.5,1.5,3,3,4.5,4.5,6},
+    # so P(W+ <= 3) = 5/8.
+    r = wilcoxon_exact_one_sided([-1, -1, 2])
+    assert r["w_plus"] == 3
+    assert math.isclose(r["p"], 5 / 8)
 
 
 # ---- bootstrap --------------------------------------------------------------

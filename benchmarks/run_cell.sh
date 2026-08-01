@@ -46,13 +46,17 @@ PROM_PORT="${PROM_PORT:-19090}"
 DCGM_PORT="${DCGM_PORT:-19400}"
 
 # ---- cell → helm args -------------------------------------------------------
+# USES_LOOKUP: does this arm route via the KV registry? Gates the registry
+# probe and the layout_info warm-up check; roundrobin ignores the registry so
+# neither signal exists there.
 HELM_ARGS=(-f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml")
-ALPHA="" BETA="" ARM=""
+ALPHA="" BETA="" ARM="" USES_LOOKUP=1
 case "$CELL" in
   kvaware)
     ARM=kvaware ;;
   roundrobin)
     ARM=roundrobin
+    USES_LOOKUP=0
     HELM_ARGS+=(--set routerSpec.routingLogic=roundrobin) ;;
   loadaware-b*)
     ARM=loadaware
@@ -109,6 +113,21 @@ fi
 
 # ---- 3. cold start: restart engines so every cell begins with empty caches --
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
+
+# validity rule 2: wrong image = discard, never correct. Assert the deployed
+# router matches the cell's label before anything is measured.
+ROUTER_IMAGE=$(oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
+  -o jsonpath='{.spec.template.spec.containers[0].image}')
+if [ "$ARM" = "loadaware" ]; then
+  WANT="quay.io/rhl193000/lmstack-router-loadaware:$LOADAWARE_TAG"
+  [ "$ROUTER_IMAGE" = "$WANT" ] || { echo "router image $ROUTER_IMAGE != $WANT" >&2; exit 1; }
+else
+  case "$ROUTER_IMAGE" in
+    lmcache/lmstack-router:*) ;;
+    *) echo "baseline cell but router image is $ROUTER_IMAGE" >&2; exit 1 ;;
+  esac
+fi
+
 ENGINE_RESTART_TS=$(date +%s)
 oc rollout restart "deploy/$ENGINE_DEPLOY" -n "$NS"
 oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
@@ -120,7 +139,9 @@ oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
 echo "==> waiting for 2 worker registrations since engine restart"
 registered=0
 for _ in $(seq 60); do
-  since=$(( $(date +%s) - ENGINE_RESTART_TS + 5 ))
+  # window starts AT the restart, never before it: a pre-restart registration
+  # line must not satisfy the gate
+  since=$(( $(date +%s) - ENGINE_RESTART_TS )); [ "$since" -lt 1 ] && since=1
   registered=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
     | grep -c "Registered instance-worker" || true)
   [ "$registered" -ge 2 ] && break
@@ -128,16 +149,18 @@ for _ in $(seq 60); do
 done
 [ "$registered" -ge 2 ] || { echo "workers never re-registered (saw $registered)" >&2; exit 1; }
 
-# ---- 5. registry probe (#13) - skip on roundrobin (routing ignores the registry)
-if [ "$ARM" != "roundrobin" ]; then
+# ---- 5. registry probe (#13) - only meaningful on lookup-routing arms -------
+if [ "$USES_LOOKUP" = 1 ]; then
   "$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
 fi
 
 # ---- 6. warm-up over the prefix pool, gated on non-empty layout_info --------
 WARMUP_START=$(date +%s)
 python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure
-if [ "$ARM" != "roundrobin" ]; then
-  since=$(( $(date +%s) - WARMUP_START + 5 ))
+if [ "$USES_LOOKUP" = 1 ]; then
+  # window starts AT warm-up start: probe traffic just before it also logs
+  # "found by" lines and must not satisfy this gate
+  since=$(( $(date +%s) - WARMUP_START )); [ "$since" -lt 1 ] && since=1
   hits=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" \
     | grep -c "found by .* router" || true)
   if [ "$hits" -eq 0 ]; then
@@ -173,8 +196,7 @@ for seed in 1 2 3 4 5 6; do
     --base-url "$BASE_URL" --model "$MODEL" --insecure \
     --workload "$BENCH_DIR/workloads/seed-$seed.jsonl" \
     --rate "$RATE" --seed "$seed" \
-    --out "$OUT/driver-seed$seed.csv" \
-    --summary-json "$OUT/summary-seed$seed.json"
+    --out "$OUT/driver-seed$seed.csv"
 done
 CELL_END=$(date +%s)
 
@@ -184,8 +206,7 @@ python3 "$BENCH_DIR/collectors/prom_dump.py" \
   --start "$CELL_START" --end "$CELL_END" --out "$OUT/prom"
 
 # ---- 10. run manifest -------------------------------------------------------
-ROUTER_IMAGE=$(oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
-  -o jsonpath='{.spec.template.spec.containers[0].image}')
+# per-seed windows are derivable from each driver CSV's send_ts column
 ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
   -o jsonpath='{.spec.selector.matchLabels}' \
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
@@ -193,28 +214,24 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
 export CELL ARM ALPHA BETA RATE CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
 python3 - <<'PY'
-import glob, json, os
-out = os.environ["OUT"]
-seeds = {}
-for path in sorted(glob.glob(os.path.join(out, "summary-seed*.json"))):
-    seeds[os.path.basename(path)[len("summary-seed"):-len(".json")]] = json.load(open(path))
-manifest = json.load(open(os.path.join(os.environ["BENCH_DIR"], "workloads", "manifest.json")))
+import json, os
+env = os.environ
+manifest = json.load(open(os.path.join(env["BENCH_DIR"], "workloads", "manifest.json")))
 run = {
-    "cell": os.environ["CELL"],
-    "arm": os.environ["ARM"],
-    "alpha": os.environ["ALPHA"] or None,
-    "beta": os.environ["BETA"] or None,
-    "rate_req_s": float(os.environ["RATE"]),
-    "window": {"start_ts": int(os.environ["CELL_START"]), "end_ts": int(os.environ["CELL_END"])},
-    "router_image": os.environ["ROUTER_IMAGE"],
-    "router_image_id": os.environ["ROUTER_IMAGE_ID"],
-    "git_commit": os.environ["GIT_COMMIT"],
+    "cell": env["CELL"],
+    "arm": env["ARM"],
+    "alpha": env["ALPHA"] or None,
+    "beta": env["BETA"] or None,
+    "rate_req_s": float(env["RATE"]),
+    "window": {"start_ts": int(env["CELL_START"]), "end_ts": int(env["CELL_END"])},
+    "router_image": env["ROUTER_IMAGE"],
+    "router_image_id": env["ROUTER_IMAGE_ID"],
+    "git_commit": env["GIT_COMMIT"],
     "workload_manifest": manifest,
-    "seed_windows": seeds,
 }
-with open(os.path.join(out, "run.json"), "w") as f:
+with open(os.path.join(env["OUT"], "run.json"), "w") as f:
     json.dump(run, f, indent=2)
-print(f"wrote {out}/run.json")
+print(f"wrote {env['OUT']}/run.json")
 PY
 
 # ---- 11. validity gate ------------------------------------------------------
