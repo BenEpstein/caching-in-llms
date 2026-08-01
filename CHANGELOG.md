@@ -8,6 +8,27 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (evening) - Ticket #3 resolved: benchmark methodology locked
+
+### Decided
+- **Benchmark methodology (issue #3, full detail in its resolution comment):** one frozen
+  Zipfian prefix workload (s=1.2, 20 prefixes × 2048 tok, OSL 64, committed JSONL); merged
+  6-cell sweep (loadaware β ∈ {0, 0.1, 0.5, 1.0} + kvaware + roundrobin) × 6 seeds × 500
+  requests, full engine-restart choreography per cell (#13); headline pre-registered as
+  shipped β=0.1 vs kvaware on client-observed TTFT p95, one-sided paired Wilcoxon p<0.05 +
+  bootstrap CI; mechanism metric = per-instance load CV.
+- **Measured runs use built images only** (stock image for baselines, SHA-tagged Quay image
+  for loadaware; overlay never measured) - settles #16's open question and makes #16 a hard
+  blocker for #7 (blocked-by edge wired). No mock/simulation anywhere.
+- **Metric plumbing verified live on gapu-2:** driver CSV is the only percentile-capable
+  latency source (router exposes averages only; engine TTFT histogram is coarse and starts
+  at the engine); Prometheus dump per run for load/queue/LMCache-hit metrics; DCGM polled
+  directly via port-forward (stack Prometheus does not scrape it; no ServiceMonitor added).
+
+### Added
+- `docs/handoffs/claude-wayfinder-3-e533a3.md` (session log + metric verification) and
+  `docs/handoffs/claude-wayfinder-3-e533a3-decisions.md` (workload exploration, D1-D4).
+
 ## 2026-08-01 (implementation) — Change 2 landed: `loadaware` placement (issue #5)
 
 ### Added
