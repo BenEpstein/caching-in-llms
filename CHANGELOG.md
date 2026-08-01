@@ -8,6 +8,68 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (implementation) — Change 2 landed: `loadaware` placement (issue #5)
+
+### Added
+- **`loadaware` placement policy** in `patches/vllm_router/routers/routing_logic.py`:
+  `LOADAWARE` enum value, a factory branch mirroring `KVAWARE`, and a `LoadAwareRouter`
+  (subclass of `KvawareRouter`) that scores **every** endpoint by
+  `α·(matched_tokens/prompt_tokens) − β·(in_prefill + in_decoding)` and routes to the argmax.
+  The patch is **additions only** — `KvawareRouter` is byte-identical, so the baseline arm of
+  the experiment is untouched. Registered in both `get_routing_logic()` and
+  `cleanup_routing_logic()`.
+- **α/β exposed as tunables** (§4 requires this): `LOADAWARE_ALPHA` / `LOADAWARE_BETA` env
+  vars, defaults 1.0 / 0.1, overridable by kwargs. Documented in `patches/README.md`.
+- **`--routing-logic loadaware` accepted by the CLI**
+  (`patches/vllm_router/parsers/parser.py`): the flag's `choices` are hard-coded literals, not
+  derived from `RoutingLogic`, so the enum value alone would have been rejected by argparse and
+  the router would have exited before the factory ran. One-line widening; `apply-router-patch.sh`
+  learned the `parser.py` target. An AST-based test asserts `choices` and `RoutingLogic` stay in
+  lockstep in both directions.
+- **38 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
+  cluster/GPU/install; suite now 57). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
+  `requests`, `fastapi` and `uhashring` import surface and loads the tracked patch file itself.
+  Covers the α/β crossover, ties, cold start, the fallbacks, and a regression test that
+  `kvaware` still pins to the loaded cache holder.
+
+### Fixed
+- **The instance_id → URL bridge is refreshed when it goes stale, not once.** Review caught two
+  silent failures the first cut had: a count-of-entries guard never notices a restarted engine
+  (it registers under a *fresh* instance_id while the bridge only ever grows), so every holder
+  would read as unmapped and placement would degenerate to least-loaded for the life of the
+  router — an invalidated evaluation run with nothing in the logs. And when two ids share a URL,
+  only the **live** one may be credited: the Controller's `kv_pool` keeps the dead instance's
+  chunks until an explicit deregister, but the restarted engine came back with an empty cache, so
+  that match is phantom. Evidence: `test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold`,
+  `test_a_dead_instance_id_earns_no_phantom_credit`.
+  Known residual window, documented in the docstring: the bridge only learns the fresh id once
+  the restarted engine appears in a `layout_info`, so until its first admit the dead id's match
+  still reads as credit. Closing it means an unconditional Controller round-trip per request on a
+  path that already blocks the event loop (production-stack#1016) — so the operational answer
+  stands: gate runs on `registry-probe.sh`, do not restart engines mid-run. `kvaware` has the
+  same hole and routes purely on that credit; §5 material.
+
+### Decided
+- **Cache-hit benefit is normalized to the fraction of the prompt cached**, not the raw
+  matched-token count the handoff brief sketched. With raw counts the meaningful α:β ratio is
+  ~1:1000 *and* shifts with prompt length, so one (α, β) pair would be a different policy for a
+  500- and a 4000-token prompt — unusable for the §5 sweep. Normalized, `1/β` reads directly as
+  "in-flight requests that cancel a full cache hit". Evidence:
+  `test_benefit_is_normalized_so_the_weights_are_prompt_length_invariant`.
+- **`loadaware` does not apply `kv_aware_threshold`.** Upstream needs that band because kvaware
+  cannot weigh a small match against anything; the argmax can. Keeping it would also route
+  every sub-threshold prompt by QPS in *both* arms, making that slice of the workload an
+  identical no-op comparison. `kvaware` keeps the band (baseline unchanged). Evidence:
+  `test_short_prompts_are_placed_not_dropped_to_the_qps_fallback`.
+- **α/β travel by environment variable, not a CLI flag.** Registering a flag means the parser
+  *and* `app.py` (which builds the `initialize_routing_logic` kwargs), i.e. one more file to
+  mount and keep in sync than the one-line `choices` widening already forced. The factory still forwards `loadaware_alpha`/
+  `loadaware_beta` kwargs, so adding a flag later touches no code here.
+- **Not applied to the cluster in this session.** With issue #13 open (a router restart empties
+  the KV registry and engines never re-admit), a live `loadaware` run would see `layout_info={}`
+  and degenerate to the fallback — the ~7 min engine restart buys nothing until #13 lands.
+  Offline tests + PR is the whole of #5.
+
 ## 2026-08-01 (implementation) — Change 1 landed: multi-instance lookup (issue #4)
 
 ### Added
