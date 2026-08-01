@@ -31,10 +31,15 @@ with a pointer to the evidence — those matter as much as code.
   (`test_gap_stops_credit_at_the_gap_not_after_it`). This is a real design decision and belongs
   in §5 of the report.
 - **`kvaware` is *not* behaviourally invariant under this patch**, even though
-  `routing_logic.py` is untouched: it selects `list(layout_info.keys())[0]`, i.e. by insertion
-  order, and the order changes whenever a chunk has more than one holder. **The baseline arm
-  must be measured with `revert-router-patch.sh` applied**, never with Change 1 mounted.
-  Regression tests pin the single-holder case as byte-equivalent to stock.
+  `routing_logic.py` is untouched. The *instance* it selects is unchanged — both
+  implementations insert `kv_pool[key0][0]` first and Python keeps a key's original position
+  on re-assignment — but that instance's **`matched_tokens` can grow**, because an instance is
+  now credited on every chunk it holds rather than only on chunks where it happens to be `[0]`.
+  kvaware bands `matched_tokens` against `kv_aware_threshold` (`routing_logic.py:354-369`) to
+  choose the cache path over the QPS fallback, so a larger count can flip that branch.
+  **The baseline arm must be measured with `revert-router-patch.sh` applied**, never with
+  Change 1 mounted. Evidence: `test_selected_instance_is_unchanged_even_with_several_holders`
+  and `test_matched_tokens_of_the_selected_instance_can_grow`.
 
 ### Fixed
 - **`deploy/dev/apply-router-patch.sh` was unrunnable on macOS** — `declare -A` needs bash 4 and

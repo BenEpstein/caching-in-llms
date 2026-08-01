@@ -177,17 +177,45 @@ def test_single_holder_matches_upstream_exactly():
     assert lookup(c, TOKENS) == {"instance-a": (LOCAL, 12)}
 
 
-def test_first_key_is_stable_for_single_holder_prefixes():
-    """kvaware picks `list(layout_info.keys())[0]`, so insertion order matters.
+def test_selected_instance_is_unchanged_even_with_several_holders():
+    """kvaware picks `list(layout_info.keys())[0]`, and that key does not move.
 
-    With one holder per chunk the order is unchanged; where holders differ the
-    order *does* change, which is why the baseline arm must be measured with
-    the patch reverted rather than mounted.
+    Both implementations insert `kv_pool[key0][0]` first, and Python keeps a
+    key's original position when it is re-assigned — so the *selected instance*
+    is invariant under the patch.
     """
     c = make_controller()
-    admit(c, TOKENS, "instance-a", {0, 1, 2, 3})
+    admit(c, TOKENS, "instance-a", {0})
+    admit(c, TOKENS, "instance-b", {0, 1})
+    admit(c, TOKENS, "instance-a", {1})
 
-    assert list(lookup(c, TOKENS)) == list(upstream_lookup(c, TOKENS))
+    assert list(lookup(c, TOKENS))[0] == list(upstream_lookup(c, TOKENS))[0]
+
+
+def test_matched_tokens_of_the_selected_instance_can_grow():
+    """...but its `matched_tokens` does change, and that is what kvaware bands.
+
+    kvaware compares `matched_tokens` against `kv_aware_threshold`
+    (`routing_logic.py:354-369`) to choose the cache path over the QPS
+    fallback, so a larger count can flip the branch even though the instance
+    picked from `layout_info` is the same. This is why the baseline arm must be
+    measured with the patch reverted rather than mounted.
+    """
+    c = make_controller()
+    admit(c, TOKENS, "instance-a", {0})  # kv_pool[key0] == [a, b]
+    admit(c, TOKENS, "instance-b", {0, 1})  # kv_pool[key1] == [b, a]
+    admit(c, TOKENS, "instance-a", {1})
+
+    # stock credits instance-a only on the chunk where it happens to be [0]
+    assert upstream_lookup(c, TOKENS) == {
+        "instance-a": (LOCAL, 4),
+        "instance-b": (LOCAL, 8),
+    }
+    # the patch credits it on every chunk it actually holds
+    assert lookup(c, TOKENS) == {
+        "instance-a": (LOCAL, 8),
+        "instance-b": (LOCAL, 8),
+    }
 
 
 # --- edges -------------------------------------------------------------------

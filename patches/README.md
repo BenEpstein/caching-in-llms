@@ -40,8 +40,11 @@ dev loop and the reproducible image apply *identical* bytes.
 
 ## ⚠️ Baseline measurements must be taken with the patch reverted
 
-`kvaware` picks `list(layout_info.keys())[0]`, i.e. it depends on insertion order. The
-multi-instance lookup changes that order whenever a chunk has more than one holder, so
-`kvaware` **is not behaviourally invariant** under this patch even though
-`routing_logic.py` is untouched. Run `deploy/dev/revert-router-patch.sh` and confirm the
-router is stock before measuring the baseline arm.
+`kvaware` **is not behaviourally invariant** under the multi-instance lookup, even though
+`routing_logic.py` is untouched. The *instance* it picks — `list(layout_info.keys())[0]` — is
+unchanged, but that instance's `matched_tokens` can grow, since an instance is now credited on
+every chunk it holds rather than only on chunks where it happens to be `[0]`. kvaware bands
+`matched_tokens` against `kv_aware_threshold` (`routing_logic.py:354-369`) to choose the cache
+path over the QPS fallback, so a larger count can flip that branch. Run
+`deploy/dev/revert-router-patch.sh` and confirm the router is stock before measuring the
+baseline arm.

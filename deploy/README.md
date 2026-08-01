@@ -72,8 +72,12 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
    so both carry the same lmcache minor version. Check with:
    `oc exec <pod> -- /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`
 
-1. **Router restart self-heals — but ONLY because `workerHeartbeatTime` is set.**
-   *(Corrected 2026-08-01; this gotcha previously said engines must always be restarted.)*
+1. **Router restart re-registers the workers — but ONLY because `workerHeartbeatTime` is set.
+   It does NOT restore the KV registry; that still needs an engine restart (issue #13).**
+   *(Corrected twice on 2026-08-01: first to say engines need not be restarted, then again
+   when the KV-admission half of the claim turned out to be false. Re-registration
+   self-heals; `kv_pool` does not — the engines never re-admit what they already hold, so
+   every lookup returns `{}` until the engines restart. See `deploy/dev/README.md`.)*
    The controller re-registers unknown workers when it receives their heartbeat
    (`registration_controller.py:176-192`), and the worker only sends heartbeats when
    `lmcache_worker_heartbeat_time > 0`. Our `values-baseline-kvaware.yaml:58` sets
