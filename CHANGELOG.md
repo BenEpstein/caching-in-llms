@@ -8,32 +8,23 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
-### Open for next session (planning + reconciliation)
-- **Benchmark plan is deliberately undecided** — workload data/shape, sweep grid, run
-  lengths, and stats methodology to be finalized as their own decision (a proposal was
-  discussed 2026-08-01, nothing locked). *Deadline note: this is now day-3 work at the
-  latest; it gates the evaluation runs on days 4-5.*
-- **Reconcile two parallel 2026-08-01 streams** (Ben's planning session and Eliad's
-  implementation session ran the same day; entries for both below, partially conflicting):
-  1. *LMCache lookup PR:* the scope-lock entry says file it early into LMCache; the
-     upstream re-verification retargets PRs **off** LMCache v1 (MP-mode deprecation,
-     LMCache#4025) toward production-stack. The re-verification evidence is newer;
-     needs joint sign-off. *Deadline note: with 9 days, all upstream PRs are opportunistic
-     — this does not block the graded deliverables either way.*
-  2. *PR portfolio breadth:* scope-lock says the two required PRs only, no drive-by
-     fixes; the re-verification portfolio still lists ports/registration/image-matrix
-     + production-stack#1016. *Deadline note: the narrower "two PRs only" position is the
-     one the schedule supports.*
-  3. *Next session's goal:* the implementation handoff says start coding Change 1;
-     Ben wants a final implementation-planning session first.
-     **⚠ STILL OPEN — Eliad + Ben must settle this before the next session starts.**
-     Not resolved by the deadline: it argues both ways (less time to plan, but also less
-     time to recover from building the wrong thing).
-  4. *Second optimization:* `docs/router-optimization-ideas.md` Recommendation #1 says keep
-     adaptive β — written before the deadline was known. The deadline entry below cuts to
-     core-only. That survey's own escape hatch makes the live question **F (kvaware fast
-     path) vs. nothing**, since F strengthens the 70%-weighted axes rather than the
-     15%-weighted one. **⚠ Needs joint sign-off; banner added at the top of that file.**
+## 2026-08-01 (later) - Wayfinder map: e2e plan on GitHub Issues
+
+### Decided
+- **The e2e plan now lives on GitHub Issues** - map issue #1 (label `wayfinder:map`),
+  9 sub-issue tickets (#2-#10) with native blocked-by edges. Frontier (start now, in
+  parallel): #2 repo cleanup + CI, #3 benchmark methodology, #4 Change 1 lookup.
+- **All four 2026-08-01 reconciliation items settled (Ben, at map charting; recorded in
+  issue #1 "Decisions so far"):**
+  1. Upstream PR target = production-stack, not LMCache v1 (newer re-verification
+     evidence wins; LMCache#4025 deprecation).
+  2. PR breadth = two PRs only (#10); extra fixes become upstream *issues*, not PRs.
+  3. The map is the final implementation plan - coding starts immediately off
+     `docs/handoff-core-implementation.md`, no further planning session.
+  4. Second optimization = nothing; kvaware fast path (F) only becomes a ticket if
+     evaluation is running by day 5.
+- **Benchmark plan remains deliberately undecided** - now ticket #3 (grilling), day-3
+  latest; it gates evaluation (#7) via the harness (#6).
 
 ## 2026-08-01 (end of session) — Deadline known: scope cut to core-only
 
