@@ -8,6 +8,19 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (later still) - Ticket #2 resolved: repo cleanup + CI skeleton
+
+### Added
+- Root `README.md` (project summary, repo layout, setup/test instructions),
+  `requirements.txt` (httpx + pytest), and `.github/workflows/ci.yml` running
+  `pytest benchmarks/` on every push and PR.
+
+### Changed
+- Pruned for the submission repo: personal hyperresearch skills moved out of
+  `.claude/skills/` (now user-level on Ben's machine), course lecture PDFs and the
+  scheduling docx removed from `docs/references/` (git history keeps them). Only the
+  authoritative `Final Project Guidelines.pdf` remains.
+
 ## 2026-08-01 (later) - Wayfinder map: e2e plan on GitHub Issues
 
 ### Decided

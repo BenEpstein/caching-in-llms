@@ -2,3 +2,6 @@ research/
 .hyperresearch/
 .DS_Store
 CLAUDE.local.md
+__pycache__/
+.hypothesis/
+.pytest_cache/
