@@ -8,6 +8,19 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (evening) — Scope lock: PRs and load signal
+
+### Decided
+- **Upstream-PR scope narrowed to the two the project requires** (Ben): LMCache
+  per-instance lookup (core dependency, filed early) and production-stack loadaware
+  router (filed after benchmarks). Ports fix stays a documented deploy workaround;
+  re-registration stays a gotcha note. No drive-by fixes/PRs.
+- **Core locked with G folded in** (Ben): loadaware score's load term is a tunable
+  signal — `count` (in-flight requests, default/baseline) vs `work-left` (estimated
+  remaining tokens from existing RequestStats; the G idea) — compared as one ablation
+  rung. F dropped (partially fixed upstream by #1025; residual value not worth a rung).
+  Ladder: kvaware → +per-instance lookup → +load(count) → +work-left → +adaptive β.
+
 ## 2026-08-01 (later still) — FullLookup overlap verified
 
 ### Decided
