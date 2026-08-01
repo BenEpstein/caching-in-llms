@@ -8,6 +8,18 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (end of session) — Implementation handoff
+
+### Added
+- `docs/handoff-core-implementation.md` — self-contained brief for the next session to start
+  writing the core feature: exact file paths, line numbers and verbatim current code for both
+  changes (read live out of the running router pod, not from upstream HEAD), the dev loop, the
+  available routing signals, the offline test plan, and the measurement trap in §5.
+
+### Next session starts here
+Implement Change 1 (multi-instance `lookup()`), observe two instances in a single
+`layout_info`, keep `kvaware` byte-identical as the baseline arm.
+
 ## 2026-08-01 (later) — Dev loop solved; two doc corrections
 
 ### Added
