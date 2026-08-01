@@ -40,9 +40,36 @@ area is warm — three independent attempts orbit it, all stalled or dead:
   request's uncached tokens, trapezoid Q·K estimate) and routes to lowest predicted TTFT;
   uses an LMCache **"FullLookup"** feature and claims ~17% avg-TTFT win over kvaware in
   its own benchmark. Blocked on that LMCache dependency; dormant ~10 months. Consequences:
-  cite as related work for G; **⚠ verify whether LMCache's FullLookup overlaps our
-  multi-instance lookup extension** (it may partially cover the same TODO — check what
-  landed in LMCache since `bf20f51` before writing our lookup PR).
+  cite as related work for G; FullLookup overlap verified below.
+
+### FullLookup overlap — VERIFIED 2026-08-01 (LMCache @ `0427938a`)
+
+**Verdict: functionally overlapping, but dead upstream — our lookup-extension gap is
+still open.**
+
+- "FullLookup" = **LMCache PR #1420** (author chickeyton, same effort as
+  production-stack #670): adds `FullLookupMsg`/`FullLookupRetMsg` + a `/full_lookup`
+  endpoint returning metadata of **all** cached chunks (vs existing lookup's chain walk)
+  with continuity checking — substantially the same capability as our multi-instance
+  lookup extension. Author demonstrated 17–19% routing wins with it.
+- **Never merged: auto-closed as stale 2025-12-25** after 60 days' inactivity. No
+  maintainer design objection on record — it died of neglect, same failure mode as
+  production-stack #884 (no sustained follow-through/benchmarks).
+- **Code check at LMCache HEAD (`0427938a`):** no FullLookup anywhere in code or commit
+  history; `kv_controller.py` is byte-identical to our pin `bf20f51` (only
+  config/utils/worker changed in `cache_controller/`); `lookup()` still walks prefix
+  chunks recording only the first instance found per chunk; the multi-results TODO
+  (`kv_controller.py:402`) is still open. Nothing landed that covers the gap.
+
+**Consequences for our lookup-extension PR:**
+1. **Cite #1420** as a prior unmerged attempt (report related-work + PR description) —
+   not a novelty problem for coursework, and upstream it's an asset: an acknowledged
+   want, twice-requested (#1420, #670), zero design objections.
+2. **Frame our PR as reviving that capability with the missing evidence** — engage
+   #1420's message-schema design (compatibility with #670's consumer is a selling
+   point) and attach the benchmark data that both dead PRs lacked.
+3. The stale-bot lesson: when we file, respond fast and keep the PR active — 60 days
+   of silence kills it.
 - Overall: field is warming → **file the lookup-extension PR early** (the memo already
   said this; #884/#670 make it urgent).
 

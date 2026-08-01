@@ -8,6 +8,17 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (later still) — FullLookup overlap verified
+
+### Decided
+- **Lookup extension proceeds unchanged; cite + build on LMCache #1420.** "FullLookup"
+  (= LMCache PR #1420, feeding production-stack #670) is functionally the same
+  per-instance lookup capability we're building, but was auto-closed stale 2025-12-25,
+  unmerged, no design objections. Verified at LMCache HEAD `0427938a`: no FullLookup in
+  code/history, `kv_controller.py` identical to our pin, multi-results TODO still open.
+  Our PR = revive the capability with the benchmarks both dead attempts (#1420, #884)
+  lacked. Evidence: `docs/router-optimization-ideas.md` (FullLookup section).
+
 ## 2026-08-01 (later) — Prior-art check on the core idea + F correction
 
 ### Added
