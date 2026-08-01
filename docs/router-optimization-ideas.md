@@ -1,21 +1,11 @@
 # Router Optimization Ideas — Fresh Survey of production-stack `main`
 
-> ⚠ **UNRESOLVED CONFLICT — added 2026-08-01, end of day. Needs Eliad + Ben sign-off.**
-> This survey's **Recommendation #1 ("keep adaptive β") predates knowledge of the deadline**:
-> submission is ~2026-08-10, 9 days out, with zero implementation code written. Eliad's
-> session cut scope to **core-only** (runner-up E), per the flip condition pre-registered in
-> `docs/decisions/second-optimization.md`.
->
-> This survey already anticipated the situation: *"If one candidate must replace adaptive β
-> (e.g., schedule pressure), F is the replacement."* So the live question is no longer
-> adaptive β — it is **F (zero-overhead kvaware fast path) vs. no second optimization at
-> all**. F's stated virtue (it strengthens correctness + reproducibility, the 70% of the
-> rubric, rather than adding a 15%-weighted gain claim) is a genuine argument for keeping it
-> even under a 9-day schedule.
->
-> **Nothing here is settled.** Recommendations 2-5 below are likewise unreviewed against the
-> deadline. Do not implement from this file until the two of you agree. Current default if
-> you do not agree: core-only, per `docs/handoff-core-implementation.md`.
+> ✅ **RESOLVED 2026-08-01 (Ben, at wayfinder-map charting - see issue #1 and CHANGELOG).**
+> Decision: **no second optimization.** Scope is core-only per
+> `docs/handoff-core-implementation.md`. **F (zero-overhead kvaware fast path)** is the sole
+> conditional survivor: it becomes a ticket only if evaluation (#7) is running by day 5.
+> Recommendation #1 ("keep adaptive β") predated the deadline and is void; do not implement
+> anything else from this file.
 
 > Surveyed 2026-08-01 against `vllm-project/production-stack` @ `3314ee6` (current `main`),
 > live issue tracker, and roadmap #855. Purpose: find candidates that could **add to or
