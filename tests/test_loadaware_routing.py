@@ -10,10 +10,12 @@ import surface and loads the tracked patch file itself, so the bytes under test
 are the bytes `deploy/dev/apply-router-patch.sh` mounts into the pod.
 """
 
+import ast
 import asyncio
 
 import pytest
 from conftest import (
+    PARSER_PATCH_FILE,
     EndpointInfo,
     FakeRequest,
     LookupRetMsg,
@@ -422,3 +424,42 @@ def test_the_registry_finds_and_cleans_up_a_loadaware_router():
     routing_logic.cleanup_routing_logic()
     with pytest.raises(ValueError):
         routing_logic.get_routing_logic()
+
+
+# --- the CLI must accept the new value ---------------------------------------
+
+
+def routing_logic_choices():
+    """The literal `choices=[...]` of `--routing-logic` in the tracked parser.
+
+    Read with `ast` rather than by importing: `parser.py` pulls in the router's
+    whole config surface, and only this one list is under test.
+    """
+    tree = ast.parse(PARSER_PATCH_FILE.read_text())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        first = node.args[0]
+        if not (isinstance(first, ast.Constant) and first.value == "--routing-logic"):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg == "choices":
+                return [ast.literal_eval(element) for element in keyword.value.elts]
+    raise AssertionError("no --routing-logic argument with choices= in parser.py")
+
+
+def test_the_cli_accepts_every_routing_logic_value():
+    """`choices` is a hard-coded literal list, *not* derived from the enum.
+
+    So adding `LOADAWARE` to `RoutingLogic` is not enough on its own: argparse
+    would reject `--routing-logic loadaware` and the router would exit before
+    the factory is ever reached. Both files have to move together, in either
+    direction — hence the set equality.
+    """
+    assert set(routing_logic_choices()) == {
+        member.value for member in routing_logic.RoutingLogic
+    }
+
+
+def test_loadaware_is_selectable_from_the_command_line():
+    assert "loadaware" in routing_logic_choices()

@@ -24,6 +24,7 @@ SP=/opt/venv/lib/python3.12/site-packages
 patch_target() {
   case "$1" in
     routing_logic.py)  echo "$SP/vllm_router/routers/routing_logic.py" ;;
+    parser.py)         echo "$SP/vllm_router/parsers/parser.py" ;;
     kv_controller.py)  echo "$SP/lmcache/v1/cache_controller/controllers/kv_controller.py" ;;
     registration_controller.py)
                        echo "$SP/lmcache/v1/cache_controller/controllers/registration_controller.py" ;;

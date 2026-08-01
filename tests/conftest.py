@@ -33,6 +33,8 @@ PATCH_FILE = PATCHES / "lmcache/v1/cache_controller/controllers/kv_controller.py
 
 ROUTING_PATCH_FILE = PATCHES / "vllm_router/routers/routing_logic.py"
 
+PARSER_PATCH_FILE = PATCHES / "vllm_router/parsers/parser.py"
+
 
 # --- the message classes kv_controller actually constructs or reads -----------
 # Field names and types are verbatim from lmcache/v1/cache_controller/message.py

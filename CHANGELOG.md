@@ -20,8 +20,14 @@ with a pointer to the evidence — those matter as much as code.
   `cleanup_routing_logic()`.
 - **α/β exposed as tunables** (§4 requires this): `LOADAWARE_ALPHA` / `LOADAWARE_BETA` env
   vars, defaults 1.0 / 0.1, overridable by kwargs. Documented in `patches/README.md`.
-- **31 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
-  cluster/GPU/install). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
+- **`--routing-logic loadaware` accepted by the CLI**
+  (`patches/vllm_router/parsers/parser.py`): the flag's `choices` are hard-coded literals, not
+  derived from `RoutingLogic`, so the enum value alone would have been rejected by argparse and
+  the router would have exited before the factory ran. One-line widening; `apply-router-patch.sh`
+  learned the `parser.py` target. An AST-based test asserts `choices` and `RoutingLogic` stay in
+  lockstep in both directions.
+- **33 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
+  cluster/GPU/install; suite now 52). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
   `requests`, `fastapi` and `uhashring` import surface and loads the tracked patch file itself.
   Covers the α/β crossover, ties, cold start, the fallbacks, and a regression test that
   `kvaware` still pins to the loaded cache holder.
@@ -38,9 +44,9 @@ with a pointer to the evidence — those matter as much as code.
   every sub-threshold prompt by QPS in *both* arms, making that slice of the workload an
   identical no-op comparison. `kvaware` keeps the band (baseline unchanged). Evidence:
   `test_short_prompts_are_placed_not_dropped_to_the_qps_fallback`.
-- **α/β travel by environment variable, not a CLI flag.** The parser lives in
-  `parsers/parser.py` and is consumed in `app.py`; a flag would make this a three-file patch to
-  mount and keep in sync with upstream. The factory still forwards `loadaware_alpha`/
+- **α/β travel by environment variable, not a CLI flag.** Registering a flag means the parser
+  *and* `app.py` (which builds the `initialize_routing_logic` kwargs), i.e. one more file to
+  mount and keep in sync than the one-line `choices` widening already forced. The factory still forwards `loadaware_alpha`/
   `loadaware_beta` kwargs, so adding a flag later touches no code here.
 - **Not applied to the cluster in this session.** With issue #13 open (a router restart empties
   the KV registry and engines never re-admit), a live `loadaware` run would see `layout_info={}`

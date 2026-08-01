@@ -28,6 +28,16 @@ dev loop and the reproducible image apply *identical* bytes.
   ```bash
   deploy/dev/apply-router-patch.sh patches/lmcache/v1/cache_controller/controllers/kv_controller.py
   ```
+- **Apply every patched file in one invocation.** `apply-router-patch.sh` rebuilds the
+  ConfigMap from exactly the files it is given, so passing one file drops the others:
+  ```bash
+  deploy/dev/apply-router-patch.sh \
+    patches/lmcache/v1/cache_controller/controllers/kv_controller.py \
+    patches/vllm_router/routers/routing_logic.py \
+    patches/vllm_router/parsers/parser.py
+  ```
+  `loadaware` needs *both* router files (the parser to accept the flag, `routing_logic.py`
+  to implement it) and, to have anything to weigh, the `kv_controller.py` patch too.
 - **Tests import these files directly** (`tests/conftest.py` stubs the `lmcache` import
   surface and loads the file by path), so the bytes under test are the bytes that get mounted.
   Run them with `pytest tests/` — no cluster, no GPU, no lmcache install.
@@ -38,6 +48,7 @@ dev loop and the reproducible image apply *identical* bytes.
 |---|---|---|
 | `lmcache/v1/cache_controller/controllers/kv_controller.py` | Multi-instance lookup: `lookup()` reports per-instance matched-token counts for every holder, not just `kv_pool[key][0]` | [#4](https://github.com/BenEpstein/caching-in-llms/issues/4) |
 | `vllm_router/routers/routing_logic.py` | `loadaware` placement policy: `LOADAWARE` enum + factory branch + a `LoadAwareRouter` that routes by `α·cache_hit_benefit − β·load_penalty` over every endpoint. Additions only — `KvawareRouter` is untouched | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
+| `vllm_router/parsers/parser.py` | One-line widening of `--routing-logic`'s hard-coded `choices` list to accept `loadaware`. Without it argparse rejects the flag and the router exits before the factory runs | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
 
 ## Tunable parameters (`loadaware`)
 
