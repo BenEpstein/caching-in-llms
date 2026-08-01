@@ -32,15 +32,46 @@ Engine pod (vLLM + LMCache worker)          Router pod (LMCache controller)
                   → "who has this prefix?" → route there
 ```
 
-Two design properties (verified in `lmcache/v1/cache_controller/worker.py` and
-`controllers/registration_controller.py`):
+> **CORRECTED 2026-08-01.** The original version of this finding claimed registration is
+> one-shot and never recovers. That is **wrong when the worker heartbeat is enabled** —
+> see "Correction" below. The finding survives in a narrower, stronger form: the *default*
+> configuration leaves the heartbeat off, and that is the actual upstream defect.
 
-- **Registration is a one-shot `__init__` action.** `RegisterMsg` is sent exactly once at
-  engine-process boot. No retry loop, no periodic re-announcement. Newer versions add a
-  heartbeat, but it does not recreate a lost registration (measured: after a router
-  restart, `registered_workers_count` stays 0 while heartbeats flow).
+Two design properties (verified in `lmcache/v1/cache_controller/worker.py` and
+`controllers/registration_controller.py`, lmcache 0.3.9post2):
+
+- **The initial `RegisterMsg` is a one-shot boot action.** Sent exactly once at
+  engine-process boot; there is no retry loop on the registration path itself.
 - **The controller's registry is process memory.** No persistence; the registry *is* the
   router process.
+
+### Correction — the heartbeat *does* re-register (verified live 2026-08-01)
+
+`registration_controller.py:176-192` handles `HeartbeatMsg`: if the worker key is absent
+from `worker_info_mapping` it logs *"has not been registered, re-register the worker"* and
+calls `await self.register(msg)`. The worker side (`worker.py:201-224`) only emits
+heartbeats when `lmcache_worker_heartbeat_time` is set and `> 0`.
+
+**Measured on `gapu-2`:** with `servingEngineSpec…workerHeartbeatTime: "30"` set (our
+`values-baseline-kvaware.yaml:58`), a `rollout restart` of the router alone — engines
+untouched — had both workers re-registered within ~30 s, and end-to-end serving resumed
+with no engine restart.
+
+**Consequence for the dev loop: a router-only restart is ~60 s, not a 3-4 min engine
+reload.** This is what makes iterating on `loadaware` in-cluster practical.
+
+### The real upstream defect (narrower, still worth filing)
+
+`workerHeartbeatTime` is **not** a chart default — we set it explicitly. An out-of-the-box
+`vllm-stack` deployment therefore runs with the heartbeat off, where the one-shot behaviour
+above *does* apply and the silent-failure chain below is exactly right. So the defensible
+upstream framing is:
+
+> With `kvaware` routing enabled, the chart should default `workerHeartbeatTime` to a
+> non-zero value (or refuse to start kvaware without it), because otherwise any router
+> restart silently and permanently degrades kvaware to QPS routing.
+
+One-line chart default + a docs note; much easier to merge than a protocol change.
 
 ### What happens on router restart
 
@@ -67,17 +98,21 @@ disappears — diagnosable via the router's `/metrics`
 
 ### Operational consequence + workaround
 
-Every router restart (crash, probe kill, redeploy of a modified router — i.e., **our whole
-loadaware dev loop**) requires restarting all engine pods so their init-time registration
-re-runs: `oc rollout restart deployment/stack-llm-deployment-vllm -n cache-llm`
-(~3–4 min for 2× model reload).
+**Only when the heartbeat is disabled.** In that configuration every router restart
+requires restarting all engine pods so their init-time registration re-runs:
+`oc rollout restart deployment/stack-llm-deployment-vllm -n cache-llm` (~3–4 min for 2×
+model reload). **With `workerHeartbeatTime` set — our configuration — this is not needed;
+the router restarts alone and workers re-register within one heartbeat interval.**
 
 ### Report/PR angle
 
 - Report: baseline fragility; motivates measuring router availability as part of the story.
-- Upstream PR candidate: worker re-registration — the heartbeat response already carries a
-  command channel (`HeartbeatRetMsg.commands`); a controller that answers an unknown
-  worker's heartbeat with a "re-register" command closes the loop with no new protocol.
+  The honest version of the story is the *default-configuration* hazard, not a missing
+  mechanism — the mechanism exists and works.
+- Upstream PR candidate (revised): make the chart default `workerHeartbeatTime` non-zero
+  when `routingLogic: kvaware`, so the silent-degradation path is unreachable by default.
+  **Do not** file "workers never re-register" — that claim is false and would be rejected
+  on sight.
 
 ---
 

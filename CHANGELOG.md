@@ -8,6 +8,40 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (later) — Dev loop solved; two doc corrections
+
+### Added
+- `deploy/dev/` — in-cluster dev loop for router/LMCache code: ConfigMap + `subPath`
+  overlay onto the running router pod, no image build and no container runtime required.
+  `apply-router-patch.sh` / `revert-router-patch.sh` + README. **Validated end-to-end**:
+  a marked-up `routing_logic.py` was mounted, confirmed live (log attributed to
+  `routing_logic.py:393`), then cleanly reverted to stock.
+
+### Fixed
+- **`deploy/README.md` gotcha #1 was wrong** — "router restart ⇒ engine restart" does not
+  hold in our configuration. The controller re-registers unknown workers on heartbeat
+  (`registration_controller.py:176-192`), gated on `lmcache_worker_heartbeat_time > 0`,
+  which `values-baseline-kvaware.yaml:58` sets to 30. Verified live: router-only restart,
+  both workers back in ~30 s, engines untouched. **Dev loop is ~60 s, not ~25 min.**
+- **`docs/upstream-findings.md` Finding 1 corrected** — "workers never re-register" is
+  false; do not file it. Reframed to the real defect: `workerHeartbeatTime` is not a chart
+  default, so stock deployments silently degrade kvaware on router restart. That is a
+  one-line chart fix and a much easier merge.
+
+### Changed
+- **Lookup extension is far smaller than the July design assumed.** In the deployed
+  lmcache 0.3.9post2, `kv_controller.lookup()` already returns
+  `layout_info: Dict[instance_id → (location, matched_tokens)]` — the wire format already
+  expresses per-instance match info. The defect is a single `[0]`: `self.kv_pool[key][0]`
+  credits only the *first* holder of each chunk, discarding the rest. So the change is
+  ~10 lines with **no protocol/message-schema change**, and the router-side counterpart is
+  replacing `list(layout_info.keys())[0]` (`routing_logic.py:349`) with the α/β argmax.
+- Recorded design consequence: under pure `kvaware` a prefix is rarely held by more than
+  one instance, so the lookup fix is a near-no-op in isolation — it only pays once routing
+  spreads requests. Rungs 2 and 3 of the ablation ladder are co-dependent and the workload
+  must be designed so replication actually occurs. First live evidence:
+  `layout_info={'…cc926': ('LocalCPUBackend', 2048)}` — one holder, 2048 matched tokens.
+
 ## 2026-08-01 — Restart after 4-week pause; upstream re-verification
 
 ### Decided
