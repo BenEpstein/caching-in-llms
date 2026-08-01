@@ -29,8 +29,8 @@ words with exactly these meanings. Implementation details live elsewhere.
   copy → source worker pushes KV to the destination's CPU tier). Exists upstream; gated
   on P2P/NIXL; nothing invokes it today.
 - **Replication Policy** — the (nonexistent upstream) logic deciding *which* entries earn
-  replication and *when*. Candidate second optimization; parked — see
-  `docs/handoff-second-optimization.md`.
+  replication and *when*. Candidate second optimization; parked - see
+  `docs/decisions/second-optimization.md` (frozen; handoff doc removed 2026-08-01, in git history).
 - **Hot Prefix** — a shared prompt prefix popular enough that its placement materially
   skews load; produced deliberately by the Zipfian workload.
 - **Affinity Probe** — the smoke test: N requests sharing a long prefix; pass = the

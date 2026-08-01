@@ -1,4 +1,6 @@
-# Upstream Findings — Production-Stack / LMCache Control Plane
+# Upstream Findings - Production-Stack / LMCache Control Plane
+
+> status: live · 2026-08-01 · input to the upstream-PRs ticket (#10); findings dated 2026-07-04, re-verify against current upstream before filing
 
 > Material collected during baseline deployment (2026-07-04) for two later uses:
 > 1. the **final report** (Experimental Setup / Discussion sections — these findings show

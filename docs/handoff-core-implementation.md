@@ -1,5 +1,7 @@
 # Handoff: implement the core (multi-instance lookup + `loadaware` placement)
 
+> status: live · 2026-08-01 · implementation brief for the two core changes (issues #4, #5)
+
 > Written 2026-08-01. **This brief is self-contained** — a fresh Claude Code session should
 > be able to start writing code from this file alone, without re-reading the July design docs.
 > Every code fact below was read out of the *running* router pod on cluster `gapu-2` on
