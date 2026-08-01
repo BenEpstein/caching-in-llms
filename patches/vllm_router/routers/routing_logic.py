@@ -517,7 +517,16 @@ class LoadAwareRouter(KvawareRouter):
         resolves it — dicts preserve insertion order and `refresh_instance_map`
         appends ids as it learns them, so the last id written for a URL is the
         live one. Credit rides on that id alone; if it reports nothing, the URL
-        scores no benefit, which is exactly right after a restart.
+        scores no benefit, which is right once the bridge has caught up.
+
+        **Residual window:** the bridge only learns the fresh id when it appears
+        in some `layout_info`, i.e. after the restarted engine admits its first
+        chunk. Until then the dead id is the only one mapped and its match still
+        reads as credit. Closing that would mean an unconditional Controller
+        round-trip per request on a path that already blocks the event loop
+        (production-stack#1016), so the operational answer stands instead: gate
+        runs on `deploy/dev/registry-probe.sh` and do not restart engines
+        mid-run. `kvaware` has the same hole and routes purely on that credit.
         """
         url_to_instance = {url: iid for iid, url in self.instance_id_to_ip.items()}
         matched = {}

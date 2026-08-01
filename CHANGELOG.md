@@ -42,6 +42,12 @@ with a pointer to the evidence — those matter as much as code.
   chunks until an explicit deregister, but the restarted engine came back with an empty cache, so
   that match is phantom. Evidence: `test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold`,
   `test_a_dead_instance_id_earns_no_phantom_credit`.
+  Known residual window, documented in the docstring: the bridge only learns the fresh id once
+  the restarted engine appears in a `layout_info`, so until its first admit the dead id's match
+  still reads as credit. Closing it means an unconditional Controller round-trip per request on a
+  path that already blocks the event loop (production-stack#1016) — so the operational answer
+  stands: gate runs on `registry-probe.sh`, do not restart engines mid-run. `kvaware` has the
+  same hole and routes purely on that credit; §5 material.
 
 ### Decided
 - **Cache-hit benefit is normalized to the fraction of the prompt cached**, not the raw
