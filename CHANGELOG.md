@@ -8,6 +8,43 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-07-05 (later) — Second-optimization deep-dive
+
+### Decided
+- **Second optimization = adaptive β** (feedback-controlled load weight, pluggable
+  `BetaPolicy`, driven by the router's fresh event-driven `RequestStats` instead of the
+  15–30 s-stale scraped `EngineStats`). Runners-up with flip conditions: B (pre-warm,
+  gated on NIXL spike + spare days) and E (core-only). Full rationale + survey evidence:
+  `docs/decisions/second-optimization.md` (Claude session, per handoff brief).
+- NIXL spike **not** run: A/B eliminated on criteria 1–3 regardless of outcome; but the
+  key static unknown was settled live — `nixl` 0.7.1 IS importable in the running
+  `v0.3.9post2` engine pods, so B's flip condition is realistic.
+
+### Added
+- `docs/decisions/second-optimization.md` — decision memo (also records: lookup TODO
+  still open at `bf20f51`; LMCache migrating to MP mode → file the lookup PR early;
+  upstream #876/#905 confirm the load-signal-freshness gap).
+
+## 2026-07-05 — Requirements grounding session (grilling)
+
+### Decided
+- **Core contribution locked:** `loadaware` placement policy (α·cache_benefit − β·load) +
+  the multi-instance Lookup Extension it requires; ships router-image-only (the controller
+  runs in the router pod — engine images stay official/pinned) (Eliad).
+- **Framing rule** for §2/report: "KV-cache-aware request placement", never headline
+  "load balancing"; hit rate stays a first-class metric (Eliad).
+- **Second optimization parked** — deep-dive delegated to a dedicated session;
+  self-contained brief with candidate menu, decision criteria, and NIXL-spike gate in
+  `docs/handoff-second-optimization.md` (Eliad).
+- Upstream-PR portfolio (service ports, one-shot registration, image matrix) is an
+  always-on parallel track, independent of the second-optimization choice (Eliad).
+
+### Added
+- `CONTEXT.md` — project glossary (ubiquitous language: Instance, Controller, Placement
+  Policy, Lookup Extension, Replication Mechanism vs Policy, Affinity Probe, …) (Eliad).
+- `docs/handoff-second-optimization.md` — handoff brief for the second-optimization
+  deep-dive (Eliad).
+
 ## 2026-07-04 (later) — Baseline VALIDATED end-to-end
 
 ### Added (post-validation polish)
