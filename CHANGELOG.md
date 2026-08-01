@@ -8,6 +8,13 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+### Open for next session (final implementation planning)
+- **Benchmark plan is deliberately undecided** — workload data/shape, sweep grid, run
+  lengths, and stats methodology to be finalized as their own decision (a proposal was
+  discussed 2026-08-01 but nothing locked). Everything else is locked per the
+  2026-08-01 entries below: two PRs, load-signal tunable (count/work-left), adaptive β,
+  F dropped.
+
 ## 2026-08-01 (evening) — Scope lock: PRs and load signal
 
 ### Decided
