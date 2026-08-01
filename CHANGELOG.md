@@ -8,6 +8,45 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-01 (implementation) — Change 2 landed: `loadaware` placement (issue #5)
+
+### Added
+- **`loadaware` placement policy** in `patches/vllm_router/routers/routing_logic.py`:
+  `LOADAWARE` enum value, a factory branch mirroring `KVAWARE`, and a `LoadAwareRouter`
+  (subclass of `KvawareRouter`) that scores **every** endpoint by
+  `α·(matched_tokens/prompt_tokens) − β·(in_prefill + in_decoding)` and routes to the argmax.
+  The patch is **additions only** — `KvawareRouter` is byte-identical, so the baseline arm of
+  the experiment is untouched. Registered in both `get_routing_logic()` and
+  `cleanup_routing_logic()`.
+- **α/β exposed as tunables** (§4 requires this): `LOADAWARE_ALPHA` / `LOADAWARE_BETA` env
+  vars, defaults 1.0 / 0.1, overridable by kwargs. Documented in `patches/README.md`.
+- **31 more offline unit tests** (`tests/test_loadaware_routing.py`; suite now 50, still no
+  cluster/GPU/install). `tests/conftest.py` grew a second loader that stubs the `vllm_router`,
+  `requests`, `fastapi` and `uhashring` import surface and loads the tracked patch file itself.
+  Covers the α/β crossover, ties, cold start, the fallbacks, and a regression test that
+  `kvaware` still pins to the loaded cache holder.
+
+### Decided
+- **Cache-hit benefit is normalized to the fraction of the prompt cached**, not the raw
+  matched-token count the handoff brief sketched. With raw counts the meaningful α:β ratio is
+  ~1:1000 *and* shifts with prompt length, so one (α, β) pair would be a different policy for a
+  500- and a 4000-token prompt — unusable for the §5 sweep. Normalized, `1/β` reads directly as
+  "in-flight requests that cancel a full cache hit". Evidence:
+  `test_benefit_is_normalized_so_the_weights_are_prompt_length_invariant`.
+- **`loadaware` does not apply `kv_aware_threshold`.** Upstream needs that band because kvaware
+  cannot weigh a small match against anything; the argmax can. Keeping it would also route
+  every sub-threshold prompt by QPS in *both* arms, making that slice of the workload an
+  identical no-op comparison. `kvaware` keeps the band (baseline unchanged). Evidence:
+  `test_short_prompts_are_placed_not_dropped_to_the_qps_fallback`.
+- **α/β travel by environment variable, not a CLI flag.** The parser lives in
+  `parsers/parser.py` and is consumed in `app.py`; a flag would make this a three-file patch to
+  mount and keep in sync with upstream. The factory still forwards `loadaware_alpha`/
+  `loadaware_beta` kwargs, so adding a flag later touches no code here.
+- **Not applied to the cluster in this session.** With issue #13 open (a router restart empties
+  the KV registry and engines never re-admit), a live `loadaware` run would see `layout_info={}`
+  and degenerate to the fallback — the ~7 min engine restart buys nothing until #13 lands.
+  Offline tests + PR is the whole of #5.
+
 ## 2026-08-01 (implementation) — Change 1 landed: multi-instance lookup (issue #4)
 
 ### Added
