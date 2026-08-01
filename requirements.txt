@@ -1,0 +1,4 @@
+# Runtime + test dependencies for the benchmark harness.
+# Everything else in benchmarks/ is stdlib-only (Python >= 3.10).
+httpx>=0.27
+pytest>=8.0

@@ -72,8 +72,8 @@ to catch up on what the other collaborator did.
 
 ## Reference material
 
-- `docs/references/Final Project Guidelines.pdf` — the spec. Authoritative.
-- `docs/references/שיבוץ להרצאות.docx` — Hebrew course-logistics doc, unrelated to technical content.
+- `docs/references/Final Project Guidelines.pdf` - the spec. Authoritative.
+  (Course lecture PDFs were pruned 2026-08-01 for the submission repo; recover from git history if needed.)
 
 ## Machine-specific setup
 
