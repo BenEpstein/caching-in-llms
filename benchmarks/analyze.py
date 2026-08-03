@@ -49,6 +49,15 @@ def seed_stats(csv_path: str) -> Dict:
     ok = [r for r in rows if r["status"] == "ok"]
     ttft = [float(r["ttft_s"]) for r in ok if r["ttft_s"]]
     e2e = [float(r["e2e_s"]) for r in ok if r["e2e_s"]]
+    # Pooled over every inter-token gap in the seed, not over per-request
+    # summaries: "ITL p99" means the 99th percentile of gaps. Absent on CSVs
+    # written before the driver recorded it, hence the .get.
+    itl = [
+        float(x) / 1000
+        for r in ok
+        for x in (r.get("itls_ms") or "").split(";")
+        if x
+    ]
     sends = [float(r["send_ts"]) for r in rows]
     ends = [float(r["send_ts"]) + float(r["e2e_s"]) for r in rows if r["e2e_s"]]
     wall = (max(ends) - min(sends)) if ends else float("nan")
@@ -63,9 +72,12 @@ def seed_stats(csv_path: str) -> Dict:
         "throughput_req_s": len(ok) / wall if wall and wall > 0 else float("nan"),
         "throughput_tok_s": comp_tokens / wall if wall and wall > 0 else float("nan"),
     }
-    for name, xs in (("ttft", ttft), ("e2e", e2e)):
+    for name, xs in (("ttft", ttft), ("e2e", e2e), ("itl", itl)):
         s[f"{name}_mean"] = sum(xs) / len(xs) if xs else float("nan")
-        for p in (50, 95, 99):
+        # p90 as well as p95: the policy shifts the whole TTFT body, while p95
+        # over 500 samples is dominated by bursty engine stalls that have
+        # nothing to do with routing (see docs/, the 2026-08-03 post-mortem).
+        for p in (50, 90, 95, 99):
             s[f"{name}_p{p}"] = percentile(xs, p)
     return s
 
@@ -136,7 +148,8 @@ def bootstrap_ci_median_rel_reduction(
 
 
 _COLS = [
-    "ok", "errors", "ttft_mean", "ttft_p50", "ttft_p95", "ttft_p99",
+    "ok", "errors", "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
+    "itl_p50", "itl_p95", "itl_p99",
     "e2e_mean", "e2e_p95", "e2e_p99", "throughput_req_s", "throughput_tok_s",
 ]
 

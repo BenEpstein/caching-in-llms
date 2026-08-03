@@ -46,6 +46,12 @@ class Result:
     completion_tokens: Optional[int]
     status: str  # "ok" | "error"
     error: str = ""
+    # Inter-token latencies, ';'-joined milliseconds. Decode is ~92% of E2E at
+    # OSL=64, so without this the only thing measured about 92% of the request
+    # is an aggregate. Kept as raw gaps, not a per-request percentile: pooled
+    # ITL percentiles are the reported quantity and cannot be recovered from
+    # per-request summaries.
+    itls_ms: str = ""
 
 
 def load_workload(path: str):
@@ -77,6 +83,8 @@ async def one_request(
     t0 = time.perf_counter()
     wall0 = time.time()
     ttft = None
+    last = None
+    itls: List[float] = []
     prompt_toks = completion_toks = None
     try:
         async with client.stream(
@@ -94,16 +102,22 @@ async def one_request(
                 data = line[5:].strip()
                 if data == "[DONE]":
                     break
-                if ttft is None:
-                    ttft = time.perf_counter() - t0
+                now = time.perf_counter()
                 # usage arrives only in the final chunk - don't JSON-parse
-                # every token on the measurement path
-                if '"usage"' not in data:
+                # every token on the measurement path. That chunk carries no
+                # token, so its arrival is a stream-close artifact and must not
+                # count as an inter-token gap.
+                if '"usage"' in data:
+                    usage = json.loads(data).get("usage")
+                    if usage:
+                        prompt_toks = usage.get("prompt_tokens")
+                        completion_toks = usage.get("completion_tokens")
                     continue
-                usage = json.loads(data).get("usage")
-                if usage:
-                    prompt_toks = usage.get("prompt_tokens")
-                    completion_toks = usage.get("completion_tokens")
+                if ttft is None:
+                    ttft = now - t0
+                else:
+                    itls.append(now - last)
+                last = now
         return Result(
             index=req["index"],
             prefix_id=req["prefix_id"],
@@ -113,6 +127,7 @@ async def one_request(
             prompt_tokens=prompt_toks,
             completion_tokens=completion_toks,
             status="ok",
+            itls_ms=";".join(f"{g * 1000:.2f}" for g in itls),
         )
     except Exception as e:  # noqa: BLE001 - record, don't crash the run
         return Result(
@@ -128,8 +143,24 @@ async def one_request(
         )
 
 
+# Every latency here is timestamped inside the client's event loop, so client
+# scheduling delay is indistinguishable from server latency. At the offered
+# rates that matter (near the engine knee) hundreds of streams share one loop.
+# Sample the loop's own lag so a run can be *shown* not to be measuring Python
+# instead of vLLM, rather than assumed not to be.
+_LOOP_LAG: List[float] = []
+
+
+async def _loop_lag_probe(interval: float = 0.01) -> None:
+    while True:
+        t = time.perf_counter()
+        await asyncio.sleep(interval)
+        _LOOP_LAG.append(time.perf_counter() - t - interval)
+
+
 async def run_open_loop(args, workload) -> List[Result]:
     rng = random.Random(args.seed)
+    probe = asyncio.create_task(_loop_lag_probe())
     async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
         tasks = []
         for req in workload:
@@ -139,7 +170,9 @@ async def run_open_loop(args, workload) -> List[Result]:
                 )
             )
             await asyncio.sleep(rng.expovariate(args.rate))
-        return list(await asyncio.gather(*tasks))
+        results = list(await asyncio.gather(*tasks))
+    probe.cancel()
+    return results
 
 
 async def run_closed_loop(args, workload) -> List[Result]:
@@ -168,13 +201,19 @@ def summarize(results: List[Result], wall_s: float) -> str:
     e2e = [r.e2e_s for r in ok if r.e2e_s is not None]
     ttft = [r.ttft_s for r in ok if r.ttft_s is not None]
     toks = sum(r.completion_tokens or 0 for r in ok)
+    itl = [float(x) for r in ok for x in r.itls_ms.split(";") if x]
+    lag = [x * 1000 for x in _LOOP_LAG]
     return (
         f"n={len(results)} ok={len(ok)} err={len(results) - len(ok)} wall={wall_s:.1f}s "
         f"req/s={len(ok) / wall_s:.2f} tok/s={toks / wall_s:.1f}\n"
         f"TTFT  p50={percentile(ttft, 50):.3f}s p95={percentile(ttft, 95):.3f}s "
         f"p99={percentile(ttft, 99):.3f}s\n"
         f"E2E   p50={percentile(e2e, 50):.3f}s p95={percentile(e2e, 95):.3f}s "
-        f"p99={percentile(e2e, 99):.3f}s"
+        f"p99={percentile(e2e, 99):.3f}s\n"
+        f"ITL   p50={percentile(itl, 50):.1f}ms p95={percentile(itl, 95):.1f}ms "
+        f"p99={percentile(itl, 99):.1f}ms  (n={len(itl)})\n"
+        f"client loop lag p50={percentile(lag, 50):.1f}ms p99={percentile(lag, 99):.1f}ms"
+        " - any TTFT effect smaller than this is client noise"
     )
 
 

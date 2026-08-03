@@ -30,7 +30,8 @@ FIELDS = [
     # and grouping by it silently merges two different experiments.
     "run", "cell", "arm", "alpha", "beta", "rate_req_s", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
-    "ttft_mean", "ttft_p50", "ttft_p95", "ttft_p99",
+    "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
+    "itl_p50", "itl_p95", "itl_p99",
     "e2e_mean", "e2e_p95", "e2e_p99",
     "throughput_req_s", "throughput_tok_s", "imbalance",
 ]
@@ -41,8 +42,19 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     path = os.path.join(run_dir, "prom", "vllm_num_requests_running.json")
     if not os.path.exists(path):
         return {}
+    # `vllm:num_requests_running` is exported TWICE: once per engine pod under
+    # job=vllm-engines, and once per backend under job=router - where every
+    # series shares instance="stack-router-service:80" and is distinguished only
+    # by the `server` label. Keying on `pod or instance` therefore collapsed all
+    # router series into a single bucket that averages both engines together,
+    # and that synthetic third "engine" then entered the max/min. With two
+    # engines it happens to land between them so the ratio survived; a third
+    # engine, or a scrape where it did not, would have corrupted a co-primary
+    # silently. Take the engine job only.
     series: Dict[str, List] = {}
     for s in json.load(open(path))["data"]["result"]:
+        if s["metric"].get("job") != "vllm-engines":
+            continue
         pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
         series.setdefault(pod, []).extend(
             (float(t), float(v)) for t, v in s["values"]
@@ -90,7 +102,8 @@ def main() -> None:
                 "seed": seed, "ok": s["ok"], "errors": s["errors"],
                 "error_rate": round(s["error_rate"], 5),
                 **{k: round(s[k], 4) for k in (
-                    "ttft_mean", "ttft_p50", "ttft_p95", "ttft_p99",
+                    "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
+                    "itl_p50", "itl_p95", "itl_p99",
                     "e2e_mean", "e2e_p95", "e2e_p99",
                     "throughput_req_s", "throughput_tok_s")},
                 "imbalance": round(imb[seed], 4) if seed in imb else "",

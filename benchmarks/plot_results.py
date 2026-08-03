@@ -6,6 +6,8 @@ figure can never disagree with the table it sits next to.
   fig1-ttft-p95-vs-beta.png   centerpiece: TTFT p95 vs beta, baselines as bands
   fig2-ttft-ecdf.png          client-observed TTFT distribution per arm
   fig3-hit-rate.png           LMCache lookup hit rate over the measured window
+  fig8-itl-percentiles.png    inter-token latency p50/p95/p99 - the decode side
+  fig9-throughput.png         sustained tok/s and req/s per arm
 
 Usage:
   python3 plot_results.py results/<...>-loadaware-b0 results/<...>-kvaware ... \
@@ -247,22 +249,77 @@ def fig_paired(cells: List[Dict], out: str, cand="loadaware-b0.1", base="kvaware
     plt.close(fig)
 
 
-def fig_percentiles(cells: List[Dict], out: str) -> None:
-    """p50 / p95 / p99 side by side: where each arm's cost actually sits."""
+def _panel_grid(cells: List[Dict], out: str, metrics, scale: float,
+                unit: str, suptitle: str) -> None:
+    """Median-across-seeds bar panels, one per percentile. Shared by the TTFT,
+    ITL and throughput figures so all three read identically."""
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
-    metrics = [("ttft_p50", "TTFT p50"), ("ttft_p95", "TTFT p95"), ("ttft_p99", "TTFT p99")]
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4 * len(metrics), 4), sharey=True)
+    axes = axes if len(metrics) > 1 else [axes]
     for ax, (key, label) in zip(axes, metrics):
-        names = [c["cell"] for c in ordered]
-        meds = [percentile([s[key] for s in c["seeds"]], 50) for c in ordered]
-        ax.barh(names, meds, color="tab:blue", alpha=0.8)
-        ax.set_xlabel(f"{label} (s), median of 6 seeds")
+        vals = [[s[key] for s in c["seeds"] if s[key] == s[key]] for c in ordered]
+        meds = [percentile(v, 50) * scale if v else float("nan") for v in vals]
+        ax.barh([c["cell"] for c in ordered], meds, color="tab:blue", alpha=0.8)
+        # error bar = seed spread, so a reader sees whether a gap is meaningful
+        for i, v in enumerate(vals):
+            if len(v) > 1:
+                lo, hi = percentile(v, 5) * scale, percentile(v, 95) * scale
+                ax.plot([lo, hi], [i, i], color="k", lw=1)
+        n = max((len(v) for v in vals), default=0)
+        ax.set_xlabel(f"{label} ({unit}), median of {n} seeds")
         ax.grid(alpha=0.3, axis="x")
     axes[0].invert_yaxis()
-    fig.suptitle("TTFT percentiles by arm - the arms separate in the tail, not at the median")
+    fig.suptitle(suptitle)
     fig.tight_layout()
     fig.savefig(out, dpi=160)
     plt.close(fig)
+
+
+def fig_percentiles(cells: List[Dict], out: str) -> None:
+    """p50 / p90 / p95 / p99 side by side: where each arm's cost actually sits.
+
+    p90 is on this figure because the 2026-08-03 sweep showed the policy shifts
+    the whole TTFT body (~7% at p50 and p90) while p95/p99 are dominated by
+    bursty engine stalls - reading only p95/p99 hides the effect in noise.
+    """
+    _panel_grid(
+        cells, out,
+        [("ttft_p50", "TTFT p50"), ("ttft_p90", "TTFT p90"),
+         ("ttft_p95", "TTFT p95"), ("ttft_p99", "TTFT p99")],
+        1.0, "s",
+        "TTFT percentiles by arm - bars are seed medians, whiskers the p5-p95 seed spread",
+    )
+
+
+def fig_itl(cells: List[Dict], out: str) -> None:
+    """Inter-token latency percentiles - the 92% of E2E that TTFT does not cover.
+
+    Pooled over every inter-token gap in the cell. ITL is where engine-side
+    load actually lands: a router that overfills one engine grows its decode
+    batch, and every sequence on that engine decodes slower.
+    """
+    _panel_grid(
+        cells, out,
+        [("itl_p50", "ITL p50"), ("itl_p95", "ITL p95"), ("itl_p99", "ITL p99")],
+        1000.0, "ms",
+        "Inter-token latency by arm - the decode-side cost of imbalance",
+    )
+
+
+def fig_throughput(cells: List[Dict], out: str) -> None:
+    """Sustained throughput per arm - the rubric's throughput metric.
+
+    Under an open loop at a fixed offered rate, all arms are *given* the same
+    work; achieved throughput therefore only separates once an arm cannot keep
+    up. A flat panel here is itself the finding: the offered rate is below the
+    engines' knee and no arm is being stressed.
+    """
+    _panel_grid(
+        cells, out,
+        [("throughput_tok_s", "output tokens/s"), ("throughput_req_s", "requests/s")],
+        1.0, "per seed",
+        "Sustained throughput by arm - flat bars mean the offered rate is below the knee",
+    )
 
 
 def fig_imbalance(cells: List[Dict], out: str) -> None:
@@ -280,10 +337,13 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
         path = os.path.join(c["dir"], "prom", "vllm_num_requests_running.json")
         if not os.path.exists(path):
             continue
-        # one series per engine per scrape target; key by pod so duplicate
-        # targets for the same engine collapse instead of counting twice
+        # job=vllm-engines only. The router exports the same metric per backend
+        # under a single shared `instance`, so including it merges both engines
+        # into one synthetic series - see export_summary.per_seed_imbalance.
         per_pod: Dict[str, List[float]] = {}
         for s in json.load(open(path))["data"]["result"]:
+            if s["metric"].get("job") != "vllm-engines":
+                continue
             pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
             per_pod.setdefault(pod, []).extend(
                 float(v[1]) for v in s["values"] if v[1] not in ("NaN", "+Inf", "-Inf"))
@@ -336,6 +396,8 @@ def main() -> None:
     fig_percentiles(cells, os.path.join(args.out, "fig5-percentiles.png"))
     fig_imbalance(cells, os.path.join(args.out, "fig6-load-balance.png"))
     fig_beta_tradeoff(cells, os.path.join(args.out, "fig7-beta-tradeoff.png"))
+    fig_itl(cells, os.path.join(args.out, "fig8-itl-percentiles.png"))
+    fig_throughput(cells, os.path.join(args.out, "fig9-throughput.png"))
     print(f"wrote figures to {args.out}")
 
 

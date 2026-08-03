@@ -8,6 +8,49 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 - Post-mortem on the amended sweep: the rate was the bug
+
+### Decided
+- **The 10.5 req/s operating point invalidates the latency co-primary, not the policy.** In both
+  headline cells `vllm:num_requests_waiting` is 0.00 mean *and* 0.00 max on both engines, queue
+  time is 0.0-0.8 ms, and KV usage is 15-19%. Nothing queued anywhere, so a load-aware router had
+  no load to be aware of and the 4.7% TTFT gap is residual cache locality alone. Evidence:
+  `results/20260803-{210741-loadaware-b0.1,212450-kvaware}/prom/`.
+- **The knee was never measured.** `rate_pilot.sh` defaulted to 2..10 req/s and TTFT p95 is flat
+  across it (0.212 / 0.259 / 0.251 / 0.249 s at 4/6/8/10). The 20-rate CSVs in
+  `results/rate-pilot/` put the knee at 14-16 (20 offered yields 14.9 achieved), so 10.5 was
+  ~70% of a knee the pilot had not reached, deep in the flat region. Any rerun must be at or just
+  under the knee, and that is a new pre-registration.
+- **Do not cut seeds to shorten a run; cut cells.** Measured on the 2026-08-03 sweep: ~8 min of
+  fixed setup per cell against ~50 s per seed replay, so 6 cells were 48 of the 76 minutes. Cut
+  `loadaware-b1.0` and one roundrobin seed instead, and keep `loadaware-b0` - it is the ablation
+  that isolates what beta buys. Sweep is now 5 cells / 30 replays.
+
+### Fixed
+- **Per-engine imbalance mixed in router-scraped series** (`export_summary.py`, `plot_results.py`).
+  `vllm:num_requests_running` is exported twice: per pod under `job=vllm-engines`, and per backend
+  under `job=router` where every series shares `instance="stack-router-service:80"` and differs
+  only by `server`. Keying on `pod or instance` collapsed both router series into one bucket
+  averaging the two engines, and that synthetic third "engine" entered the max/min. It changed 17
+  of 74 committed seed rows. Corrected, the imbalance co-primary strengthens: median reduction
+  24.8% -> **25.9%**, p 0.0068 -> **0.0049**. `results/summary-per-seed.csv` regenerated.
+
+### Added
+- **Inter-token latency is now measured.** The driver records every inter-token gap
+  (`itls_ms`), and `analyze.py` reports pooled `itl_p50/p95/p99`. Decode is ~92% of E2E at OSL=64
+  and was previously unmeasured except as an aggregate.
+- **`ttft_p90`** in the per-seed stats. On the 2026-08-03 data the policy shifts the whole TTFT
+  body - paired over 10 seeds, p50 p=0.0029 (9/10, 6.9%) and p90 p=0.032 (8/10, 7.4%) - while
+  p95 p=0.0527 and p99 p=0.81. The TTFT outliers arrive in bursts at single instants (loadaware
+  seed 9: five of the six worst all at t=29 s), so per-seed p95/p99 largely counts engine stall
+  events, not routing quality. **Reported for diagnosis; the headline metric stays as
+  pre-registered** - switching it after seeing these p-values would be optional stopping.
+- **`fig8-itl-percentiles.png`** and **`fig9-throughput.png`**; `fig5-percentiles` gains a p90
+  panel and seed-spread whiskers.
+- **Client event-loop lag probe** in the driver, printed per seed. TTFT is timestamped inside the
+  client's event loop, so an effect smaller than the loop's own lag is not measurable; this makes
+  that checkable instead of assumed.
+
 ## 2026-08-03 - Amended sweep complete: imbalance significant, TTFT not
 
 ### Added
