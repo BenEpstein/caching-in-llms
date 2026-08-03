@@ -98,6 +98,28 @@ results/<ts>-<cell>/
 `analyze.py compare` refuses to pair two runs whose `run.json` rate or workload manifest
 differ - the methodology's "identical workload across arms" is enforced, not assumed.
 
+### What is committed vs. what stays local
+
+`results/` is gitignored - driver CSVs and Prometheus dumps run to megabytes. But every number
+in the report has to be checkable by a reader who cannot rerun the cluster, so two derived
+artifacts are **force-added** to git (`git add -f`, rather than punching holes in `.gitignore`):
+
+| Committed | Why |
+|---|---|
+| `results/<run>/run.json` | arm, α/β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
+| `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
+
+Between them a reader can reproduce every figure, every percentile, and both co-primary
+statistical tests without the raw per-request data. Regenerate with:
+
+```bash
+python3 benchmarks/export_summary.py results/<run>... --out results/summary-per-seed.csv
+```
+
+The `run` column is the sort key and comes first on purpose: `cell` alone is ambiguous, since
+the same cell name appears in the 7.5 req/s pilot and the 10.5 req/s amended sweep, and
+grouping by it silently merges two different experiments.
+
 Driver CSVs are the only percentile-capable latency source (the router exposes only
 average-latency gauges; engine TTFT histograms start their clock at the engine and miss
 router overhead). Router `gpu_prefix_cache_*` gauges are dead (0.0) in this build - ignored.
