@@ -8,6 +8,41 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Scarcity gate falsified the first amendment; workload re-derived
+
+### Fixed
+- **The scarcity gate was reading a cumulative metric as if windowed.** vLLM's
+  `Prefix cache hit rate` log field counts from engine start, so a `--since` grep reports the
+  running average, not the window. It read 0.085 mid-warm-up and returned a false PASS where
+  the true windowed rate was 0.889. Now takes a delta of
+  `vllm:prefix_cache_{queries,hits}_total`, and measures under load rather than at warm-up
+  concurrency (with negligible in-flight KV, almost the whole pool is free for retention and
+  the config flatters itself).
+
+### Decided
+- **64 prefixes at s=1.2 is falsified: measured 0.889 under load vs the pilot's ~0.95.** The
+  realised KV pool was 104,624 tok on both engines against a predicted ~99,000, so the
+  calibration held - the design point was wrong. In-flight KV at 7.5 req/s is far below the
+  56k projected from kvaware's concentrated peak, so the hot set still fit.
+- **Scarcity is a count condition before it is a distribution condition.** An LRU simulator
+  over the real generator (validated against the measurement: predicted 0.865, measured 0.889)
+  shows that when the pool fits in cache the exponent does *nothing* - pool=20 gives 0.960 at
+  s=0.9 and 0.960 at s=0.0, identical. And at s=1.2 pool size barely helps: 0.687 even at 256
+  prefixes, because the concentrated head stays resident however long the tail grows. Both
+  conditions are needed.
+- **Workload re-derived: `prefix_pool_size` 64 -> 128, `zipf_s` 1.2 -> 0.9.** Gate PASSES at
+  **0.711** (threshold 0.75). s=0.9 rather than lower is deliberate: s≈1 is the canonical Zipf
+  exponent, so it reads as a normal serving profile, where flatter exponents reach the same
+  scarcity but describe near-uniform prefix popularity that nobody observes. Revision:
+  <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169741456>.
+- **The simulator is a design tool, not a predictor of the metric.** Measured 0.711 vs
+  predicted 0.605 is consistent with effective capacity ~55 rather than 38 prefixes: in-flight
+  KV is smaller than assumed, and vLLM's counter is block-level so a partially-evicted prefix
+  still scores partial hits. It will always read above a whole-prefix simulation.
+- **§6 framing**: the pilot workload could not discriminate the policies and the evaluation
+  workload was re-derived so the working set exceeds cache capacity, with the gate
+  measurements as evidence. Pilot numbers stay in §5 as the contrast.
+
 ## 2026-08-03 - Methodology amended (#3): the pilot could not test the hypothesis
 
 ### Decided
