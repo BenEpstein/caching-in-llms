@@ -28,8 +28,8 @@ helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" \
   -f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml"
 oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
-oc rollout restart "deploy/$ENGINE_DEPLOY" -n "$NS"
-oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
+NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
+  "$BENCH_DIR/cold_start.sh"
 "$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
 
 PILOT_DIR="${PILOT_DIR:-results/rate-pilot}"

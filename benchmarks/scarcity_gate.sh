@@ -49,9 +49,10 @@ fi
 oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 
-echo "==> cold engine restart"
-oc rollout restart "deploy/$ENGINE_DEPLOY" -n "$NS"
-oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
+echo "==> cold, stale-free start"
+# roundrobin: no LMCache controller, so no registrations to wait for
+NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
+  EXPECT_REGISTRATIONS=0 "$BENCH_DIR/cold_start.sh"
 
 # ---- validity rule 5: realised KV pool, from the engine's own log -----------
 echo "==> realised KV pool (validity rule 5)"
