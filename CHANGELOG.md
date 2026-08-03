@@ -8,6 +8,121 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Ticket #21 root-caused: both router-stability issues explained
+
+### Fixed
+- `load_driver.py` now reads the response body on a failed request before raising. Streamed
+  responses arrive body-unread, so `raise_for_status()` was discarding the server's error
+  detail - all six demo CSVs recorded a bare "500 Internal Server Error" with no cause. The
+  error column is widened 200 -> 500 chars to fit a traceback summary.
+
+### Decided
+- **Issue 1 (SIGKILL at 4 req/s) is a liveness starvation caused by a blocking HF call on the
+  event loop, and it is baseline-inherent - it caps the pilot rate, it does not invalidate the
+  comparison.** Evidence, all on the live `:c68ccfc` deploy: the router pod cannot write an HF
+  cache (runs as uid 1001020000, `HF_HOME` unset, no writable `/.cache`), so
+  `AutoTokenizer.from_pretrained` fails on **every** request - the exception path never sets
+  `self.tokenizer`, so it is retried per request, and the failing call costs **245 ms median**
+  because it reaches huggingface.co over the network before failing. Measured in-router
+  blocking is **0.248 s/request mean** (n=644, p95 0.282 s), giving a single-event-loop ceiling
+  of **4.04 req/s** - the router was killed at exactly 4 req/s. The kill is the liveness probe,
+  not memory: `reason: "Error"` (not `OOMKilled`) with `timeoutSeconds: 1`, period 5s,
+  threshold 3. `KvawareRouter.route_request` contains the identical try/except, so the stock
+  baseline arm pays the same cost.
+- **Issue 2 (background 500s) is not ours: 16/16 tracebacks are
+  `aiohttp.client_exceptions.ServerDisconnectedError`** raised in upstream
+  `request.py:164` while opening the upstream connection, i.e. after the routing decision had
+  already succeeded. The router's aiohttp pool holds idle engine connections **15.0 s**
+  (`TCPConnector(limit=0)`, aiohttp default) while the engine closes them at **5 s**
+  (vLLM `VLLM_HTTP_TIMEOUT_KEEP_ALIVE=5`, not overridden). Arm-independent: the code path is
+  shared by every routing logic.
+- **That timeout mismatch alone is NOT sufficient, and the leading hypothesis now links the two
+  issues.** A controlled sequential probe (90 requests, idle gaps 1.0/2.0/2.5/3.0/4.0/5.0 s,
+  n=15 each) returned **90/90 HTTP 200** - with one connection in play aiohttp processes the
+  engine's FIN and discards the dead connection cleanly. The demo 500s occurred only under
+  concurrency, and the suspected mechanism is that the 0.25 s/request event-loop block above
+  *delays the router's processing of the engine's FIN*, so closed connections linger in the
+  pool as reusable and get handed out. **That experiment has now run and both issues cleared
+  on the single fix** (below), which is the intervention evidence for the link.
+
+### Fixed
+- **`HF_HOME=/tmp/hf`, applied to BOTH arms via `benchmarks/run_cell.sh`, clears both issues.**
+  It cannot live in values: chart 0.1.11's `deployment-router.yaml` hardcodes the router env
+  list and declares no volumes at all (verified against the pulled chart, 2026-08-03), so there
+  is neither a `routerSpec.env` passthrough nor a volume hook - and `/tmp` is the only writable
+  path in the container. Set on baseline cells too; an arm-only fix would flatter loadaware.
+  Verified live after rollout:
+  - in-router blocking **221 ms -> 1 ms median**; first request costs 3.50 s once (the tokenizer
+    load), which the existing warm-up gate already absorbs
+  - remote `/tokenize` calls **933/7 -> 0/0** across the two engines
+  - 2 req/s x 3 seeds x 100: **300/300 OK, 0 tracebacks** (pre-fix 16/600 = 2.7%; under a 2.7%
+    rate, 0-in-300 has p ~ 3e-4)
+  - the 4 req/s repro that previously SIGKILLed the router: **100/100 OK, 0 restarts**
+  Caveat: this is a before/after on a shared cluster, not a controlled A/B - the workloads are
+  the frozen seeds 101-103 in both cases, but engine cache state differed.
+
+### Changed
+- Confounder found while root-causing: because local tokenization always fails, every request
+  falls back to a synchronous `requests.post(.../tokenize)` aimed at `endpoints[0]` - **933
+  tokenize calls landed on engine-0 vs 7 on engine-1** over the demo window. That is an
+  unmeasured load asymmetry pointed at one engine, which biases a *load-aware* routing
+  experiment specifically. Must be fixed before #7, identically in both arms.
+- Verified the live router overlay (`router-patch` configmap: `routing_logic.py`,
+  `kv_controller.py`, `parser.py`) is **byte-identical** to the branch, so the demo runs did
+  exercise the intended code. Corrects the handoff's "NO dev overlay mounted" note.
+
+## 2026-08-01 (late night) - Ticket #6 completed: benchmark harness built
+
+### Added
+- Benchmark harness implementing the locked methodology (issue #3): `freeze_workloads.py`
+  (6 frozen seeds pinned by SHA-256 manifest), `warmup.py`, `collectors/prom_dump.py` +
+  `collectors/dcgm_poll.py`, `run_cell.sh` per-cell choreography (deploy → #13 gates →
+  warm-up → 6 seeds → collect → `run.json`), `run_sweep.sh`, `rate_pilot.sh`, and
+  `analyze.py` with the pre-registered exact one-sided Wilcoxon + bootstrap CI
+  (stdlib-only). 30 new unit tests; `benchmarks/README.md` pre-registers the validity rules.
+
+### Changed
+- `workload_gen.py`: `pool_seed` split from `seed` so all 6 replay seeds share ONE frozen
+  prefix pool (a single warm-up must cover every seed). `load_driver.py`: `send_ts` is now
+  wall-clock epoch (aligns rows with Prometheus/DCGM windows), optional `--summary-json`,
+  and `--insecure` opt-in TLS flag (gapu-2 self-signed route) instead of implicit trust.
+
+### Changed
+- **Review + simplify pass over PR #20** (/code-review + /simplify, 4 findings applied,
+  ~90 lines net removed): `percentile` now lives only in `analyze.py` (driver imports it);
+  tautological Wilcoxon brute-force test replaced with a hand-computed midrank-ties case;
+  driver `--summary-json` dropped (windows derive from CSV `send_ts`); unused
+  `prom_dump --metric` dropped; redundant bootstrap sorts removed; DCGM poll sleeps to a
+  deadline. Correctness from review: driver pins OSL via `ignore_eos` (early EOS was
+  leaking output-length variance into E2E/throughput), unbounded httpx connection pool
+  (pool-queueing would count as TTFT past the knee), per-chunk JSON parse removed from the
+  measurement path, `--since` log windows floored at the gate timestamp (probe traffic
+  could satisfy the warm-up gate), router image asserted per cell and
+  `analyze.py compare` refuses runs with differing rate/workload manifests
+  (validity rules now enforced, not recorded).
+
+### Fixed
+- **Live verification on gapu-2 falsified four harness assumptions** (issue #6, PR #20):
+  (1) chart 0.1.11 silently ignores `routerSpec.env` - α/β now travel via `oc set env`
+  per cell, removed on baseline cells so a stale β can't leak through the three-way merge;
+  (2) the pinned router exposes NO `registered_workers_count` gauge - registration gate is
+  now the router's `Registered instance-worker` log lines (deploy/README diagnostic
+  corrected too); (3) `lmcache:request_cache_hit_rate` is a histogram, prom_dump now pulls
+  `_sum`/`_count`; (4) DCGM is a DaemonSet and a Service port-forward pins to ONE pod - now one port-forward per exporter pod, poller takes multiple `--url`s (verified rows
+  from both workers). Also: `helm upgrade` now pins `--version 0.1.11` (0.1.12 has schema
+  drift), and a mounted dev overlay (`router-patch` ConfigMap - found live!) is
+  auto-reverted before measuring. Driver, warm-up gate line, registry probe, prom_dump,
+  and DCGM poller all exercised against the real cluster.
+
+### Decided
+- **Workload JSONLs are not committed; the manifest is** (issue #6): 6×~6 MB of synthetic
+  filler would bloat the submission repo, and generation is deterministic - the committed
+  `workloads/manifest.json` (config + SHA-256 per seed) plus a mandatory
+  regenerate-and-verify in `run_cell.sh` gives the same frozen-dataset guarantee.
+- **Registry probe skipped on the roundrobin cell** (issue #6): roundrobin routing ignores
+  the KV registry, and the probe's pinning signal is meaningless there; the worker
+  registration wait still applies. Documented in `benchmarks/README.md`.
+
 ## 2026-08-01 (night) - Ticket #16 completed: image pipeline pushes to Quay
 
 ### Fixed
@@ -25,6 +140,14 @@ with a pointer to the evidence — those matter as much as code.
 - **Quay repo is public** (issue #16): cluster pulls with no imagePullSecret and a grader can
   pull the exact SHA-tagged image cited in the report. Credentials live only in GitHub Actions
   secrets (`QUAY_USERNAME`/`QUAY_TOKEN`, robot account scoped to this one repo).
+
+### Added
+- **Image path verified end to end on gapu-2** (closes #16): first CI push
+  (`:c68ccfc`, digest `sha256:ae5772fe…`) deployed via
+  `helm upgrade --reuse-values -f deploy/values-loadaware-image.yaml` (rev 13); router pod
+  pulled the exact digest from Quay, booted `loadaware` (α=1.0, β=0.1 defaults), and after
+  the expected #13 blind window the registry probe pinned 4/4 - prefix affinity confirmed on
+  the built image, dev-loop overlay uninvolved. #7 unblocked.
 
 ## 2026-08-01 (evening) - Ticket #3 resolved: benchmark methodology locked
 

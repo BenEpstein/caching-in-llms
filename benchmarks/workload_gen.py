@@ -35,6 +35,10 @@ class WorkloadConfig:
     zipf_s: float = 1.2                 # skew: 0 = uniform, >1 = heavy head
     prefix_tokens: int = 2048           # approx tokens per shared prefix
     suffix_tokens: int = 32             # approx tokens per unique suffix
+    # The pool is THE dataset (issue #3: one frozen prefix pool); `seed` only
+    # varies sampling order + suffixes, so N seed replays share one pool and a
+    # single warm-up pass covers all of them.
+    pool_seed: int = 42
     seed: int = 42
 
 
@@ -64,7 +68,7 @@ def _filler(rng: random.Random, approx_tokens: int, tag: str) -> str:
 
 def build_prefix_pool(cfg: WorkloadConfig) -> List[str]:
     """Deterministic pool of long shared prefixes."""
-    rng = random.Random(cfg.seed)
+    rng = random.Random(cfg.pool_seed)
     return [
         _filler(rng, cfg.prefix_tokens, tag=f"[PREFIX-{i:03d}]")
         for i in range(cfg.prefix_pool_size)
@@ -114,6 +118,7 @@ if __name__ == "__main__":
     p.add_argument("--zipf-s", type=float, default=1.2)
     p.add_argument("--prefix-tokens", type=int, default=2048)
     p.add_argument("--suffix-tokens", type=int, default=32)
+    p.add_argument("--pool-seed", type=int, default=42)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", required=True, help="output JSONL path")
     a = p.parse_args()
@@ -123,6 +128,7 @@ if __name__ == "__main__":
         zipf_s=a.zipf_s,
         prefix_tokens=a.prefix_tokens,
         suffix_tokens=a.suffix_tokens,
+        pool_seed=a.pool_seed,
         seed=a.seed,
     )
     dump_jsonl(cfg, a.out)

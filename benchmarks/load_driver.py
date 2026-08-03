@@ -26,12 +26,20 @@ from typing import List, Optional
 
 import httpx
 
+from analyze import percentile
+
+# Unbounded connection pool: past the saturation knee the in-flight count can
+# exceed httpx's default 100, and pool-queueing would be silently counted as
+# TTFT (t0 starts before client.stream) - distorting the very tail the rate
+# pilot measures.
+_LIMITS = httpx.Limits(max_connections=None)
+
 
 @dataclasses.dataclass
 class Result:
     index: int
     prefix_id: int
-    send_ts: float
+    send_ts: float  # wall-clock epoch seconds - aligns rows with Prometheus/DCGM windows
     ttft_s: Optional[float]
     e2e_s: Optional[float]
     prompt_tokens: Optional[int]
@@ -58,18 +66,28 @@ async def one_request(
         "model": model,
         "prompt": req["prompt"],
         "max_tokens": max_tokens,
+        # pin the output length (methodology: OSL is fixed) - without this,
+        # greedy decoding can hit EOS early and output-length variance leaks
+        # into E2E latency and throughput
+        "ignore_eos": True,
         "temperature": 0.0,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
     t0 = time.perf_counter()
+    wall0 = time.time()
     ttft = None
     prompt_toks = completion_toks = None
     try:
         async with client.stream(
             "POST", f"{base_url}/v1/completions", json=payload, timeout=300.0
         ) as resp:
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                # streamed responses arrive body-unread, so raise_for_status()
+                # would throw away the server's error detail - the router's
+                # traceback summary lives in this body (#21)
+                body = (await resp.aread()).decode("utf-8", "replace")
+                raise RuntimeError(f"HTTP {resp.status_code}: {body.strip()}")
             async for line in resp.aiter_lines():
                 if not line.startswith("data:"):
                     continue
@@ -78,38 +96,41 @@ async def one_request(
                     break
                 if ttft is None:
                     ttft = time.perf_counter() - t0
-                chunk = json.loads(data)
-                usage = chunk.get("usage")
+                # usage arrives only in the final chunk - don't JSON-parse
+                # every token on the measurement path
+                if '"usage"' not in data:
+                    continue
+                usage = json.loads(data).get("usage")
                 if usage:
                     prompt_toks = usage.get("prompt_tokens")
                     completion_toks = usage.get("completion_tokens")
         return Result(
             index=req["index"],
             prefix_id=req["prefix_id"],
-            send_ts=t0,
+            send_ts=wall0,
             ttft_s=ttft,
             e2e_s=time.perf_counter() - t0,
             prompt_tokens=prompt_toks,
             completion_tokens=completion_toks,
             status="ok",
         )
-    except Exception as e:  # noqa: BLE001 — record, don't crash the run
+    except Exception as e:  # noqa: BLE001 - record, don't crash the run
         return Result(
             index=req["index"],
             prefix_id=req["prefix_id"],
-            send_ts=t0,
+            send_ts=wall0,
             ttft_s=ttft,
             e2e_s=time.perf_counter() - t0,
             prompt_tokens=None,
             completion_tokens=None,
             status="error",
-            error=f"{type(e).__name__}: {e}"[:200],
+            error=f"{type(e).__name__}: {e}"[:500],
         )
 
 
 async def run_open_loop(args, workload) -> List[Result]:
     rng = random.Random(args.seed)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
         tasks = []
         for req in workload:
             tasks.append(
@@ -137,17 +158,9 @@ async def run_closed_loop(args, workload) -> List[Result]:
                 await one_request(client, args.base_url, args.model, req, args.max_tokens)
             )
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
         await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
     return results
-
-
-def percentile(xs: List[float], p: float) -> float:
-    if not xs:
-        return float("nan")
-    xs = sorted(xs)
-    i = min(len(xs) - 1, max(0, round(p / 100 * (len(xs) - 1))))
-    return xs[i]
 
 
 def summarize(results: List[Result], wall_s: float) -> str:
@@ -175,6 +188,11 @@ def main():
     mode.add_argument("--concurrency", type=int, help="closed-loop worker count")
     p.add_argument("--max-tokens", type=int, default=64)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument(
+        "--insecure",
+        action="store_true",
+        help="skip TLS verification (gapu-2's edge route serves a self-signed cert)",
+    )
     p.add_argument("--out", required=True, help="per-request CSV path")
     args = p.parse_args()
 

@@ -51,7 +51,9 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
    **reply port 9001** and heartbeat on 9002. Result: registration hangs silently,
    `registered_workers_count` stays 0, all KV-admit events are rejected, every lookup
    misses, and kvaware degrades to QPS routing with **no error anywhere**. Diagnose via
-   the router's `/metrics`: `lmcache:cache_controller_registered_workers_count`.
+   the router *logs*: count `Registered instance-worker` lines (the pinned 0.1.9-era
+   router exposes **no** `lmcache:cache_controller_registered_workers_count` gauge on
+   `/metrics` - verified live 2026-08-01).
    Fix (re-apply after every `helm upgrade` — helm reverts it):
 
    ```bash

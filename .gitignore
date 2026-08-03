@@ -1,5 +1,7 @@
 research/
 .hyperresearch/
+benchmarks/workloads/*.jsonl
+results/
 .DS_Store
 CLAUDE.local.md
 __pycache__/
