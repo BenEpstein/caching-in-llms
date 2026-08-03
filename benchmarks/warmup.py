@@ -1,6 +1,6 @@
 """Unmeasured warm-up passes over the frozen prefix pool (methodology, issue #3).
 
-Sends every prefix in the pool `--passes` times so all 20 prefixes are cached
+Sends every prefix in the pool `--passes` times so every prefix is cached
 and admitted to the KV registry before measurement starts. Each request gets a
 unique suffix (mirrors real traffic; keeps full prompts distinct). Nothing here
 is recorded as a measurement.
