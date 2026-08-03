@@ -1,0 +1,200 @@
+index,prefix_id,send_ts,ttft_s,e2e_s,prompt_tokens,completion_tokens,status,error
+0,16,1785602684.8414989,,0.12391183292493224,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+1,2,1785602685.809111,,0.042357416125014424,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+2,3,1785602685.963524,,0.08123150002211332,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+3,0,1785602686.282463,,0.034183625131845474,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+4,0,1785602686.617316,,0.03731083404272795,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+5,12,1785602686.678797,,0.03444166714325547,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+6,0,1785602686.699779,,0.04036520794034004,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+7,0,1785602686.932319,,0.03548454097472131,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+8,18,1785602686.965847,,0.125514917075634,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+9,0,1785602687.086858,,0.044786165934056044,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+10,6,1785602687.639273,,0.041677125031128526,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+11,0,1785602688.153962,,0.03643662505783141,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+12,10,1785602688.1863282,,0.04534695902839303,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+13,0,1785602688.2142231,,0.0427800000179559,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+14,2,1785602688.278212,,0.04168662498705089,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+15,0,1785602688.719689,,0.05111433402635157,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+16,1,1785602688.7262049,,0.04472374985925853,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+17,3,1785602688.791195,,0.040382000152021646,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+18,1,1785602688.8198972,,0.03378933388739824,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+19,3,1785602688.8541791,,0.040302000008523464,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+20,0,1785602689.0408661,,0.12585866590961814,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+21,0,1785602689.092565,,0.09695420879870653,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+22,0,1785602689.225675,,0.04103979212231934,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+23,0,1785602689.5570729,,0.032623291946947575,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+24,0,1785602689.878558,,0.03943962510675192,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+25,2,1785602690.013623,,0.04477391694672406,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+26,5,1785602690.399585,,0.04740429110825062,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+27,5,1785602690.6138508,,0.1294502920936793,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+28,16,1785602691.053656,,0.0773078331258148,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+29,0,1785602691.1260831,,0.04023491684347391,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+30,7,1785602691.242471,,0.14094029180705547,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+31,7,1785602691.460949,,0.039374582935124636,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+32,2,1785602692.191519,,0.13036904111504555,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+33,1,1785602692.434556,,0.04406416602432728,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+34,0,1785602692.596749,,0.03630566713400185,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+35,4,1785602692.669557,,0.0388453749474138,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+36,5,1785602692.753314,,0.1145609999075532,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+37,0,1785602692.815688,,0.05223775003105402,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+38,0,1785602693.890871,,0.04674362507648766,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+39,0,1785602694.4363031,,0.03909908281639218,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+40,0,1785602695.00092,,0.05004041688516736,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+41,2,1785602695.190231,,0.04155229078605771,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+42,11,1785602695.499727,,0.03344925004057586,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+43,2,1785602695.588981,,0.056374792009592056,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+44,0,1785602695.754443,,0.03544229199178517,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+45,0,1785602695.794692,,0.034424832789227366,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+46,2,1785602695.931413,,0.0692587501835078,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+47,2,1785602696.004904,,0.0388648749794811,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+48,17,1785602696.033592,,0.04550866689532995,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+49,4,1785602696.6642492,,0.04891895898617804,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+50,10,1785602696.690659,,0.04598570801317692,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+51,0,1785602697.110925,,0.04601070890203118,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+52,13,1785602697.412867,,0.13395812502130866,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+53,1,1785602697.436901,,0.1347336668986827,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+54,0,1785602697.6041129,,0.04212554101832211,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+55,15,1785602698.977057,,0.04031900013796985,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+56,3,1785602700.062041,,0.12956566596403718,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+57,1,1785602700.270188,,0.04991683317348361,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+58,0,1785602700.640324,,0.0820195828564465,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+59,7,1785602700.9501781,,0.0481290421448648,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+60,0,1785602701.0376792,,0.045778749976307154,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+61,0,1785602701.2384598,,0.04015791695564985,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+62,1,1785602701.466801,,0.038867542054504156,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+63,10,1785602701.593146,,0.036655375035479665,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+64,7,1785602702.021253,,0.03603545785881579,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+65,0,1785602702.168592,,0.12428341596387327,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+66,5,1785602702.518315,,0.049789374927058816,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+67,3,1785602702.535087,,0.046260334085673094,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+68,0,1785602702.686547,,0.1207904580514878,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+69,3,1785602702.6994822,,0.13364004087634385,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+70,8,1785602702.959872,,0.22975141694769263,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+71,0,1785602703.484252,,0.2355167919304222,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+72,13,1785602703.680767,,0.057817749911919236,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+73,2,1785602703.890661,,0.09335537487640977,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+74,5,1785602704.135432,,0.03475570888258517,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+75,0,1785602704.200803,,0.0380360831040889,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+76,6,1785602704.3244522,,0.07297395821660757,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+77,0,1785602704.541923,,0.0351863750256598,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+78,3,1785602704.802277,,0.15759629104286432,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+79,0,1785602704.922252,,0.07541579217649996,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+80,2,1785602705.085079,,0.03806579206138849,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+81,0,1785602705.186094,,0.03868162492290139,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+82,2,1785602705.389408,,0.05830379109829664,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+83,5,1785602705.672296,,0.04185829102061689,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+84,3,1785602705.7731898,,0.042552166851237416,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+85,2,1785602706.065749,,0.041435749968513846,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+86,0,1785602706.538614,,0.041685499949380755,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+87,0,1785602706.733269,,0.04410620778799057,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+88,1,1785602707.7172558,,0.046601250069215894,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+89,2,1785602707.810821,,0.03986641694791615,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+90,0,1785602708.441826,,0.1375426659360528,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+91,17,1785602708.492267,,0.10676112514920533,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+92,2,1785602708.606076,,0.033072917023673654,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+93,1,1785602709.031708,,0.07986595900729299,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+94,0,1785602709.040853,,0.07102295919321477,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+95,0,1785602709.280682,,0.04518554196693003,,,error,ReadError: 
+96,0,1785602709.7947562,,0.05196154210716486,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+97,0,1785602710.5164218,,0.13826391706243157,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+98,2,1785602710.8042629,,0.0532793749589473,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+99,4,1785602710.9114099,,0.0823229169473052,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"

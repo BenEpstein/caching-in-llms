@@ -8,6 +8,17 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+### Added
+- **`results/` is now tracked in git** (364 files, 5.2 MB): raw per-seed driver CSVs, `dcgm.csv`,
+  and the `prom/*.json` scrapes for every run, so a collaborator or grader can inspect the
+  evidence behind every figure without rerunning the cluster.
+
+### Decided
+- **Commit raw run artifacts, keep frozen workloads out.** `.gitignore` now ignores only
+  `results/**/*.jsonl` - the 2.5 MB `rate-pilot/pilot-seed999.jsonl` is regenerable from
+  `benchmarks/workloads/manifest.json`, which is the existing checksum-manifest policy for
+  workload data. Everything else is small enough that reproducibility beats repo size.
+
 ## 2026-08-04 - Post-mortem on the amended sweep: the rate was the bug
 
 ### Decided

@@ -1,0 +1,16 @@
+{
+  "cell": "demo-b",
+  "arm": "loadaware",
+  "alpha": "1.0",
+  "beta": "0.1",
+  "rate_req_s": 2.0,
+  "window": {
+    "start_ts": 1785603056,
+    "end_ts": 1785603207
+  },
+  "router_image": "quay.io/rhl193000/lmstack-router-loadaware:c68ccfc",
+  "note": "DEMO: 3 mini seeds x 100 req, no cold start - pipeline demo, not a measurement",
+  "workload_manifest": {
+    "note": "mini demo seeds 101-103, pool_seed 42"
+  }
+}

@@ -1,7 +1,9 @@
 research/
 .hyperresearch/
 benchmarks/workloads/*.jsonl
-results/
+# results/ is tracked (raw CSVs + prom JSON) so runs are reviewable without rerunning.
+# Frozen workload jsonl stays out - reproduce it from benchmarks/workloads/manifest.json.
+results/**/*.jsonl
 .DS_Store
 CLAUDE.local.md
 __pycache__/

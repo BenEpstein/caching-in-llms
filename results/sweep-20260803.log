@@ -1,0 +1,460 @@
+==> cell loadaware-b0 (arm=loadaware alpha=1.0 beta=0) rate=7.5 → results/20260803-161908-loadaware-b0
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 16:19:10 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 16
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+==> 4 identical requests, seed 1785763586
+    stack-llm-deployment-vllm-5656d58f5b-92tw5: 0/4
+    stack-llm-deployment-vllm-5656d58f5b-jxm8l: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 20/20 ok in 4.3s
+pass 2/2: 20/20 ok in 0.7s
+==> warm-up gate ok (20 cache-path routings)
+==> seed 1 / 6
+n=500 ok=500 err=0 wall=70.1s req/s=7.13 tok/s=456.3
+TTFT  p50=0.143s p95=0.222s p99=0.274s
+E2E   p50=2.170s p95=3.231s p99=3.367s
+wrote results/20260803-161908-loadaware-b0/driver-seed1.csv
+==> seed 2 / 6
+n=500 ok=500 err=0 wall=71.7s req/s=6.97 tok/s=446.3
+TTFT  p50=0.154s p95=0.226s p99=0.254s
+E2E   p50=2.433s p95=3.042s p99=3.217s
+wrote results/20260803-161908-loadaware-b0/driver-seed2.csv
+==> seed 3 / 6
+n=500 ok=499 err=1 wall=68.2s req/s=7.32 tok/s=468.5
+TTFT  p50=0.161s p95=0.262s p99=0.309s
+E2E   p50=2.609s p95=4.113s p99=4.644s
+wrote results/20260803-161908-loadaware-b0/driver-seed3.csv
+==> seed 4 / 6
+n=500 ok=500 err=0 wall=74.4s req/s=6.72 tok/s=430.4
+TTFT  p50=0.160s p95=0.242s p99=0.280s
+E2E   p50=2.531s p95=3.166s p99=3.791s
+wrote results/20260803-161908-loadaware-b0/driver-seed4.csv
+==> seed 5 / 6
+n=500 ok=497 err=3 wall=70.0s req/s=7.10 tok/s=454.4
+TTFT  p50=0.158s p95=0.247s p99=0.289s
+E2E   p50=2.561s p95=4.110s p99=4.335s
+wrote results/20260803-161908-loadaware-b0/driver-seed5.csv
+==> seed 6 / 6
+n=500 ok=500 err=0 wall=71.6s req/s=6.98 tok/s=446.8
+TTFT  p50=0.149s p95=0.268s p99=0.331s
+E2E   p50=2.486s p95=3.774s p99=4.050s
+wrote results/20260803-161908-loadaware-b0/driver-seed6.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-161908-loadaware-b0/run.json
+run valid: all seeds under the error threshold
+==> cell loadaware-b0 complete: results/20260803-161908-loadaware-b0
+==> cell loadaware-b0.1 (arm=loadaware alpha=1.0 beta=0.1) rate=7.5 → results/20260803-163350-loadaware-b0.1
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 16:33:52 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 17
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+==> 4 identical requests, seed 1785764536
+    stack-llm-deployment-vllm-5dc9fc7db-s9jf2: 0/4
+    stack-llm-deployment-vllm-5dc9fc7db-xzzmq: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 20/20 ok in 3.9s
+pass 2/2: 20/20 ok in 0.8s
+==> warm-up gate ok (20 cache-path routings)
+==> seed 1 / 6
+n=500 ok=500 err=0 wall=70.1s req/s=7.14 tok/s=456.7
+TTFT  p50=0.136s p95=0.201s p99=0.282s
+E2E   p50=2.140s p95=3.107s p99=3.202s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed1.csv
+==> seed 2 / 6
+n=500 ok=500 err=0 wall=71.1s req/s=7.03 tok/s=450.0
+TTFT  p50=0.192s p95=0.418s p99=0.440s
+E2E   p50=2.540s p95=3.612s p99=4.011s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed2.csv
+==> seed 3 / 6
+n=500 ok=500 err=0 wall=68.2s req/s=7.34 tok/s=469.5
+TTFT  p50=0.152s p95=0.238s p99=0.278s
+E2E   p50=2.644s p95=3.688s p99=4.507s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed3.csv
+==> seed 4 / 6
+n=500 ok=500 err=0 wall=75.3s req/s=6.64 tok/s=424.8
+TTFT  p50=0.145s p95=0.195s p99=0.238s
+E2E   p50=2.364s p95=3.167s p99=3.276s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed4.csv
+==> seed 5 / 6
+n=500 ok=500 err=0 wall=70.1s req/s=7.13 tok/s=456.6
+TTFT  p50=0.153s p95=0.203s p99=0.237s
+E2E   p50=2.582s p95=3.373s p99=3.591s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed5.csv
+==> seed 6 / 6
+n=500 ok=500 err=0 wall=72.0s req/s=6.94 tok/s=444.3
+TTFT  p50=0.152s p95=0.210s p99=0.283s
+E2E   p50=2.641s p95=3.292s p99=3.561s
+wrote results/20260803-163350-loadaware-b0.1/driver-seed6.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-163350-loadaware-b0.1/run.json
+run valid: all seeds under the error threshold
+==> cell loadaware-b0.1 complete: results/20260803-163350-loadaware-b0.1
+==> cell loadaware-b0.5 (arm=loadaware alpha=1.0 beta=0.5) rate=7.5 → results/20260803-164940-loadaware-b0.5
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 16:49:42 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 18
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+==> 4 identical requests, seed 1785765413
+    stack-llm-deployment-vllm-5b4ddd9b9b-b2xv8: 0/4
+    stack-llm-deployment-vllm-5b4ddd9b9b-rrcpr: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 20/20 ok in 4.3s
+pass 2/2: 20/20 ok in 1.6s
+==> warm-up gate ok (20 cache-path routings)
+==> seed 1 / 6
+n=500 ok=500 err=0 wall=69.4s req/s=7.20 tok/s=460.8
+TTFT  p50=0.155s p95=0.372s p99=0.753s
+E2E   p50=2.213s p95=2.945s p99=3.339s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed1.csv
+==> seed 2 / 6
+n=500 ok=500 err=0 wall=71.2s req/s=7.02 tok/s=449.2
+TTFT  p50=0.165s p95=0.251s p99=0.368s
+E2E   p50=2.553s p95=3.625s p99=3.960s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed2.csv
+==> seed 3 / 6
+n=500 ok=499 err=1 wall=68.6s req/s=7.28 tok/s=465.8
+TTFT  p50=0.178s p95=0.273s p99=0.312s
+E2E   p50=2.474s p95=4.087s p99=4.477s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed3.csv
+==> seed 4 / 6
+n=500 ok=500 err=0 wall=75.6s req/s=6.61 tok/s=423.1
+TTFT  p50=0.175s p95=0.258s p99=0.291s
+E2E   p50=2.616s p95=3.280s p99=3.410s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed4.csv
+==> seed 5 / 6
+n=500 ok=499 err=1 wall=69.3s req/s=7.20 tok/s=460.6
+TTFT  p50=0.177s p95=0.270s p99=0.329s
+E2E   p50=2.578s p95=3.542s p99=3.781s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed5.csv
+==> seed 6 / 6
+n=500 ok=499 err=1 wall=72.7s req/s=6.86 tok/s=439.3
+TTFT  p50=0.173s p95=0.263s p99=0.331s
+E2E   p50=2.697s p95=3.324s p99=3.404s
+wrote results/20260803-164940-loadaware-b0.5/driver-seed6.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-164940-loadaware-b0.5/run.json
+run valid: all seeds under the error threshold
+==> cell loadaware-b0.5 complete: results/20260803-164940-loadaware-b0.5
+==> cell loadaware-b1.0 (arm=loadaware alpha=1.0 beta=1.0) rate=7.5 → results/20260803-170418-loadaware-b1.0
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 17:04:20 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 19
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+==> 4 identical requests, seed 1785766281
+    stack-llm-deployment-vllm-7979f8dff-nks88: 0/4
+    stack-llm-deployment-vllm-7979f8dff-zd9fm: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 20/20 ok in 4.0s
+pass 2/2: 20/20 ok in 2.6s
+==> warm-up gate ok (20 cache-path routings)
+==> seed 1 / 6
+n=500 ok=500 err=0 wall=69.4s req/s=7.21 tok/s=461.3
+TTFT  p50=0.159s p95=0.288s p99=0.691s
+E2E   p50=2.197s p95=3.135s p99=3.800s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed1.csv
+==> seed 2 / 6
+n=500 ok=499 err=1 wall=71.3s req/s=7.00 tok/s=448.0
+TTFT  p50=0.168s p95=0.265s p99=0.337s
+E2E   p50=2.412s p95=4.105s p99=4.283s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed2.csv
+==> seed 3 / 6
+n=500 ok=499 err=1 wall=68.3s req/s=7.31 tok/s=467.7
+TTFT  p50=0.170s p95=0.287s p99=0.749s
+E2E   p50=2.546s p95=4.658s p99=5.315s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed3.csv
+==> seed 4 / 6
+n=500 ok=500 err=0 wall=75.3s req/s=6.64 tok/s=425.0
+TTFT  p50=0.173s p95=0.264s p99=0.313s
+E2E   p50=2.752s p95=3.279s p99=3.349s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed4.csv
+==> seed 5 / 6
+n=500 ok=500 err=0 wall=69.4s req/s=7.20 tok/s=460.9
+TTFT  p50=0.173s p95=0.268s p99=0.370s
+E2E   p50=2.930s p95=3.879s p99=3.962s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed5.csv
+==> seed 6 / 6
+n=500 ok=500 err=0 wall=72.6s req/s=6.89 tok/s=440.9
+TTFT  p50=0.176s p95=0.266s p99=0.305s
+E2E   p50=2.774s p95=3.444s p99=3.588s
+wrote results/20260803-170418-loadaware-b1.0/driver-seed6.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-170418-loadaware-b1.0/run.json
+run valid: all seeds under the error threshold
+==> cell loadaware-b1.0 complete: results/20260803-170418-loadaware-b1.0
+==> cell kvaware (arm=kvaware alpha=n/a beta=n/a) rate=7.5 → results/20260803-171846-kvaware
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 17:18:49 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 20
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+==> 4 identical requests, seed 1785767150
+    stack-llm-deployment-vllm-8f46dd97-94vnj: 0/4
+    stack-llm-deployment-vllm-8f46dd97-kb2st: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 20/20 ok in 4.4s
+pass 2/2: 20/20 ok in 0.9s
+==> warm-up gate ok (20 cache-path routings)
+==> seed 1 / 6
+n=500 ok=500 err=0 wall=69.3s req/s=7.21 tok/s=461.6
+TTFT  p50=0.154s p95=0.242s p99=0.273s
+E2E   p50=2.216s p95=3.119s p99=3.364s
+wrote results/20260803-171846-kvaware/driver-seed1.csv
+==> seed 2 / 6
+n=500 ok=500 err=0 wall=71.1s req/s=7.04 tok/s=450.4
+TTFT  p50=0.167s p95=0.261s p99=0.308s
+E2E   p50=2.466s p95=3.244s p99=3.707s
+wrote results/20260803-171846-kvaware/driver-seed2.csv
+==> seed 3 / 6
+n=500 ok=500 err=0 wall=68.1s req/s=7.35 tok/s=470.2
+TTFT  p50=0.170s p95=0.259s p99=0.303s
+E2E   p50=2.566s p95=3.223s p99=4.029s
+wrote results/20260803-171846-kvaware/driver-seed3.csv
+==> seed 4 / 6
+n=500 ok=500 err=0 wall=75.6s req/s=6.61 tok/s=423.3
+TTFT  p50=0.163s p95=0.275s p99=0.365s
+E2E   p50=2.427s p95=3.350s p99=4.345s
+wrote results/20260803-171846-kvaware/driver-seed4.csv
+==> seed 5 / 6
+n=500 ok=500 err=0 wall=70.2s req/s=7.12 tok/s=455.9
+TTFT  p50=0.177s p95=0.277s p99=0.317s
+E2E   p50=2.727s p95=3.577s p99=4.046s
+wrote results/20260803-171846-kvaware/driver-seed5.csv
+==> seed 6 / 6
+n=500 ok=499 err=1 wall=71.7s req/s=6.96 tok/s=445.3
+TTFT  p50=0.168s p95=0.255s p99=0.336s
+E2E   p50=2.508s p95=2.834s p99=3.732s
+wrote results/20260803-171846-kvaware/driver-seed6.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-171846-kvaware/run.json
+run valid: all seeds under the error threshold
+==> cell kvaware complete: results/20260803-171846-kvaware
+==> cell roundrobin (arm=roundrobin alpha=n/a beta=n/a) rate=7.5 → results/20260803-173314-roundrobin
+seed 1: b7842f4f5aff781d…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 98b783258ec82fdf…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: 80999d18a1de956a…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 2e42282d2e21f1cb…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: c5129025190fac39…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: 75db9196eda9a265…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 17:33:16 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 21
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+Warning: would violate PodSecurity "restricted:latest": runAsNonRoot != true (container "vllm" must not set securityContext.runAsNonRoot=false)
+deployment.apps/stack-llm-deployment-vllm restarted
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for 2 worker registrations since engine restart
+workers never re-registered (saw 0)

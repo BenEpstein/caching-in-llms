@@ -1,0 +1,153 @@
+index,prefix_id,send_ts,ttft_s,e2e_s,prompt_tokens,completion_tokens,status,error
+0,0,1785602638.018473,0.8496308748144656,1.5707116248086095,1578,64,ok,
+1,3,1785602638.2371252,0.6850224169902503,1.9275008749682456,1578,64,ok,
+2,1,1785602638.2923672,0.6301045829895884,1.8722337079234421,1578,64,ok,
+3,4,1785602639.133364,0.3744055409915745,2.345019333064556,1578,64,ok,
+4,3,1785602639.778723,0.9066777920816094,1.8526008750777692,1578,64,ok,
+5,0,1785602639.936938,1.2759582081343979,2.1684281250927597,1578,64,ok,
+6,16,1785602640.209884,2.156798457959667,3.493051208090037,1578,64,ok,
+7,0,1785602640.271345,1.3586529998574406,2.3600949998945,1578,64,ok,
+8,9,1785602640.3343549,2.2952117500826716,3.33803250011988,1578,64,ok,
+9,0,1785602640.419531,2.4649603329598904,3.5097818330395967,1578,64,ok,
+10,1,1785602640.715399,1.9155075829476118,2.9875760830473155,1578,64,ok,
+11,3,1785602640.776163,2.10807158309035,3.1530685001052916,1578,64,ok,
+12,0,1785602641.663382,1.7450820000376552,2.7861346669960767,1578,64,ok,
+13,8,1785602641.683163,1.4670162089169025,2.766406042035669,1578,64,ok,
+14,16,1785602641.73691,2.9810576250310987,4.271572124911472,1578,64,ok,
+15,9,1785602641.7607338,3.2077144999057055,4.254321041982621,1578,64,ok,
+16,0,1785602642.129317,3.104185750009492,4.153432583203539,1578,64,ok,
+17,3,1785602642.243618,2.2084633328486234,3.24551137490198,1578,64,ok,
+18,3,1785602642.4044642,2.3122552919667214,3.344764541834593,1578,64,ok,
+19,3,1785602642.5031948,2.466050166869536,3.5118944589048624,1578,64,ok,
+20,5,1785602642.758052,2.47481133393012,3.524498000042513,1578,64,ok,
+21,0,1785602642.8884008,2.606464499840513,3.6486506250221282,1578,64,ok,
+22,3,1785602642.9499881,3.957571290899068,4.995579957962036,1578,64,ok,
+23,0,1785602643.092403,4.127788374898955,4.857440249994397,1578,64,ok,
+24,0,1785602643.184245,3.0960893749725074,4.238224542001262,1578,64,ok,
+25,0,1785602643.2140229,3.3284442501608282,4.5347554590553045,1578,64,ok,
+26,6,1785602643.648745,3.268770416965708,4.299416667083278,1578,64,ok,
+27,4,1785602643.9341629,3.2885280419141054,4.548465917119756,1578,64,ok,
+28,7,1785602644.20852,3.212296040961519,4.27422829112038,1578,64,ok,
+29,11,1785602644.74547,3.004102041013539,4.046230208128691,1578,64,ok,
+30,8,1785602644.872153,3.076421167002991,4.127282833913341,1578,64,ok,
+31,9,1785602644.992686,2.9566736661363393,4.330315708182752,1578,64,ok,
+32,0,1785602645.1303759,2.8206492089666426,4.408966584131122,1578,64,ok,
+33,0,1785602645.2626119,3.528353709029034,4.578377166995779,1578,64,ok,
+34,8,1785602645.5403361,4.52710754214786,5.347942667081952,1578,64,ok,
+35,0,1785602645.542516,3.7800614167936146,4.8267553329933435,1578,64,ok,
+36,12,1785602645.703167,3.8342388330493122,4.666056041140109,1578,64,ok,
+37,2,1785602645.895989,3.9441352081485093,4.992124042008072,1578,64,ok,
+38,0,1785602646.003823,4.063115332974121,5.116199875017628,1578,64,ok,
+39,0,1785602646.009424,4.358083709143102,5.4057950840797275,1578,64,ok,
+40,12,1785602646.3157198,4.286309333983809,5.322415792150423,1578,64,ok,
+41,4,1785602646.31809,4.582943709101528,5.321722584078088,1578,64,ok,
+42,1,1785602646.526987,4.592294791946188,5.414308666950092,1578,64,ok,
+43,6,1785602646.56896,4.844841832993552,5.614537665853277,1578,64,ok,
+44,0,1785602646.580603,5.055672042071819,5.895071791950613,1578,64,ok,
+45,2,1785602646.634411,5.005888999905437,6.1334179998375475,1578,64,ok,
+46,2,1785602646.65247,4.9936594581231475,6.415484874974936,1578,64,ok,
+47,3,1785602646.700435,5.0022970421705395,6.669405749998987,1578,64,ok,
+48,1,1785602646.9900749,,4.649706584168598,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+49,4,1785602647.317823,,4.316996250068769,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+50,5,1785602647.430635,,4.2042474169284105,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+51,9,1785602647.697398,,3.938082583947107,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+52,1,1785602647.859794,,3.7751134170684963,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+53,11,1785602648.0329862,,3.6018662920687348,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+54,8,1785602648.555667,,3.0823757080361247,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+55,1,1785602648.650021,,2.988128582946956,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+56,13,1785602649.161668,,2.473953291075304,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+57,1,1785602649.4561439,,2.1792669577989727,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+58,9,1785602649.74479,,1.8908498750533909,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+59,0,1785602649.749652,,1.8858383749611676,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+60,11,1785602649.770724,,1.8672747910022736,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+61,9,1785602649.77951,,1.855932875070721,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+62,0,1785602649.886693,,1.7512277499772608,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+63,0,1785602650.61814,,1.01987245795317,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+64,2,1785602651.140378,,0.49758066702634096,,,error,"HTTPStatusError: Server error '502 Bad Gateway' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/"
+65,3,1785602651.597632,,3.053726457990706,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+66,16,1785602651.632112,,3.062285207910463,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+67,3,1785602651.938793,,0.038348708068951964,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+68,0,1785602652.311082,,0.04027183284051716,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+69,3,1785602652.726062,,0.032503374852240086,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+70,2,1785602653.120094,,0.039571958128362894,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+71,1,1785602653.1583989,,0.039321333868429065,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+72,6,1785602653.209049,,0.03856183378957212,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+73,12,1785602653.602487,,0.03828104096464813,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+74,0,1785602653.9385622,,0.1270488330628723,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+75,8,1785602654.4973152,,0.08759391587227583,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+76,18,1785602654.646114,,0.04019725020043552,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+77,10,1785602655.198473,,0.04368508397601545,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+78,10,1785602655.236328,,0.03890416701324284,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+79,7,1785602656.0247738,,0.12370391702279449,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+80,0,1785602656.56479,,0.13969854195602238,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+81,0,1785602656.669442,,0.06385179096832871,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+82,2,1785602656.688134,,0.07861483306623995,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+83,7,1785602656.8876631,,0.04283524979837239,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+84,3,1785602657.180979,,0.03886995906941593,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+85,0,1785602657.290258,,0.03372541698627174,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+86,1,1785602657.305352,,0.037644959054887295,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+87,1,1785602657.388182,,0.039687708020210266,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+88,12,1785602657.824343,,0.03886337508447468,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+89,2,1785602657.850734,,0.03955091699026525,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+90,8,1785602658.544238,,0.04369041579775512,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+91,6,1785602658.616671,,0.036898125195875764,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+92,9,1785602658.675733,,0.10379716707393527,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+93,4,1785602658.706582,,0.07499366602860391,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+94,7,1785602659.699318,,0.12276654108427465,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+95,1,1785602660.278804,,0.07198700006119907,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+96,19,1785602660.383014,,0.03374387486837804,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+97,0,1785602660.4115698,,0.03682891698554158,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+98,13,1785602660.675377,,0.03884133300743997,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"
+99,1,1785602661.2220821,,0.18196620792150497,,,error,"HTTPStatusError: Server error '503 Service Unavailable' for url 'https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions'
+For more information check: https://developer.mozilla.org/en-US/d"

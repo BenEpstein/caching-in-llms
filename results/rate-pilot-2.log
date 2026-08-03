@@ -1,0 +1,69 @@
+==> deploying kvaware for the pilot
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 20:51:18 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 26
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+deployment "stack-deployment-router" successfully rolled out
+==> draining engines to 0 (no live engine may register with the new router)
+deployment.apps/stack-llm-deployment-vllm scaled
+==> restarting the router into an empty cluster (kv_pool starts clean)
+deployment.apps/stack-deployment-router restarted
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> bringing engines back to 2
+deployment.apps/stack-llm-deployment-vllm scaled
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for exactly 2 worker registrations
+==> cold start clean: 2 registrations, all live
+==> 4 identical requests, seed 1785779905
+    stack-llm-deployment-vllm-58c7ddcdd5-2q9s9: 0/4
+    stack-llm-deployment-vllm-58c7ddcdd5-8k24p: 4/4
+==> registry LIVE — all 4 pinned to one instance
+==> pilot workload: pool=128 zipf_s=0.9 prefix_tokens=2048
+wrote 200 requests to results/rate-pilot/pilot-seed999.jsonl; top-1 prefix share = 14.5%, top-3 share = 29.5%
+==> warm-up over the frozen prefix pool
+pass 1/1: 128/128 ok in 27.3s
+
+==> pilot at rate=2 req/s
+n=200 ok=200 err=0 wall=101.1s req/s=1.98 tok/s=126.6
+TTFT  p50=0.124s p95=0.309s p99=4.135s
+E2E   p50=1.762s p95=3.778s p99=7.867s
+wrote results/rate-pilot/pilot-rate2.csv
+
+==> pilot at rate=4 req/s
+n=200 ok=200 err=0 wall=52.3s req/s=3.82 tok/s=244.6
+TTFT  p50=0.135s p95=0.212s p99=0.256s
+E2E   p50=1.987s p95=3.311s p99=3.461s
+wrote results/rate-pilot/pilot-rate4.csv
+
+==> pilot at rate=6 req/s
+n=200 ok=200 err=0 wall=35.1s req/s=5.70 tok/s=364.7
+TTFT  p50=0.150s p95=0.259s p99=0.348s
+E2E   p50=2.409s p95=3.429s p99=3.581s
+wrote results/rate-pilot/pilot-rate6.csv
+
+==> pilot at rate=8 req/s
+n=200 ok=200 err=0 wall=27.1s req/s=7.37 tok/s=471.9
+TTFT  p50=0.172s p95=0.251s p99=0.323s
+E2E   p50=2.713s p95=3.424s p99=3.611s
+wrote results/rate-pilot/pilot-rate8.csv
+
+==> pilot at rate=10 req/s
+n=200 ok=200 err=0 wall=22.2s req/s=9.02 tok/s=577.0
+TTFT  p50=0.164s p95=0.249s p99=0.289s
+E2E   p50=2.565s p95=3.367s p99=3.444s
+wrote results/rate-pilot/pilot-rate10.csv
+
+Pick the rate where TTFT p95 elbows; freeze ~75% of it for run_sweep.sh.

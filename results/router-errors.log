@@ -1,0 +1,67 @@
+21:34:31 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:53896 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:34:31 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:34:31 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:36:33 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:33704 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:36:33 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:36:33 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:37:34 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:33884 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:37:34 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:37:34 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:38:35 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:48598 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:38:35 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:38:35 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:38:35 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:46034 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:38:35 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:38:35 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:39:36 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:46034 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:39:36 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:39:36 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:39:36 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:37426 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:39:36 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:39:36 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:40:37 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:57136 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:40:37 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:40:37 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+21:41:38 stack-deployment-router-b56756b5-65mxf INFO:     10.131.0.2:60102 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+21:41:38 stack-deployment-router-b56756b5-65mxf ERROR:    Exception in ASGI application
+21:41:38 stack-deployment-router-b56756b5-65mxf aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:03:51 stack-deployment-router-5b8458df9b-w48zb INFO:     10.131.0.2:49098 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:03:51 stack-deployment-router-5b8458df9b-w48zb ERROR:    Exception in ASGI application
+22:03:51 stack-deployment-router-5b8458df9b-w48zb aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:04:52 stack-deployment-router-5b8458df9b-w48zb INFO:     10.131.0.2:49098 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:04:52 stack-deployment-router-5b8458df9b-w48zb ERROR:    Exception in ASGI application
+22:04:52 stack-deployment-router-5b8458df9b-w48zb aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:13:55 stack-deployment-router-68d97d5458-njt4z INFO:     10.131.0.2:52552 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:13:55 stack-deployment-router-68d97d5458-njt4z ERROR:    Exception in ASGI application
+22:13:55 stack-deployment-router-68d97d5458-njt4z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:14:56 stack-deployment-router-68d97d5458-njt4z INFO:     10.131.0.2:52552 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:14:56 stack-deployment-router-68d97d5458-njt4z ERROR:    Exception in ASGI application
+22:14:56 stack-deployment-router-68d97d5458-njt4z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:45724 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:45784 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:46030 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:46148 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:25:00 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:26:01 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:34674 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:26:01 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:26:01 stack-deployment-router-7767d45fbc-5nq5z ConnectionResetError: [Errno 104] Connection reset by peer
+22:26:01 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ClientOSError: [Errno 104] Connection reset by peer
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:53886 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z INFO:     10.131.0.2:54012 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z ERROR:    Exception in ASGI application
+22:27:02 stack-deployment-router-7767d45fbc-5nq5z aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw INFO:     10.131.0.2:42028 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw ERROR:    Exception in ASGI application
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw INFO:     10.131.0.2:42088 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw ERROR:    Exception in ASGI application
+22:39:07 stack-deployment-router-5478dcbff5-c6qlw aiohttp.client_exceptions.ServerDisconnectedError: Server disconnected
