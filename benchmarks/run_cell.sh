@@ -146,18 +146,25 @@ oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
 # This router build exposes no registered-workers gauge; the router logs
 # "Registered instance-worker" per registration (same signal
 # revert-router-patch.sh relies on).
-echo "==> waiting for 2 worker registrations since engine restart"
-registered=0
-for _ in $(seq 60); do
-  # window starts AT the restart, never before it: a pre-restart registration
-  # line must not satisfy the gate
-  since=$(( $(date +%s) - ENGINE_RESTART_TS )); [ "$since" -lt 1 ] && since=1
-  registered=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
-    | grep -c "Registered instance-worker" || true)
-  [ "$registered" -ge 2 ] && break
-  sleep 5
-done
-[ "$registered" -ge 2 ] || { echo "workers never re-registered (saw $registered)" >&2; exit 1; }
+#
+# Lookup arms only: a `--routing-logic roundrobin` router never instantiates the
+# LMCache controller (verified 2026-08-03 - zero controller lines in its log), so
+# no worker ever registers and this gate can only time out. Same USES_LOOKUP
+# reason that skips the registry probe and the warm-up gate below.
+if [ "$USES_LOOKUP" = 1 ]; then
+  echo "==> waiting for 2 worker registrations since engine restart"
+  registered=0
+  for _ in $(seq 60); do
+    # window starts AT the restart, never before it: a pre-restart registration
+    # line must not satisfy the gate
+    since=$(( $(date +%s) - ENGINE_RESTART_TS )); [ "$since" -lt 1 ] && since=1
+    registered=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
+      | grep -c "Registered instance-worker" || true)
+    [ "$registered" -ge 2 ] && break
+    sleep 5
+  done
+  [ "$registered" -ge 2 ] || { echo "workers never re-registered (saw $registered)" >&2; exit 1; }
+fi
 
 # ---- 5. registry probe (#13) - only meaningful on lookup-routing arms -------
 if [ "$USES_LOOKUP" = 1 ]; then

@@ -8,6 +8,42 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Ticket #7: full 6-cell evaluation sweep executed on gapu-2
+
+### Added
+- `benchmarks/plot_results.py` + `docs/figures/`: the three §5 figures, built from the same
+  `analyze.py` per-seed stats as the tables so a figure cannot disagree with its table.
+  Centerpiece `fig1` (TTFT p95 vs β) shows β=0.1 is the minimum and β≥0.5 converges onto the
+  baselines.
+- Full sweep at 7.5 req/s, 6 cells × 6 seeds × 500 req, all validated (errors ≤ 0.6%, every
+  registry probe 4/4, every warm-up gate ≥ 20 cache-path routings):
+  `results/20260803-{161908-loadaware-b0,163350-loadaware-b0.1,164940-loadaware-b0.5,170418-loadaware-b1.0,171846-kvaware,174639-roundrobin}`.
+
+### Fixed
+- `run_cell.sh` step 4 (worker-registration gate) is now gated on `USES_LOOKUP`, like the
+  registry probe and warm-up gate already were. A `--routing-logic roundrobin` router never
+  instantiates the LMCache controller (verified: zero controller lines in its log), so no
+  worker ever registers and the gate could only time out - it killed the roundrobin cell on
+  the first sweep attempt. Lookup arms are unaffected, so the five completed cells stand.
+
+### Decided
+- **Cache hit rate cannot be the §5 headline metric at this workload.** `lmcache:lookup_hit_rate`
+  is scraped from the *engines* (`job=vllm-engines`), so it measures each engine's hit rate
+  against its own local cache, not whether the router picked the instance holding the KV. With
+  a 20-prefix pool it saturates at ~0.95 on **every** arm including roundrobin (`fig3`). TTFT
+  is the discriminating metric; `fig3` is kept to document the null, not to claim a win.
+- **The pre-registered headline does not reach significance at n=6, and the seed count is the
+  binding constraint, not the effect.** loadaware β=0.1 vs kvaware: 5/6 seeds improve, median
+  −17.0% TTFT p95, exact one-sided Wilcoxon p=0.219. Seed 2 reverses (0.418 s vs a 0.20 s cell
+  median; its TTFT *mean* is also elevated, so it is a whole-seed excursion, not one bad
+  request). At n=6 a single reversal caps exact Wilcoxon at p=0.219 regardless of effect size -
+  only 6/6 in one direction clears p<0.05. Seed 2 passes every validity rule and is **not**
+  dropped (rule 2 forbids post-hoc exceptions). Raising the seed count is a change to the
+  frozen methodology (#3) and is pending Ben's decision on #7.
+- **Cell position is not a confound.** The two independent kvaware cells - the #21 dry cell and
+  the in-sweep cell 5, ~1.5 h apart - agree closely (median TTFT p95 0.272 s vs 0.259 s), so the
+  ~3 h drift I flagged before the run does not drive the headline.
+
 ## 2026-08-03 - Ticket #21 root-caused: both router-stability issues explained
 
 ### Fixed
