@@ -212,6 +212,57 @@ def fig_percentiles(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+def fig_imbalance(cells: List[Dict], out: str) -> None:
+    """Per-engine in-flight requests: the mechanism, measured directly.
+
+    This is what the policy actually changes. `vllm:num_requests_running` is
+    scraped per engine, so the gap between the busiest and idlest engine over
+    the window is a direct read of how evenly each router spreads load - no
+    latency modelling in between.
+    """
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
+    labels, lows, highs = [], [], []
+    for c in ordered:
+        path = os.path.join(c["dir"], "prom", "vllm_num_requests_running.json")
+        if not os.path.exists(path):
+            continue
+        # one series per engine per scrape target; key by pod so duplicate
+        # targets for the same engine collapse instead of counting twice
+        per_pod: Dict[str, List[float]] = {}
+        for s in json.load(open(path))["data"]["result"]:
+            pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
+            per_pod.setdefault(pod, []).extend(
+                float(v[1]) for v in s["values"] if v[1] not in ("NaN", "+Inf", "-Inf"))
+        means = sorted(sum(v) / len(v) for v in per_pod.values() if v)
+        if len(means) < 2:
+            continue
+        labels.append(c["cell"])
+        lows.append(means[0])
+        highs.append(means[-1])
+
+    if not labels:
+        return
+    y = range(len(labels))
+    ax.barh([i - 0.2 for i in y], highs, height=0.38, color="tab:red", alpha=0.8,
+            label="busiest engine")
+    ax.barh([i + 0.2 for i in y], lows, height=0.38, color="tab:blue", alpha=0.8,
+            label="idlest engine")
+    for i, (lo, hi) in enumerate(zip(lows, highs)):
+        ax.annotate(f"{hi / lo:.1f}x" if lo else "n/a", (max(hi, lo), i),
+                    textcoords="offset points", xytext=(6, 0), fontsize=8, va="center")
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean in-flight requests over the measured window")
+    ax.set_title("Load balance across the two engines - what the policy actually changes")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3, axis="x")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
@@ -230,6 +281,7 @@ def main() -> None:
     fig_hit_rate(cells, os.path.join(args.out, "fig3-hit-rate.png"))
     fig_paired(cells, os.path.join(args.out, "fig4-paired-seeds.png"))
     fig_percentiles(cells, os.path.join(args.out, "fig5-percentiles.png"))
+    fig_imbalance(cells, os.path.join(args.out, "fig6-load-balance.png"))
     print(f"wrote figures to {args.out}")
 
 
