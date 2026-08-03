@@ -21,18 +21,18 @@ def test_sampling_differs_across_replay_seeds():
 
 
 def test_frozen_config_matches_methodology():
-    """Pins the amended methodology (#3, 2026-08-03).
+    """Pins the amended methodology (#3, 2026-08-03, post-scarcity-gate).
 
-    64 prefixes, not 20: at s=1.2 the Zipf hot set (90% of traffic) is 31
-    prefixes = 63k tokens, which must EXCEED what one engine retains under
-    gpuMemoryUtilization 0.45 (~99k pool - ~56k peak in-flight = ~43k = 21
-    prefixes). With 20 prefixes every engine held everything and there was no
-    placement decision to get right.
+    128 prefixes at s=0.9. The pilot (20, s=1.2) and the first amendment
+    (64, s=1.2) both left the working set resident on every engine - the gate
+    measured 0.889 hit rate under load against the pilot's ~0.95. Pool size
+    alone does not fix it; at s=1.2 the top ~20 prefixes stay cached however
+    long the tail is. Flattening the exponent is what creates the scarcity.
     """
     cfg = frozen_config(seed=1)
     assert cfg.num_requests == 500
-    assert cfg.prefix_pool_size == 64
-    assert cfg.zipf_s == 1.2
+    assert cfg.prefix_pool_size == 128
+    assert cfg.zipf_s == 0.9
     assert cfg.prefix_tokens == 2048
     assert cfg.suffix_tokens == 32
 

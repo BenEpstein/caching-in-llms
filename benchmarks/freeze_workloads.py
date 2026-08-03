@@ -1,7 +1,7 @@
 """Materialize + verify the frozen benchmark workloads (methodology, issue #3).
 
-The methodology fixes ONE dataset: a 64-prefix x 2048-token Zipfian pool
-(s=1.2, pool_seed=42), replayed as up to 10 seeds x 500 requests (cells replay
+The methodology fixes ONE dataset: a 128-prefix x 2048-token Zipfian pool
+(s=0.9, pool_seed=42), replayed as up to 10 seeds x 500 requests (cells replay
 a prefix of that seed list - see run_sweep.sh). The JSONL files are
 ~6 MB each, so they are NOT committed; what is committed is `workloads/manifest.json`
 holding the exact config + a SHA-256 per seed file. Generation is deterministic,
@@ -24,21 +24,34 @@ import sys
 
 from workload_gen import WorkloadConfig, dump_jsonl
 
-# Amended methodology (#3, 2026-08-03): 64 prefixes so the Zipf hot set (31
-# prefixes at s=1.2) exceeds what an engine can retain under
-# gpuMemoryUtilization 0.45. 10 seeds because the headline pair needs n=10 to
-# survive one reversal; the beta-sweep cells replay a 3-seed subset of the SAME
-# files, so there is still exactly one frozen dataset.
+# Amended methodology (#3, 2026-08-03, revised after the scarcity gate).
+#
+# The first amendment (64 prefixes, s=1.2) was FALSIFIED by the gate: measured
+# prefix-cache hit rate under load was 0.889 against the pilot's ~0.95. Pool
+# size alone cannot fix that - at s=1.2 the distribution is so concentrated that
+# the top ~20 prefixes stay resident however long the tail is (simulated 0.69
+# even at 256 prefixes). The binding parameter is the EXPONENT.
+#
+# 128 prefixes at s=0.9 predicts ~0.60 under normal load and ~0.52 under
+# kvaware's concentration: enough reuse that routing to the holder is worth
+# something, little enough that placement is a real decision. It also puts the
+# LMCache CPU tier (114k tok = 56 prefixes) and HBM (~50 prefixes) at comparable
+# capacity, so the registry tracks HBM reality instead of drifting from it.
+#
+# 10 seeds because the headline pair needs n=10 to survive one reversal; the
+# beta-sweep cells replay a 3-seed subset of the SAME files, so there is still
+# exactly one frozen dataset.
 SEEDS = list(range(1, 11))
 NUM_REQUESTS = 500
-PREFIX_POOL_SIZE = 64
+PREFIX_POOL_SIZE = 128
+ZIPF_S = 0.9
 
 
 def frozen_config(seed: int) -> WorkloadConfig:
     return WorkloadConfig(
         num_requests=NUM_REQUESTS,
         prefix_pool_size=PREFIX_POOL_SIZE,
-        zipf_s=1.2,
+        zipf_s=ZIPF_S,
         prefix_tokens=2048,
         suffix_tokens=32,
         pool_seed=42,
