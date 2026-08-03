@@ -64,34 +64,58 @@ for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.
 done
 [ "$POOL_OK" = 1 ] || { echo "could not read the KV pool from any engine log" >&2; exit 1; }
 
-# ---- two warm-up passes; pass 2 is the measurement -------------------------
-echo "==> warm-up pass 1 (populate)"
+# ---- warm up, then measure a load burst ------------------------------------
+# NOT the `Prefix cache hit rate` field on vLLM's periodic log line: that is
+# CUMULATIVE SINCE ENGINE START, so a time-windowed grep of it silently reports
+# whatever the running average happened to be (it read 0.085 mid-warm-up on
+# 2026-08-03 while the true windowed rate was 0.889). Use the counters and take
+# a delta.
+#
+# Measure under LOAD, not under warm-up: at warm-up concurrency the in-flight KV
+# is negligible, so almost the whole pool is free for retention and the hit rate
+# flatters the config. The experiment runs loaded; the gate must too.
+snapshot() {
+  for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
+    oc exec -n "$NS" "$pod" -- curl -s localhost:8000/metrics 2>/dev/null \
+      | grep -E "^vllm:prefix_cache_(queries|hits)_total" \
+      | awk -v P="$pod" '{split($0,a," "); print P, $1, a[2]}'
+  done
+}
+
+echo "==> warm-up"
 python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure --passes 1
 
-PASS2_START=$(date +%s)
-echo "==> warm-up pass 2 (the gate: every prefix was seen in pass 1)"
-python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure --passes 1
+snapshot > /tmp/scarcity_before.txt
+echo "==> load burst (seed 1 at ${PROBE_RATE:-7.5} req/s)"
+python3 "$BENCH_DIR/load_driver.py" \
+  --base-url "$BASE_URL" --model "$MODEL" --insecure \
+  --workload "$BENCH_DIR/workloads/seed-1.jsonl" \
+  --rate "${PROBE_RATE:-7.5}" --seed 1 --out /tmp/scarcity_probe.csv
+snapshot > /tmp/scarcity_after.txt
 
-# vLLM logs "Prefix cache hit rate: N%" on its periodic stats line. Read only
-# lines emitted during pass 2 - pass 1 necessarily misses and would drag it down
-# for the wrong reason.
-since=$(( $(date +%s) - PASS2_START )); [ "$since" -lt 1 ] && since=1
-rates=$(for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
-  oc logs -n "$NS" "$pod" --since="${since}s" 2>/dev/null \
-    | grep -o "Prefix cache hit rate: [0-9.]*%" | grep -o "[0-9.]*" || true
-done)
-
-[ -n "$rates" ] || { echo "no prefix-cache-hit-rate lines in the pass-2 window" >&2; exit 1; }
-echo "$rates" | python3 -c "
+python3 - "$THRESHOLD" "$PILOT_SATURATION" <<'PY'
 import sys
-xs=[float(l)/100 for l in sys.stdin if l.strip()]
-mean=sum(xs)/len(xs)
-print(f'==> pass-2 vLLM prefix cache hit rate: mean {mean:.3f} over {len(xs)} samples '
-      f'(min {min(xs):.3f}, max {max(xs):.3f})')
-print(f'    pilot saturation was ~$PILOT_SATURATION; gate threshold $THRESHOLD')
-if mean < $THRESHOLD:
-    print('==> PASS: engines are evicting - there is a placement decision to get right')
+thr, sat = float(sys.argv[1]), float(sys.argv[2])
+def load(f):
+    d = {}
+    for line in open(f):
+        pod, name, val = line.split()
+        d[(pod, "hits" if "hits" in name else "queries")] = float(val)
+    return d
+b, a = load("/tmp/scarcity_before.txt"), load("/tmp/scarcity_after.txt")
+tq = th = 0.0
+for pod in sorted({k[0] for k in b}):
+    dq = a[(pod, "queries")] - b[(pod, "queries")]
+    dh = a[(pod, "hits")] - b[(pod, "hits")]
+    tq += dq; th += dh
+    print(f"    {pod[-12:]}: queries +{dq:,.0f} hits +{dh:,.0f} "
+          f"rate {dh/dq:.3f}" if dq else f"    {pod[-12:]}: no traffic")
+rate = th / tq
+print(f"==> windowed prefix cache hit rate under load: {rate:.3f} "
+      f"(pilot saturation ~{sat}, gate threshold {thr})")
+if rate < thr:
+    print("==> PASS: engines are evicting - there is a placement decision to get right")
 else:
-    print('==> FAIL: still saturated - scarcity did not take, do NOT run the sweep')
+    print("==> FAIL: scarcity did not take. Do NOT run the sweep; re-derive the sizing.")
     sys.exit(1)
-"
+PY
