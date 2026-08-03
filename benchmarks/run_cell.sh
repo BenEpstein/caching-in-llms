@@ -175,8 +175,13 @@ if [ "$USES_LOOKUP" = 1 ]; then
 fi
 
 # ---- 7. collectors ----------------------------------------------------------
-oc port-forward -n "$NS" svc/stack-prometheus "$PROM_PORT:9090" >/dev/null 2>&1 &
-PIDS+=($!)
+# NOTE: no Prometheus port-forward here. prom_dump uses query_range over a past
+# window, so it only needs Prometheus reachable at DUMP time - holding a
+# forward open across the whole cell just gives it ~10 min to die. It did
+# (2026-08-03: `Connection refused` after the b0 seeds, which under `set -e`
+# killed the cell AND the remaining three cells of the sweep). Established in
+# step 9 instead, with retries. DCGM genuinely needs a live forward because it
+# polls continuously.
 # DCGM is a DaemonSet: forward each pod on its own port, or one node's GPU is lost
 DCGM_URLS=()
 port="$DCGM_PORT"
@@ -206,9 +211,26 @@ done
 CELL_END=$(date +%s)
 
 # ---- 9. Prometheus dump over the measurement window -------------------------
-python3 "$BENCH_DIR/collectors/prom_dump.py" \
-  --prom-url "http://localhost:$PROM_PORT" \
-  --start "$CELL_START" --end "$CELL_END" --out "$OUT/prom"
+# Forward now, not at cell start: a short-lived forward is a reliable one. Retry
+# because a single refused connection here would otherwise discard a cell whose
+# measurements are already complete and on disk.
+prom_dumped=0
+for attempt in 1 2 3; do
+  oc port-forward -n "$NS" svc/stack-prometheus "$PROM_PORT:9090" >/dev/null 2>&1 &
+  pf_pid=$!
+  PIDS+=("$pf_pid")
+  sleep 5
+  if python3 "$BENCH_DIR/collectors/prom_dump.py" \
+      --prom-url "http://localhost:$PROM_PORT" \
+      --start "$CELL_START" --end "$CELL_END" --out "$OUT/prom"; then
+    prom_dumped=1
+    break
+  fi
+  echo "==> prometheus dump attempt $attempt failed; retrying" >&2
+  kill "$pf_pid" 2>/dev/null || true
+  PROM_PORT=$((PROM_PORT + 1))   # a wedged local port would fail identically
+done
+[ "$prom_dumped" = 1 ] || echo "WARNING: no Prometheus dump for $OUT - driver CSVs are still valid, but the imbalance co-primary cannot be computed for this cell" >&2
 
 # ---- 10. run manifest -------------------------------------------------------
 # per-seed windows are derivable from each driver CSV's send_ts column
