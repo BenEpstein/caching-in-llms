@@ -81,8 +81,12 @@ def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
 
     ax.set_xlabel(r"$\beta$  (load weight; $\alpha$ fixed at 1.0)")
     ax.set_ylabel("TTFT p95 (s)")
+    # seed counts differ by cell (headline pair 10, sweep cells 3) - state the
+    # range rather than a number that is wrong for half the points
+    ns = sorted({len(c["seeds"]) for c in cells})
+    nlab = f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
     ax.set_title(f"TTFT p95 vs load weight - {cells[0]['rate']} req/s, "
-                 "6 seeds x 500 requests per cell")
+                 f"{nlab} seeds x 500 requests per cell")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -155,6 +159,55 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
     ax.set_ylim(0, 1.05)
     ax.tick_params(axis="x", rotation=20)
     ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
+def counter_delta(run_dir: str, metric: str) -> float:
+    """Total increase of a Prometheus counter over the window, summed over series."""
+    path = os.path.join(run_dir, "prom", metric.replace(":", "_") + ".json")
+    if not os.path.exists(path):
+        return float("nan")
+    total = 0.0
+    for s in json.load(open(path))["data"]["result"]:
+        vals = [float(v[1]) for v in s["values"] if v[1] not in ("NaN", "+Inf", "-Inf")]
+        if len(vals) >= 2:
+            total += max(vals) - min(vals)
+    return total
+
+
+def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
+    """The causal figure: what beta actually buys and what it costs.
+
+    Left axis = vLLM prefix-cache hit rate (the thing diverting destroys),
+    right axis = TTFT p95 (the consequence). This is the mechanism behind the
+    beta blow-up, not an inference from latency alone.
+    """
+    la = sorted([c for c in cells if c["arm"] == "loadaware"], key=lambda c: c["beta"])
+    la = [c for c in la
+          if not (counter_delta(c["dir"], "vllm:prefix_cache_queries_total") !=
+                  counter_delta(c["dir"], "vllm:prefix_cache_queries_total"))]  # drop NaN
+    if len(la) < 2:
+        return
+    betas = [c["beta"] for c in la]
+    hit = [counter_delta(c["dir"], "vllm:prefix_cache_hits_total")
+           / counter_delta(c["dir"], "vllm:prefix_cache_queries_total") for c in la]
+    p95 = [median(ttft_p95s(c)) for c in la]
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    ax.plot(betas, hit, "o-", color="tab:green", lw=2, label="prefix cache hit rate")
+    ax.set_xlabel(r"$\beta$  (load weight; $\alpha$ fixed at 1.0)")
+    ax.set_ylabel("vLLM prefix cache hit rate", color="tab:green")
+    ax.tick_params(axis="y", labelcolor="tab:green")
+    ax.set_ylim(0.6, 1.0)
+    ax2 = ax.twinx()
+    ax2.plot(betas, p95, "s--", color="tab:red", lw=2, label="TTFT p95")
+    ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
+    ax2.tick_params(axis="y", labelcolor="tab:red")
+    ax.set_title(r"Raising $\beta$ diverts requests off their cached instance:"
+                 "\nhit rate falls, latency follows")
+    ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -282,6 +335,7 @@ def main() -> None:
     fig_paired(cells, os.path.join(args.out, "fig4-paired-seeds.png"))
     fig_percentiles(cells, os.path.join(args.out, "fig5-percentiles.png"))
     fig_imbalance(cells, os.path.join(args.out, "fig6-load-balance.png"))
+    fig_beta_tradeoff(cells, os.path.join(args.out, "fig7-beta-tradeoff.png"))
     print(f"wrote figures to {args.out}")
 
 
