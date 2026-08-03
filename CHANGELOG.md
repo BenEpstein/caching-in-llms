@@ -8,6 +8,69 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Ticket #21 root-caused: both router-stability issues explained
+
+### Fixed
+- `load_driver.py` now reads the response body on a failed request before raising. Streamed
+  responses arrive body-unread, so `raise_for_status()` was discarding the server's error
+  detail - all six demo CSVs recorded a bare "500 Internal Server Error" with no cause. The
+  error column is widened 200 -> 500 chars to fit a traceback summary.
+
+### Decided
+- **Issue 1 (SIGKILL at 4 req/s) is a liveness starvation caused by a blocking HF call on the
+  event loop, and it is baseline-inherent - it caps the pilot rate, it does not invalidate the
+  comparison.** Evidence, all on the live `:c68ccfc` deploy: the router pod cannot write an HF
+  cache (runs as uid 1001020000, `HF_HOME` unset, no writable `/.cache`), so
+  `AutoTokenizer.from_pretrained` fails on **every** request - the exception path never sets
+  `self.tokenizer`, so it is retried per request, and the failing call costs **245 ms median**
+  because it reaches huggingface.co over the network before failing. Measured in-router
+  blocking is **0.248 s/request mean** (n=644, p95 0.282 s), giving a single-event-loop ceiling
+  of **4.04 req/s** - the router was killed at exactly 4 req/s. The kill is the liveness probe,
+  not memory: `reason: "Error"` (not `OOMKilled`) with `timeoutSeconds: 1`, period 5s,
+  threshold 3. `KvawareRouter.route_request` contains the identical try/except, so the stock
+  baseline arm pays the same cost.
+- **Issue 2 (background 500s) is not ours: 16/16 tracebacks are
+  `aiohttp.client_exceptions.ServerDisconnectedError`** raised in upstream
+  `request.py:164` while opening the upstream connection, i.e. after the routing decision had
+  already succeeded. The router's aiohttp pool holds idle engine connections **15.0 s**
+  (`TCPConnector(limit=0)`, aiohttp default) while the engine closes them at **5 s**
+  (vLLM `VLLM_HTTP_TIMEOUT_KEEP_ALIVE=5`, not overridden). Arm-independent: the code path is
+  shared by every routing logic.
+- **That timeout mismatch alone is NOT sufficient, and the leading hypothesis now links the two
+  issues.** A controlled sequential probe (90 requests, idle gaps 1.0/2.0/2.5/3.0/4.0/5.0 s,
+  n=15 each) returned **90/90 HTTP 200** - with one connection in play aiohttp processes the
+  engine's FIN and discards the dead connection cleanly. The demo 500s occurred only under
+  concurrency, and the suspected mechanism is that the 0.25 s/request event-loop block above
+  *delays the router's processing of the engine's FIN*, so closed connections linger in the
+  pool as reusable and get handed out. **That experiment has now run and both issues cleared
+  on the single fix** (below), which is the intervention evidence for the link.
+
+### Fixed
+- **`HF_HOME=/tmp/hf`, applied to BOTH arms via `benchmarks/run_cell.sh`, clears both issues.**
+  It cannot live in values: chart 0.1.11's `deployment-router.yaml` hardcodes the router env
+  list and declares no volumes at all (verified against the pulled chart, 2026-08-03), so there
+  is neither a `routerSpec.env` passthrough nor a volume hook - and `/tmp` is the only writable
+  path in the container. Set on baseline cells too; an arm-only fix would flatter loadaware.
+  Verified live after rollout:
+  - in-router blocking **221 ms -> 1 ms median**; first request costs 3.50 s once (the tokenizer
+    load), which the existing warm-up gate already absorbs
+  - remote `/tokenize` calls **933/7 -> 0/0** across the two engines
+  - 2 req/s x 3 seeds x 100: **300/300 OK, 0 tracebacks** (pre-fix 16/600 = 2.7%; under a 2.7%
+    rate, 0-in-300 has p ~ 3e-4)
+  - the 4 req/s repro that previously SIGKILLed the router: **100/100 OK, 0 restarts**
+  Caveat: this is a before/after on a shared cluster, not a controlled A/B - the workloads are
+  the frozen seeds 101-103 in both cases, but engine cache state differed.
+
+### Changed
+- Confounder found while root-causing: because local tokenization always fails, every request
+  falls back to a synchronous `requests.post(.../tokenize)` aimed at `endpoints[0]` - **933
+  tokenize calls landed on engine-0 vs 7 on engine-1** over the demo window. That is an
+  unmeasured load asymmetry pointed at one engine, which biases a *load-aware* routing
+  experiment specifically. Must be fixed before #7, identically in both arms.
+- Verified the live router overlay (`router-patch` configmap: `routing_logic.py`,
+  `kv_controller.py`, `parser.py`) is **byte-identical** to the branch, so the demo runs did
+  exercise the intended code. Corrects the handoff's "NO dev overlay mounted" note.
+
 ## 2026-08-01 (late night) - Ticket #6 completed: benchmark harness built
 
 ### Added

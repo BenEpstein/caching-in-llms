@@ -96,11 +96,21 @@ fi
 # them explicitly on loadaware cells and REMOVE them on baselines - the
 # three-way merge preserves out-of-band env across upgrades, so a stale β
 # would otherwise leak between cells.
+# HF_HOME rides along on BOTH arms (#21). The router image has no writable HF
+# cache (arbitrary uid under the restricted SCC, HF_HOME unset, no /.cache), so
+# `AutoTokenizer.from_pretrained` fails on every request - and because the
+# except path never assigns self.tokenizer, it is retried per request at
+# ~245 ms a time, reaching huggingface.co before it fails. That alone is ~0.25 s
+# of event-loop blocking per request, i.e. a ~4 req/s ceiling and the liveness
+# SIGKILL. /tmp is the only writable path: chart 0.1.11 gives the router neither
+# a `routerSpec.env` passthrough nor any volume hook, so this cannot live in
+# values. Set on baselines too - the fix must be arm-neutral or it flatters us.
 if [ "$ARM" = "loadaware" ]; then
   oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
-    "LOADAWARE_ALPHA=$ALPHA" "LOADAWARE_BETA=$BETA"
+    HF_HOME=/tmp/hf "LOADAWARE_ALPHA=$ALPHA" "LOADAWARE_BETA=$BETA"
 else
-  oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" LOADAWARE_ALPHA- LOADAWARE_BETA-
+  oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
+    HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
 fi
 
 # ---- 2. router Service controller ports (deploy/README.md gotcha #0) --------

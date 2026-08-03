@@ -82,7 +82,12 @@ async def one_request(
         async with client.stream(
             "POST", f"{base_url}/v1/completions", json=payload, timeout=300.0
         ) as resp:
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                # streamed responses arrive body-unread, so raise_for_status()
+                # would throw away the server's error detail - the router's
+                # traceback summary lives in this body (#21)
+                body = (await resp.aread()).decode("utf-8", "replace")
+                raise RuntimeError(f"HTTP {resp.status_code}: {body.strip()}")
             async for line in resp.aiter_lines():
                 if not line.startswith("data:"):
                     continue
@@ -119,7 +124,7 @@ async def one_request(
             prompt_tokens=None,
             completion_tokens=None,
             status="error",
-            error=f"{type(e).__name__}: {e}"[:200],
+            error=f"{type(e).__name__}: {e}"[:500],
         )
 
 

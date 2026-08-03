@@ -91,6 +91,13 @@ routerSpec:
   sessionKey: "x-user-id"
   engineScrapeInterval: 5
 
+  # The baseline needs HF_HOME=/tmp/hf exactly as the loadaware arm does (#21):
+  # KvawareRouter.route_request carries the identical from_pretrained try/except,
+  # so the stock image pays the same ~245 ms per request when the HF cache is
+  # unwritable. Chart 0.1.11 has no routerSpec.env passthrough and no volume
+  # hook, so it cannot live here - benchmarks/run_cell.sh sets it on every cell,
+  # both arms. Applying it to only one arm would invalidate the comparison.
+
   # kvaware router init (LMCache controller + transformers imports) takes ~20s;
   # the default startup probe (5s delay, 3x5s failures) kills it mid-boot.
   startupProbe:
