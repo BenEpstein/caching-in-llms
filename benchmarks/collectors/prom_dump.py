@@ -31,6 +31,18 @@ METRICS = [
     "vllm:request_queue_time_seconds_sum",
     "vllm:request_queue_time_seconds_count",
     "vllm:kv_cache_usage_perc",
+    # Validity rule 6 (#3 amendment): preemption is RECORDED and reported per
+    # arm, never used to void a run - under concentration it is a genuine
+    # consequence of the baseline's placement, so gating on it would discard the
+    # baseline arm systematically and yield no result. Missing from the
+    # 2026-08-03 amended sweep: the rule was pre-registered and this line was
+    # not added, so preemption is unquantified for those cells.
+    "vllm:num_preemptions_total",
+    # vLLM's own HBM prefix-cache counters - the pair the scarcity gate reads.
+    # The lmcache:* hit metrics below are ENGINE-LOCAL (job=vllm-engines) and
+    # saturate regardless of routing, so they cannot stand in for these.
+    "vllm:prefix_cache_queries_total",
+    "vllm:prefix_cache_hits_total",
     "lmcache:num_hit_tokens_total",
     "lmcache:lookup_hit_rate",
     # request_cache_hit_rate is a HISTOGRAM in this lmcache build (verified on
