@@ -1,7 +1,8 @@
 """Materialize + verify the frozen benchmark workloads (methodology, issue #3).
 
-The methodology fixes ONE dataset: a 20-prefix x 2048-token Zipfian pool
-(s=1.2, pool_seed=42), replayed as 6 seeds x 500 requests. The JSONL files are
+The methodology fixes ONE dataset: a 64-prefix x 2048-token Zipfian pool
+(s=1.2, pool_seed=42), replayed as up to 10 seeds x 500 requests (cells replay
+a prefix of that seed list - see run_sweep.sh). The JSONL files are
 ~6 MB each, so they are NOT committed; what is committed is `workloads/manifest.json`
 holding the exact config + a SHA-256 per seed file. Generation is deterministic,
 so regenerate-and-verify gives bit-identical frozen workloads on any machine - the runner (`run_cell.sh`) calls this before every cell and refuses to measure
@@ -23,13 +24,20 @@ import sys
 
 from workload_gen import WorkloadConfig, dump_jsonl
 
-SEEDS = [1, 2, 3, 4, 5, 6]
+# Amended methodology (#3, 2026-08-03): 64 prefixes so the Zipf hot set (31
+# prefixes at s=1.2) exceeds what an engine can retain under
+# gpuMemoryUtilization 0.45. 10 seeds because the headline pair needs n=10 to
+# survive one reversal; the beta-sweep cells replay a 3-seed subset of the SAME
+# files, so there is still exactly one frozen dataset.
+SEEDS = list(range(1, 11))
+NUM_REQUESTS = 500
+PREFIX_POOL_SIZE = 64
 
 
 def frozen_config(seed: int) -> WorkloadConfig:
     return WorkloadConfig(
-        num_requests=500,
-        prefix_pool_size=20,
+        num_requests=NUM_REQUESTS,
+        prefix_pool_size=PREFIX_POOL_SIZE,
         zipf_s=1.2,
         prefix_tokens=2048,
         suffix_tokens=32,

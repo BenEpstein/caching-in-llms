@@ -38,7 +38,20 @@ servingEngineSpec:
       vllmConfig:
         enablePrefixCaching: true
         maxModelLen: 16384
-        gpuMemoryUtilization: "0.90"
+        # Amended methodology (#3, 2026-08-03). At 0.90 the KV pool is 393,744
+        # tokens (13.52 GiB, verified in the engine startup log) and the whole
+        # prefix pool fits on EVERY engine, so there is no placement decision
+        # for cache-aware routing to get right - engine-local hit rate saturated
+        # at ~0.95 on every arm including roundrobin.
+        # 0.45 -> ~99k tokens: below the 64-prefix Zipf hot set (31 prefixes =
+        # 63k tok) so engines hold disjoint sets, while leaving ~1.8x headroom
+        # over kvaware's measured peak in-flight KV (56k tok) so preemption does
+        # not become the thing we are measuring.
+        # Calibration: 22.49 GiB total, 6.72 GiB non-KV overhead, 29,123 tokens
+        # per GiB of KV. VERIFY the realised pool from the engine log - this
+        # arithmetic is a prediction, and validity rule 5 discards a cell whose
+        # pool does not match.
+        gpuMemoryUtilization: "0.45"
 
       # Prometheus scraping of engine /metrics (vllm:num_requests_running etc.)
       serviceMonitor:

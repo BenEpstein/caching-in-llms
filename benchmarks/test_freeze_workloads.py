@@ -21,12 +21,27 @@ def test_sampling_differs_across_replay_seeds():
 
 
 def test_frozen_config_matches_methodology():
+    """Pins the amended methodology (#3, 2026-08-03).
+
+    64 prefixes, not 20: at s=1.2 the Zipf hot set (90% of traffic) is 31
+    prefixes = 63k tokens, which must EXCEED what one engine retains under
+    gpuMemoryUtilization 0.45 (~99k pool - ~56k peak in-flight = ~43k = 21
+    prefixes). With 20 prefixes every engine held everything and there was no
+    placement decision to get right.
+    """
     cfg = frozen_config(seed=1)
     assert cfg.num_requests == 500
-    assert cfg.prefix_pool_size == 20
+    assert cfg.prefix_pool_size == 64
     assert cfg.zipf_s == 1.2
     assert cfg.prefix_tokens == 2048
     assert cfg.suffix_tokens == 32
+
+
+def test_ten_seeds_available_for_the_headline_pair():
+    """n=6 cannot survive one reversal (exact Wilcoxon caps at p=0.219) - the
+    pilot hit exactly that. The headline cells replay 10; sweep cells replay a
+    subset of the same files."""
+    assert SEEDS == list(range(1, 11))
 
 
 def test_dump_is_bit_stable(tmp_path):

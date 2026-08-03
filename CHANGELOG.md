@@ -8,6 +8,45 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Methodology amended (#3): the pilot could not test the hypothesis
+
+### Decided
+- **The 2026-08-03 sweep is demoted to a pilot; #3 is amended and pre-registered before any
+  new data.** Root cause: the per-engine HBM KV pool is 393,744 tokens (13.52 GiB, verified in
+  the engine startup log) and the 20-prefix working set is 40,960 tokens - 10.4% of it. Every
+  engine held every prefix, so there was no placement decision for cache-aware routing to get
+  right. Amendment: <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169437718>.
+- **The earlier "shrink the CPU offload tier" proposal is withdrawn.** It cannot force a
+  recompute: the KV stays resident in HBM regardless, so CPU eviction would only desynchronise
+  the registry from reality. Credit to the cache-sizing handoff session for the correction
+  (`docs/handoffs/cache-sizing-decisions.md`).
+- **HBM-only is dead, not merely blocked.** Only `local_cpu_backend` and `local_disk_backend`
+  emit `KVAdmitMsg`; there is no GPU-resident tracked backend. Without a backend the registry
+  is empty, `lookup()` returns nothing, and both arms collapse to load-only routing (#13).
+- **Scarcity is defined against the Zipf hot set, not the nominal pool.** The handoff's 32
+  prefixes gave retention 1.1x the hot set (16 retained vs 18 hot at s=1.2) - no scarcity where
+  the traffic is. Locked instead: `gpuMemoryUtilization` 0.90 -> **0.45** (~99k tok) and prefix
+  pool 20 -> **64** (hot set 31), giving retention 0.7x the hot set with 1.8x headroom over
+  kvaware's measured peak in-flight KV. The handoff's `u=0.37` was a units error (GB vs GiB);
+  measured calibration is 22.49 GiB total, 6.72 GiB non-KV overhead, 29,123 tok/GiB.
+- **Preemption is a reported outcome, not a run-voiding gate.** Under concentration it is a
+  genuine consequence of the baseline's placement; gating on it would discard the baseline arm
+  systematically and yield no result.
+- **Single-stage run plan, ~1.7-2.3 h instead of ~4.5-5.2 h.** The two-stage design existed to
+  *select* β, but β=0.1 is the shipped default and was already the pre-registered headline - it
+  is being tested, not chosen. Headline pair (b0.1, kvaware) at 10 seeds; β-sweep and
+  roundrobin at 3. Requests/seed stays 500: the 900 figure assumed first-touch prefills that
+  `warmup.py` already eliminates. n=10 on the headline pair is not negotiable - at n=6 one
+  reversal caps exact Wilcoxon at p=0.219 regardless of effect size, which is what the pilot hit.
+  Revision: <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169446888>.
+
+### Changed
+- `deploy/values-baseline-kvaware.yaml`: `gpuMemoryUtilization` 0.90 -> 0.45, with the
+  calibration and the verify-from-the-log requirement in-line.
+- `freeze_workloads.py`: 64 prefixes, seeds 1-10; workload regenerated and re-frozen (new
+  manifest SHA-256s). `run_cell.sh` takes a `SEEDS` env var instead of hardcoding 1..6, and
+  `run_sweep.sh` maps each cell to its seed count.
+
 ## 2026-08-03 - Ticket #7: full 6-cell evaluation sweep executed on gapu-2
 
 ### Added

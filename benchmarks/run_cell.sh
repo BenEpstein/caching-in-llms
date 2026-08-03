@@ -29,6 +29,11 @@ CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RATE="${2:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RESULTS_ROOT="${3:-results}"
 
+# Which frozen seeds this cell replays. The headline pair runs 10 (n=6 cannot
+# survive a single reversal - the pilot proved it); the beta-sweep cells run a
+# 3-seed subset of the SAME frozen files, so there is still one dataset.
+SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10}"
+
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
 
@@ -205,10 +210,11 @@ python3 "$BENCH_DIR/collectors/dcgm_poll.py" \
   "${DCGM_URLS[@]}" --out "$OUT/dcgm.csv" &
 PIDS+=($!)
 
-# ---- 8. measured replay: 6 frozen seeds back-to-back ------------------------
+# ---- 8. measured replay: the cell's frozen seeds back-to-back ---------------
 CELL_START=$(date +%s)
-for seed in 1 2 3 4 5 6; do
-  echo "==> seed $seed / 6"
+SEED_COUNT=$(echo "$SEEDS" | wc -w | tr -d ' ')
+for seed in $SEEDS; do
+  echo "==> seed $seed / $SEED_COUNT"
   python3 "$BENCH_DIR/load_driver.py" \
     --base-url "$BASE_URL" --model "$MODEL" --insecure \
     --workload "$BENCH_DIR/workloads/seed-$seed.jsonl" \
