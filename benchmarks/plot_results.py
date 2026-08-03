@@ -160,6 +160,58 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+def fig_paired(cells: List[Dict], out: str, cand="loadaware-b0.1", base="kvaware") -> None:
+    """The headline test, drawn: one line per seed, candidate vs baseline.
+
+    This is the figure the statistics actually operate on - the Wilcoxon sees
+    exactly these six lines and nothing else. A reversing seed is a line with
+    the opposite slope, which is why it is worth a figure of its own.
+    """
+    c = next((x for x in cells if x["cell"] == cand), None)
+    b = next((x for x in cells if x["cell"] == base), None)
+    if not c or not b:
+        return
+    cs, bs = ttft_p95s(c), ttft_p95s(b)
+
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    for i, (bv, cv) in enumerate(zip(bs, cs), start=1):
+        improved = cv < bv
+        ax.plot([0, 1], [bv, cv], "o-",
+                color="tab:blue" if improved else "tab:red",
+                alpha=0.85, lw=1.6, zorder=2)
+        ax.annotate(f"seed {i}", (1, cv), textcoords="offset points",
+                    xytext=(6, 0), fontsize=7, va="center",
+                    color="tab:blue" if improved else "tab:red")
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels([base, cand])
+    ax.set_xlim(-0.15, 1.35)
+    ax.set_ylabel("TTFT p95 (s)")
+    ax.set_title(f"Paired per-seed TTFT p95\n{sum(c < b for c, b in zip(cs, bs))}/{len(cs)} "
+                 "seeds improve (red = reversal)")
+    ax.grid(alpha=0.3, axis="y")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
+def fig_percentiles(cells: List[Dict], out: str) -> None:
+    """p50 / p95 / p99 side by side: where each arm's cost actually sits."""
+    ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
+    metrics = [("ttft_p50", "TTFT p50"), ("ttft_p95", "TTFT p95"), ("ttft_p99", "TTFT p99")]
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
+    for ax, (key, label) in zip(axes, metrics):
+        names = [c["cell"] for c in ordered]
+        meds = [percentile([s[key] for s in c["seeds"]], 50) for c in ordered]
+        ax.barh(names, meds, color="tab:blue", alpha=0.8)
+        ax.set_xlabel(f"{label} (s), median of 6 seeds")
+        ax.grid(alpha=0.3, axis="x")
+    axes[0].invert_yaxis()
+    fig.suptitle("TTFT percentiles by arm - the arms separate in the tail, not at the median")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
@@ -176,6 +228,8 @@ def main() -> None:
     fig_p95_vs_beta(cells, os.path.join(args.out, "fig1-ttft-p95-vs-beta.png"))
     fig_ecdf(cells, os.path.join(args.out, "fig2-ttft-ecdf.png"))
     fig_hit_rate(cells, os.path.join(args.out, "fig3-hit-rate.png"))
+    fig_paired(cells, os.path.join(args.out, "fig4-paired-seeds.png"))
+    fig_percentiles(cells, os.path.join(args.out, "fig5-percentiles.png"))
     print(f"wrote figures to {args.out}")
 
 
