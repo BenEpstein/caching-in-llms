@@ -8,6 +8,50 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-03 - Amended sweep complete: imbalance significant, TTFT not
+
+### Added
+- Full 6-cell sweep at the amended config (10.5 req/s, 128 prefixes s=0.9, u=0.45):
+  `results/20260803-2*`. `fig7-beta-tradeoff.png` is the new causal figure (hit rate vs β on
+  one axis, TTFT p95 on the other).
+
+### Decided
+- **Headline: `loadaware` β=0.1 achieves significantly better load balance at statistically
+  indistinguishable latency.** TTFT p95 **p=0.0527, NOT significant** (7/10 seeds, median 4.7%,
+  CI [-4.2%, +8.2%]); load imbalance **p=0.0068, significant** (8/10 seeds, median 24.5%,
+  survives Bonferroni for two co-primaries). No seeds added after seeing p=0.0527 - that would
+  be optional stopping. Full write-up:
+  <https://github.com/BenEpstein/caching-in-llms/issues/7#issuecomment-5170943693>.
+- **β≥0.5 blows up 4-6x, and the cause is measured rather than inferred.** Prefix-cache hit rate
+  falls monotonically with β (0.918 → 0.787 → 0.735) because diverting a request off its cached
+  instance now costs a real 2048-token prefill. This is the interior optimum the amended
+  workload was built to expose, and it exists - the pilot's β curve was degenerate.
+- **Cache-aware routing is the dominant effect: `roundrobin` posts TTFT p95 5.502 s, 18x worse
+  than kvaware/b0.1**, with 0.709 hit rate, 25 preemptions and 0.420 s mean queue time. Random
+  placement against a scarce cache is catastrophic.
+- **The pilot's 3.7x kvaware imbalance was substantially a registry artifact.** It falls to 1.68x
+  once prefixes are genuinely spread, because "route to the holder" then spreads load as a side
+  effect. That convergence, not a measurement problem, is why the latency effect shrank from 17%
+  to 4.7%.
+- **The 25 HTTP 500s (0.17%) are NOT the stale-id bug**: they appear in every arm including
+  roundrobin, which never touches the registry. Arm-independent, so they do not bias the
+  comparison. Root cause unidentified - captured tracebacks hold only starlette frames.
+
+### Fixed
+- `run_cell.sh` held the Prometheus port-forward open for the whole cell; it died before the
+  dump and `set -e` discarded three completed cells. Now forwarded at dump time with retries,
+  and a failed dump warns instead of aborting - driver CSVs are the latency source of truth.
+
+### Gaps for the next run
+- `vllm:num_preemptions_total` + vLLM prefix-cache counters missing for the two **headline**
+  cells (collector fixed in ba6caae only after they ran) - so the headline arms are absent from
+  fig7 and preemption is unquantified where it matters most.
+- n=10 is underpowered for a 4.7% effect; pre-register n≈20 before seeing data.
+- β grid too coarse: everything happens between 0 and 0.5. Sample {0.05, 0.1, 0.2, 0.3}.
+- **β=0 posts the lowest p95 (0.289) and highest hit rate (0.918) at n=3.** If pure
+  cache-awareness beats the load-aware variant on latency, that bears on the project's premise
+  and needs n=10, not 3.
+
 ## 2026-08-03 - Scarcity gate falsified the first amendment; workload re-derived
 
 ### Fixed
