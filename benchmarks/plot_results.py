@@ -180,11 +180,19 @@ def counter_delta(run_dir: str, metric: str) -> float:
 
 
 def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
-    """The causal figure: what beta actually buys and what it costs.
+    """What beta costs in cache locality, and whether latency follows.
 
-    Left axis = vLLM prefix-cache hit rate (the thing diverting destroys),
-    right axis = TTFT p95 (the consequence). This is the mechanism behind the
-    beta blow-up, not an inference from latency alone.
+    Left axis = vLLM prefix-cache hit rate (the thing diverting is supposed to
+    destroy), right axis = TTFT p95 (the putative consequence).
+
+    The title used to assert "hit rate falls, latency follows". That was read off
+    the 10.5 req/s sweep, where beta ran to 1.0 and hit rate genuinely collapsed
+    0.918 -> 0.787 -> 0.735. It is FALSE on the rate-16 grid: across beta 0 ->
+    0.034 -> 0.068 hit rate is flat (0.911, 0.895, 0.916), and fig3 agrees -
+    every cache-aware arm sits at ~0.96 engine-local lookup hit rate. So any TTFT
+    movement in this beta range is NOT bought with cache misses, and the figure
+    must not claim a mechanism its own data refutes. Title now states what is
+    plotted and leaves the reading to the caption.
     """
     la = sorted([c for c in cells if c["arm"] == "loadaware"], key=lambda c: c["beta"])
     la = [c for c in la
@@ -207,8 +215,8 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     ax2.plot(betas, p95, "s--", color="tab:red", lw=2, label="TTFT p95")
     ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
     ax2.tick_params(axis="y", labelcolor="tab:red")
-    ax.set_title(r"Raising $\beta$ diverts requests off their cached instance:"
-                 "\nhit rate falls, latency follows")
+    ax.set_title(r"Cache hit rate and TTFT p95 vs $\beta$"
+                 "\nhit rate is flat over this range - diverting costs no locality here")
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out, dpi=160)
@@ -281,21 +289,27 @@ def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
 def _panel_grid(cells: List[Dict], out: str, metrics, scale: float,
                 unit: str, suptitle: str) -> None:
     """Median-across-seeds bar panels, one per percentile. Shared by the TTFT,
-    ITL and throughput figures so all three read identically."""
+    ITL and throughput figures so all three read identically.
+
+    Each bar is labelled with its OWN seed count. The axis caption used to read
+    "median of {max n} seeds", which on a mixed-n figure claimed the 3-seed
+    descriptive cells (beta=0.068, roundrobin) carried the 20 seeds of the
+    inferential ones - overstating exactly the bars a reader should trust least.
+    """
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     fig, axes = plt.subplots(1, len(metrics), figsize=(4 * len(metrics), 4), sharey=True)
     axes = axes if len(metrics) > 1 else [axes]
     for ax, (key, label) in zip(axes, metrics):
         vals = [[s[key] for s in c["seeds"] if s[key] == s[key]] for c in ordered]
         meds = [percentile(v, 50) * scale if v else float("nan") for v in vals]
-        ax.barh([c["cell"] for c in ordered], meds, color="tab:blue", alpha=0.8)
+        labels = [f"{c['cell']}\n(n={len(v)})" for c, v in zip(ordered, vals)]
+        ax.barh(labels, meds, color="tab:blue", alpha=0.8)
         # error bar = seed spread, so a reader sees whether a gap is meaningful
         for i, v in enumerate(vals):
             if len(v) > 1:
                 lo, hi = percentile(v, 5) * scale, percentile(v, 95) * scale
                 ax.plot([lo, hi], [i, i], color="k", lw=1)
-        n = max((len(v) for v in vals), default=0)
-        ax.set_xlabel(f"{label} ({unit}), median of {n} seeds")
+        ax.set_xlabel(f"{label} ({unit}), median across seeds")
         ax.grid(alpha=0.3, axis="x")
     axes[0].invert_yaxis()
     fig.suptitle(suptitle)
