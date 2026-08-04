@@ -1,0 +1,278 @@
+{
+  "cell": "loadaware-b0.034",
+  "arm": "loadaware",
+  "alpha": "1.0",
+  "beta": "0.034",
+  "rate_req_s": 16.0,
+  "window": {
+    "start_ts": 1785841103,
+    "end_ts": 1785841795
+  },
+  "router_image": "quay.io/rhl193000/lmstack-router-loadaware:c68ccfc",
+  "router_image_id": "quay.io/rhl193000/lmstack-router-loadaware@sha256:ae5772fe3602ba98d51bcaa91c103e5142628fe606badc3f991b3b93c163c447",
+  "git_commit": "9eee8a1fc72a17f65a401babd0253151efb66fb9",
+  "workload_manifest": {
+    "seeds": {
+      "1": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 1,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-1.jsonl",
+        "sha256": "66fbf91f9cb1f7495bdbf66474998301515f51c4406e903614587f2e56ecc615"
+      },
+      "10": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 10,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-10.jsonl",
+        "sha256": "5a2e165ba25158fc5681a342f6fba56748bc8ed2f16cdc639fbc9dc835040b8b"
+      },
+      "11": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 11,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-11.jsonl",
+        "sha256": "81ac8bda35f0f4fd5484d66afdd1b5103089afa641635895d724972268d7bdff"
+      },
+      "12": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 12,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-12.jsonl",
+        "sha256": "c427f5228da8d182259e4b98b910ce34f5a37fabc799bc0e7e57636262b111f5"
+      },
+      "13": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 13,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-13.jsonl",
+        "sha256": "2825034272dbba9d3096db06787775b328702f3ca45bf0c78d5a115220abdb56"
+      },
+      "14": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 14,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-14.jsonl",
+        "sha256": "b428bab069bdf6e4057fb3f009e78f292aacc72b06c915b6c5839e7d12a00bd1"
+      },
+      "15": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 15,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-15.jsonl",
+        "sha256": "11ea4072ee60df9cc209e2a99d3e28f1bae8132fefdd570a0a8278b7d2782734"
+      },
+      "16": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 16,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-16.jsonl",
+        "sha256": "cad2827af6ea7dca4af644fa81077a4747d03cf4a07c9d01d9914e51f305998b"
+      },
+      "17": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 17,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-17.jsonl",
+        "sha256": "1b8a32629a2603bc55f058866541293ef15a66f946bbe17929cfe38deaa0cacf"
+      },
+      "18": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 18,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-18.jsonl",
+        "sha256": "2935ba997a616a2da8c3d370b9c27c50205e8e3c7d79401ca03d32a7ff1c7aa7"
+      },
+      "19": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 19,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-19.jsonl",
+        "sha256": "7b20483e8d8a491a3b4e0feec1bb160b2c999e1d26ffa91c4177217108a8886b"
+      },
+      "2": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 2,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-2.jsonl",
+        "sha256": "0f671c9071e007d395b9b5968c428670ef92a6c63eed6293994e96a9eeb9cca0"
+      },
+      "20": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 20,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-20.jsonl",
+        "sha256": "e7f175a149694883276512e76779020048f99e84f4b804d80d9ce9578e3e47af"
+      },
+      "3": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 3,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-3.jsonl",
+        "sha256": "b1788c9dc9e74ce2153d6850047b5e691a126c580f35e7b2e75fea6fb9168d3a"
+      },
+      "4": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 4,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-4.jsonl",
+        "sha256": "76bb2478a78a870939d38e45e9e6efbedbe3c158e869015dc756b1d5578bea25"
+      },
+      "5": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 5,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-5.jsonl",
+        "sha256": "9646e8fb9d647156f58e7899dfdfef1c4054a62b2e4079ed0544f1ea7ff496d9"
+      },
+      "6": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 6,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-6.jsonl",
+        "sha256": "d634081a6d585ef7b336bb72fd5235d317c1517abadafe2fe3b1602c38daa64c"
+      },
+      "7": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 7,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-7.jsonl",
+        "sha256": "790362a8e68e8c08698e77fd57779c52c692a5ebc5ffde0d482b56bf02ff31d0"
+      },
+      "8": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 8,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-8.jsonl",
+        "sha256": "ff448842b6d51953f735b205925e448df4300b10d521edb08ea32a08b9c2a794"
+      },
+      "9": {
+        "config": {
+          "num_requests": 500,
+          "pool_seed": 42,
+          "prefix_pool_size": 128,
+          "prefix_tokens": 2048,
+          "seed": 9,
+          "suffix_tokens": 32,
+          "zipf_s": 0.9
+        },
+        "file": "seed-9.jsonl",
+        "sha256": "9633605cc46241f45d86042b81764dfd05f215cb9e51454f8408202538202aff"
+      }
+    }
+  }
+}

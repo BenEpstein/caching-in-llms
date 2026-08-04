@@ -37,11 +37,24 @@ def test_frozen_config_matches_methodology():
     assert cfg.suffix_tokens == 32
 
 
-def test_ten_seeds_available_for_the_headline_pair():
+def test_twenty_seeds_available_for_the_headline_pair():
     """n=6 cannot survive one reversal (exact Wilcoxon caps at p=0.219) - the
-    pilot hit exactly that. The headline cells replay 10; sweep cells replay a
-    subset of the same files."""
-    assert SEEDS == list(range(1, 11))
+    pilot hit exactly that, and n=10 then returned p=0.0527 on the amended
+    sweep. Raised to 20 in the 2026-08-04 pre-registration: a seed replay costs
+    ~50 s against ~8 min of fixed setup per cell, so power is nearly free.
+    The headline cells replay all 20; sweep cells replay a subset of the same
+    files, so there is still exactly one frozen dataset."""
+    assert SEEDS == list(range(1, 21))
+
+
+def test_raising_the_seed_count_is_purely_additive():
+    """Seeds 1-10 must regenerate bit-identically after the raise, or the
+    'one frozen dataset' property is broken and every earlier cell becomes
+    incomparable for a reason unrelated to the methodology change."""
+    for seed in range(1, 11):
+        assert frozen_config(seed).seed == seed
+        assert frozen_config(seed).pool_seed == 42
+        assert frozen_config(seed).prefix_pool_size == 128
 
 
 def test_dump_is_bit_stable(tmp_path):

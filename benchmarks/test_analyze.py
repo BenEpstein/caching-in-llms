@@ -11,6 +11,9 @@ import math
 import pytest
 
 from analyze import (
+    HARD_ERROR_RATE,
+    error_bias,
+    flagged_seeds,
     MAX_ERROR_RATE,
     bootstrap_ci_median_rel_reduction,
     invalid_seeds,
@@ -127,13 +130,56 @@ def test_seed_stats_excludes_errors_from_latency_but_counts_them(tmp_path):
     assert s["ttft_p99"] <= 0.4
 
 
-def test_validity_threshold_is_1_percent(tmp_path):
-    ok = tmp_path / "ok.csv"
-    _write_csv(ok, [_row(i, 0.1, 1.0) for i in range(100)])
-    bad = tmp_path / "bad.csv"
-    rows = [_row(i, 0.1, 1.0) for i in range(98)]
-    rows += [_row(98, 0.1, 1.0, "error"), _row(99, 0.1, 1.0, "error")]
-    _write_csv(bad, rows)
-    assert invalid_seeds([seed_stats(str(ok))]) == []
-    assert len(invalid_seeds([seed_stats(str(bad))])) == 1
+def _seed_with_errors(tmp_path, name, n_err, n_total=100):
+    p = tmp_path / name
+    rows = [_row(i, 0.1, 1.0) for i in range(n_total - n_err)]
+    rows += [_row(n_total - n_err + j, 0.1, 1.0, "error") for j in range(n_err)]
+    _write_csv(p, rows)
+    return seed_stats(str(p))
+
+
+def test_two_percent_errors_are_flagged_but_do_not_void(tmp_path):
+    """Amended rule 1 (2026-08-04, pre-registered on #3 before the run). The old
+    rule voided a whole run on one seed over 1%; near the knee that fires on
+    noise (probe: 0.8% and exactly 1.0% per seed) and would discard 85 minutes
+    for an error floor already shown to be arm-independent."""
+    s = _seed_with_errors(tmp_path, "noisy.csv", 2)
+    assert len(flagged_seeds([s])) == 1      # reported...
+    assert invalid_seeds([s]) == []          # ...but not fatal
     assert MAX_ERROR_RATE == 0.01
+
+
+def test_catastrophic_error_rate_still_voids_unilaterally(tmp_path):
+    """A cell that is broken rather than noisy is not rescued by any cross-arm
+    argument."""
+    s = _seed_with_errors(tmp_path, "broken.csv", 20)   # 20%
+    assert len(invalid_seeds([s])) == 1
+    assert HARD_ERROR_RATE == 0.10
+
+
+def test_arm_independent_error_floor_is_not_bias(tmp_path):
+    """The floor that actually occurred: both arms ~1%. It cannot bias a paired
+    comparison, so the comparison stands."""
+    cand = [_seed_with_errors(tmp_path, f"c{i}.csv", 1) for i in range(3)]
+    base = [_seed_with_errors(tmp_path, f"b{i}.csv", 1) for i in range(3)]
+    assert error_bias(cand, base)["biased"] is False
+
+
+def test_errors_concentrated_on_one_arm_void_the_comparison(tmp_path):
+    """The failure mode rule 1 exists to catch: if one arm errors far more, the
+    surviving requests are a biased sample of that arm's latency."""
+    cand = [_seed_with_errors(tmp_path, f"c{i}.csv", 0) for i in range(3)]
+    base = [_seed_with_errors(tmp_path, f"b{i}.csv", 5) for i in range(3)]
+    bias = error_bias(cand, base)
+    assert bias["biased"] is True
+    assert bias["absolute"] == pytest.approx(0.05)
+
+
+def test_bias_needs_both_a_ratio_and_an_absolute_gap(tmp_path):
+    """0.0% vs 1.0% is an infinite ratio but only a 1pp gap - not material, and
+    voiding on ratio alone would make the rule fire on near-zero noise."""
+    cand = [_seed_with_errors(tmp_path, f"c{i}.csv", 0) for i in range(3)]
+    base = [_seed_with_errors(tmp_path, f"b{i}.csv", 1) for i in range(3)]
+    bias = error_bias(cand, base)
+    assert bias["ratio"] == float("inf")
+    assert bias["biased"] is False

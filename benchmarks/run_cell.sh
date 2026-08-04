@@ -29,10 +29,11 @@ CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RATE="${2:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RESULTS_ROOT="${3:-results}"
 
-# Which frozen seeds this cell replays. The headline pair runs 10 (n=6 cannot
-# survive a single reversal - the pilot proved it); the beta-sweep cells run a
-# 3-seed subset of the SAME frozen files, so there is still one dataset.
-SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10}"
+# Which frozen seeds this cell replays. The inferential cells run 20 (n=6 cannot
+# survive a single reversal - the pilot proved it - and n=10 then returned
+# p=0.0527); the beta-sweep cells run a 3-seed subset of the SAME frozen files,
+# so there is still exactly one dataset.
+SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"

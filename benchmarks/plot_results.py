@@ -215,17 +215,37 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
-def fig_paired(cells: List[Dict], out: str, cand="loadaware-b0.1", base="kvaware") -> None:
+def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
     """The headline test, drawn: one line per seed, candidate vs baseline.
 
     This is the figure the statistics actually operate on - the Wilcoxon sees
-    exactly these six lines and nothing else. A reversing seed is a line with
-    the opposite slope, which is why it is worth a figure of its own.
+    exactly these lines and nothing else. A reversing seed is a line with the
+    opposite slope, which is why it is worth a figure of its own.
+
+    `cand` MUST be passed or inferred; it used to default to the literal
+    "loadaware-b0.1" and return silently when that cell was absent. Since beta is
+    now calibrated per-rate (0.034 at rate 16), that default would have produced
+    no headline figure at all, with no error - the caller would have shipped a
+    figure set quietly missing its centerpiece. Absent a match, raise.
     """
+    if cand is None:
+        loadaware = [x["cell"] for x in cells
+                     if x["cell"].startswith("loadaware-b") and x["cell"] != "loadaware-b0"]
+        if len(loadaware) != 1:
+            raise SystemExit(
+                f"fig_paired: cannot infer the headline cell from {loadaware or 'none'} - "
+                "pass --cand explicitly"
+            )
+        cand = loadaware[0]
     c = next((x for x in cells if x["cell"] == cand), None)
     b = next((x for x in cells if x["cell"] == base), None)
     if not c or not b:
-        return
+        raise SystemExit(
+            f"fig_paired: missing cell(s) - candidate '{cand}' "
+            f"{'found' if c else 'MISSING'}, baseline '{base}' "
+            f"{'found' if b else 'MISSING'}. Available: "
+            f"{[x['cell'] for x in cells]}"
+        )
     cs, bs = ttft_p95s(c), ttft_p95s(b)
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
@@ -380,6 +400,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--out", default="docs/figures")
+    ap.add_argument("--cand", default=None,
+                    help="headline loadaware cell (default: the single non-b0 "
+                         "loadaware cell present; beta is calibrated per-rate so "
+                         "the cell name is not a fixed literal)")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -392,7 +416,7 @@ def main() -> None:
     fig_p95_vs_beta(cells, os.path.join(args.out, "fig1-ttft-p95-vs-beta.png"))
     fig_ecdf(cells, os.path.join(args.out, "fig2-ttft-ecdf.png"))
     fig_hit_rate(cells, os.path.join(args.out, "fig3-hit-rate.png"))
-    fig_paired(cells, os.path.join(args.out, "fig4-paired-seeds.png"))
+    fig_paired(cells, os.path.join(args.out, "fig4-paired-seeds.png"), cand=args.cand)
     fig_percentiles(cells, os.path.join(args.out, "fig5-percentiles.png"))
     fig_imbalance(cells, os.path.join(args.out, "fig6-load-balance.png"))
     fig_beta_tradeoff(cells, os.path.join(args.out, "fig7-beta-tradeoff.png"))

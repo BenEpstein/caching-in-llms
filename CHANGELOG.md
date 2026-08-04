@@ -8,7 +8,64 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 - Confirmatory sweep at the knee: driver bug fixed, load gate added
+
+### Fixed
+- **The driver recorded NO TTFT at all** (regression from `e29cb4a`). 500 rows with an empty
+  TTFT column while token counts populated normally, so a CSV looked plausible at a glance
+  while missing the primary metric. `stream_options.include_usage` puts a `usage` key on
+  *every* chunk (`null` on token chunks), so the substring test `'"usage"' in data` matched
+  all of them and `continue`d past the TTFT/ITL recording; the final chunk still set the
+  token counts. Fixed by classifying on whether a chunk **carries a token** (`choices`
+  non-empty), extracted as a pure `classify_chunk()`. Verified live: 20 requests x 64 tokens
+  -> 1260 gaps (= 20 x 63). **This makes the 2026-08-04 sweep the first run in the project
+  with a valid ITL measurement**; any ITL figure in PR #22 never existed.
+
 ### Added
+- `benchmarks/load_gate.py` - the load analogue of the scarcity gate, run on a short kvaware
+  probe before a sweep is funded. Validated against the known-bad case: it FAILS both
+  2026-08-03 headline cells and reproduces their published 1.68x imbalance.
+- Regression tests for the paths flagged as uncovered in #7 (ITL parsing, old-CSV `.get()`
+  fallback, the `job=vllm-engines` filter that corrupted 17 of 74 seed rows) plus the gate,
+  the chunk classifier, and the amended error rule. **110 tests.**
+- Seeds 10 -> 20 (`freeze_workloads.py`), verified purely additive: seeds 1-10 regenerate
+  bit-identically, only the manifest grows.
+
+### Decided
+- **This system saturates on COMPUTE, not memory - so the baseline's pathology is
+  decode-batch concentration, not queueing.** Measured: at offered 16 and 18 the busiest
+  engine ran 59 and 100 mean concurrent requests with `num_requests_waiting` = 0.00, **0
+  preemptions**, and queue time **0.0 ms/req at every rate including 10.5**. Prefix caching
+  makes concurrency nearly free in KV (~530 tokens per in-flight request against 1578-token
+  prompts), so against the verified 104,624-token pool KV tops out near 0.70 and never
+  exhausts. Confirmed by the gate probe: ITL p95 degraded **4.55x** over idle while TTFT p95
+  degraded 2.69x.
+- **The first load-gate criterion (preemption or waiting > 0) was falsified as
+  unsatisfiable, not strict, and replaced by measured degradation** (TTFT p95 or ITL p95
+  >= 1.25x an idle baseline, plus asymmetry >= 1.5x). Testing the consequence is stricter
+  than testing a counter - a counter can fire without harming anyone.
+- **The rate-selection rule "achieved/offered < 0.90" is falsified**: it picks rate 12,
+  which sits in the flat region (TTFT p95 0.251 s, identical to rates 8 and 10). The ratio
+  declines smoothly from 0.99 with no knee in it. Replaced by departure from the latency
+  plateau -> **rate 16** (asymmetry 2.09x, TTFT p95 2.69x idle, ITL p95 4.55x idle, 0 errors).
+- **Validity rule 1 amended BEFORE the run**: an arm-independent error floor is reported,
+  not fatal; a comparison is voided only when error rates differ materially between arms
+  (> 2x ratio AND > 1pp absolute), with a 10% catastrophic ceiling retained. The 500s are
+  arm-independent (present in roundrobin, which never touches the registry; 16/16 tracebacks
+  are post-routing `ServerDisconnectedError`), and the probe measured exactly 1.0% on one
+  seed - so the old rule would have discarded 85 minutes on noise.
+- **beta = 0.034 at rate 16**, from the measured `delta_load` = 14.69 via
+  `beta * delta_load = alpha * 0.5`. Recorded instability: a second probe at the same rate
+  gave `delta_load` = 39.46 (beta 0.013). The 0.034 figure comes from the only probe whose
+  driver recorded TTFT; the other is UNMEASURABLE by the gate's own criterion. The spread is
+  a direct consequence of beta being tied to absolute concurrency - the §6 limitation the
+  project deliberately chose not to fix mid-experiment.
+- Ben's `results/rate-pilot/` CSVs are **provenance-verified** as the current workload
+  (`max(prefix_id)` = 126, 72 distinct prefixes), so the rate ramp did not need repeating.
+- **Eliad works solo from 2026-08-04**; Ben is off the project. `CLAUDE.md` still says two
+  people and is stale.
+
+### Added (2026-08-03, late)
 - **`results/` is now tracked in git** (364 files, 5.2 MB): raw per-seed driver CSVs, `dcgm.csv`,
   and the `prom/*.json` scrapes for every run, so a collaborator or grader can inspect the
   evidence behind every figure without rerunning the cluster.

@@ -22,7 +22,7 @@ import dataclasses
 import json
 import random
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import httpx
 
@@ -65,6 +65,31 @@ def load_workload(path: str):
     return reqs
 
 
+def classify_chunk(data: str) -> Tuple[Optional[dict], bool]:
+    """`(usage_or_None, carries_token)` for one SSE `data:` payload.
+
+    Classify by whether the chunk CARRIES A TOKEN, never by whether a key name
+    appears in its serialization. `stream_options={"include_usage": True}` makes
+    vLLM put a `usage` key on **every** chunk - `null` on token chunks, populated
+    only on the final usage-only chunk - so the substring test `'"usage"' in
+    data` matches every chunk and classifies nothing.
+
+    That is not hypothetical: it recorded **zero TTFT values across 500
+    requests** in the 2026-08-04 gate probe while still populating token counts,
+    because the final chunk set those. Every column looked plausible except the
+    primary metric. The token test is `choices` being non-empty - the usage-only
+    chunk carries `"choices": []`.
+
+    This parses every chunk, which the previous version was avoiding. At ~64
+    chunks x ~14 req/s that is ~900 parses/s of ~200-byte payloads - single-digit
+    microseconds each, three orders of magnitude below the measured client
+    event-loop lag floor (p50 0.6 ms, printed per seed). Correctness of the
+    primary metric outranks that optimization.
+    """
+    obj = json.loads(data)
+    return obj.get("usage"), bool(obj.get("choices"))
+
+
 async def one_request(
     client: httpx.AsyncClient, base_url: str, model: str, req: dict, max_tokens: int
 ) -> Result:
@@ -103,15 +128,14 @@ async def one_request(
                 if data == "[DONE]":
                     break
                 now = time.perf_counter()
-                # usage arrives only in the final chunk - don't JSON-parse
-                # every token on the measurement path. That chunk carries no
-                # token, so its arrival is a stream-close artifact and must not
-                # count as an inter-token gap.
-                if '"usage"' in data:
-                    usage = json.loads(data).get("usage")
-                    if usage:
-                        prompt_toks = usage.get("prompt_tokens")
-                        completion_toks = usage.get("completion_tokens")
+                usage, carries_token = classify_chunk(data)
+                if usage:
+                    prompt_toks = usage.get("prompt_tokens")
+                    completion_toks = usage.get("completion_tokens")
+                # The usage-only chunk carries no token, so its arrival is a
+                # stream-close artifact and must count as neither TTFT nor an
+                # inter-token gap.
+                if not carries_token:
                     continue
                 if ttft is None:
                     ttft = now - t0

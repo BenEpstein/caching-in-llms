@@ -38,10 +38,16 @@ from workload_gen import WorkloadConfig, dump_jsonl
 # LMCache CPU tier (114k tok = 56 prefixes) and HBM (~50 prefixes) at comparable
 # capacity, so the registry tracks HBM reality instead of drifting from it.
 #
-# 10 seeds because the headline pair needs n=10 to survive one reversal; the
-# beta-sweep cells replay a 3-seed subset of the SAME files, so there is still
-# exactly one frozen dataset.
-SEEDS = list(range(1, 11))
+# 20 seeds (raised from 10, 2026-08-04 pre-registration). n=10 returned
+# p=0.0527 on the headline: underpowered, and one reversal is expensive at that
+# size. A seed replay costs ~50 s against ~8 min of fixed setup per CELL, so
+# power here is close to free - cells are the only thing worth cutting to
+# shorten a run (see run_sweep.sh). Seeds 1-10 regenerate bit-identically; this
+# is purely additive, which the manifest diff shows.
+#
+# The beta-sweep cells replay a 3-seed subset of the SAME files, so there is
+# still exactly one frozen dataset.
+SEEDS = list(range(1, 21))
 NUM_REQUESTS = 500
 PREFIX_POOL_SIZE = 128
 ZIPF_S = 0.9
