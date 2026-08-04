@@ -8,6 +8,46 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 (evening) - Sweep complete: beta curve has an interior tradeoff
+
+### Added
+- **`loadaware-b0.068` n=3** (`results/20260804-190542-loadaware-b0.068`) and
+  **`roundrobin` n=3** (`results/20260804-191644-roundrobin`), both rate 16, 0.00% errors.
+  The rate-16 sweep is now complete at 5 arms.
+- All 9 figures regenerated from the full cell set; `fig8`/`fig9` tracked for the first time.
+- `results/summary-per-seed.csv`: 160 rows across 19 cells.
+
+### Decided
+- **beta trades TTFT against ITL, and the optimum differs by metric.** Medians at rate 16:
+
+  | arm | n | TTFT p95 | ITL p95 | imbalance | achieved req/s |
+  |---|---|---|---|---|---|
+  | `roundrobin` | 3 | 11.528 | 0.863 | 1.723 | **10.7** |
+  | `kvaware` | 20 | 0.426 | 0.171 | 2.680 | 14.2 |
+  | beta=0 | 20 | 0.438 | 0.185 | 2.646 | 14.2 |
+  | beta=0.034 | 20 | **0.378** | 0.143 | 1.296 | 14.5 |
+  | beta=0.068 | 3 | 0.550 | **0.097** | **1.061** | 14.7 |
+
+  Raising beta diverts more requests off their cached engine: decode gets faster (smaller,
+  more even batches -> ITL p95 falls 32%) while prefill gets slower (more misses -> TTFT p95
+  rises past the baseline). beta=0.034 sits near the TTFT optimum, beta=0.068 near the ITL
+  optimum. Same mechanism that made beta>=0.5 collapse at 10.5 req/s, caught here while it is
+  still a tradeoff. **n=3, descriptive only** - these cells cannot be paired against the n=20
+  arms and the seed-set check correctly refuses to try.
+- **`roundrobin` is better balanced than the cache-aware baseline (1.723 vs 2.680) and 27x
+  worse on TTFT p95.** It equalises request COUNTS, not work: a misrouted request pays a full
+  2048-token prefill. This is the cleanest statement in the project of what "load" means, and
+  it is why the extension must add load-awareness on top of cache-awareness rather than
+  replacing it. **Caveat: it achieved only 10.7 req/s against 16 offered** while every other
+  arm delivered 14.2-14.7, so it is saturated and not at the same operating point - the
+  throughput shortfall is the honest headline for that arm, not the 27x.
+
+### Fixed
+- Published seed count corrected on issue #7: TTFT p95 improves on **12/20** seeds, not 13/20.
+  p, median and CI unchanged; the endpoint is a null either way. All other published counts
+  re-verified correct (imbalance 19/20 both candidate cells, beta=0 vs kvaware 9/20,
+  beta=0.034 vs beta=0 19/20).
+
 ## 2026-08-04 (later) - Headline + ablation measured; seed labels were lying
 
 ### Added
