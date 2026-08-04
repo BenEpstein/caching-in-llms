@@ -28,6 +28,9 @@ FIELDS = [
     # `run` FIRST and part of the sort key: `cell` alone is ambiguous - the same
     # cell name appears in the 7.5 req/s pilot and the 10.5 req/s amended sweep,
     # and grouping by it silently merges two different experiments.
+    # "alpha" is retained for the runs recorded before it was removed from the
+    # policy (it was 1.0 in every one of them, and only the ratio to beta was
+    # ever a free parameter). Cells run since write it empty.
     "run", "cell", "arm", "alpha", "beta", "rate_req_s", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",

@@ -26,11 +26,14 @@ routerSpec:
   repository: "quay.io/rhl193000/lmstack-router-loadaware"
   # tag: supplied per-deploy via --set routerSpec.tag=<short-sha>
 
-  # α/β come from LOADAWARE_ALPHA/LOADAWARE_BETA env vars (defaults 1.0/0.1).
+  # β comes from the LOADAWARE_BETA env var (default 1.0). There is no α: the
+  # argmax is invariant under positive scaling, so only the ratio was ever a
+  # free parameter. β is dimensionless - the router normalizes load against the
+  # live fleet mean - so 1.0 is a real default and not a per-cluster tuning.
   # Chart 0.1.11 IGNORES `routerSpec.env` (hardcoded env list in
-  # deployment-router.yaml, verified 2026-08-01) - set them after the upgrade:
-  #   oc set env deploy/stack-deployment-router LOADAWARE_ALPHA=1.0 LOADAWARE_BETA=0.1
-  # benchmarks/run_cell.sh does this per sweep cell (and removes them on
+  # deployment-router.yaml, verified 2026-08-01) - set it after the upgrade:
+  #   oc set env deploy/stack-deployment-router LOADAWARE_BETA=1.0
+  # benchmarks/run_cell.sh does this per sweep cell (and removes it on
   # baseline cells so a stale β cannot leak through the three-way merge).
   #
   # HF_HOME=/tmp/hf travels the same way, and for the same chart reason (#21).

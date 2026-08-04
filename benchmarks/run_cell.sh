@@ -10,8 +10,10 @@
 # Usage:
 #   ./run_cell.sh <cell> <rate> [results-root]
 #
-#   cell ∈ kvaware | roundrobin | loadaware-b<beta>     (α fixed at 1.0)
-#          e.g. loadaware-b0 loadaware-b0.1 loadaware-b0.5 loadaware-b1.0
+#   cell ∈ kvaware | roundrobin | loadaware-b<beta>
+#          e.g. loadaware-b0 loadaware-b0.25 loadaware-b1.0 loadaware-b2.0
+#          beta is dimensionless (load is normalized against the fleet mean
+#          inside the router), so the grid is fixed, not probe-calibrated.
 #   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, ~75% of the knee)
 #
 # Environment overrides (defaults match deploy/README.md on gapu-2):
@@ -56,7 +58,7 @@ DCGM_PORT="${DCGM_PORT:-19400}"
 # probe and the layout_info warm-up check; roundrobin ignores the registry so
 # neither signal exists there.
 HELM_ARGS=(-f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml")
-ALPHA="" BETA="" ARM="" USES_LOOKUP=1
+BETA="" ARM="" USES_LOOKUP=1
 case "$CELL" in
   kvaware)
     ARM=kvaware ;;
@@ -66,7 +68,6 @@ case "$CELL" in
     HELM_ARGS+=(--set routerSpec.routingLogic=roundrobin) ;;
   loadaware-b*)
     ARM=loadaware
-    ALPHA="1.0"
     BETA="${CELL#loadaware-b}"
     : "${LOADAWARE_TAG:?loadaware cells need LOADAWARE_TAG=<git short SHA of the CI-built image>}"
     HELM_ARGS+=(
@@ -79,7 +80,7 @@ esac
 
 OUT="$RESULTS_ROOT/$(date +%Y%m%d-%H%M%S)-$CELL"
 mkdir -p "$OUT"
-echo "==> cell $CELL (arm=$ARM alpha=${ALPHA:-n/a} beta=${BETA:-n/a}) rate=$RATE → $OUT"
+echo "==> cell $CELL (arm=$ARM beta=${BETA:-n/a}) rate=$RATE → $OUT"
 
 PIDS=()
 cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
@@ -113,10 +114,10 @@ fi
 # values. Set on baselines too - the fix must be arm-neutral or it flatters us.
 if [ "$ARM" = "loadaware" ]; then
   oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
-    HF_HOME=/tmp/hf "LOADAWARE_ALPHA=$ALPHA" "LOADAWARE_BETA=$BETA"
+    HF_HOME=/tmp/hf "LOADAWARE_BETA=$BETA"
 else
   oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
-    HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
+    HF_HOME=/tmp/hf LOADAWARE_BETA-
 fi
 
 # ---- 2. router Service controller ports (deploy/README.md gotcha #0) --------
@@ -240,7 +241,7 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
-export CELL ARM ALPHA BETA RATE CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
+export CELL ARM BETA RATE CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
 python3 - <<'PY'
 import json, os
 env = os.environ
@@ -248,7 +249,6 @@ manifest = json.load(open(os.path.join(env["BENCH_DIR"], "workloads", "manifest.
 run = {
     "cell": env["CELL"],
     "arm": env["ARM"],
-    "alpha": env["ALPHA"] or None,
     "beta": env["BETA"] or None,
     "rate_req_s": float(env["RATE"]),
     "window": {"start_ts": int(env["CELL_START"]), "end_ts": int(env["CELL_END"])},

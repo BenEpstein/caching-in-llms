@@ -46,7 +46,7 @@ if oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
   NS="$NS" "$REPO_ROOT/deploy/dev/revert-router-patch.sh"
 fi
 # baseline arm: HF_HOME on (#21), loadaware vars off so nothing leaks
-oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
+oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 
 echo "==> cold, stale-free start"

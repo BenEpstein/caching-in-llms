@@ -47,29 +47,42 @@ dev loop and the reproducible image apply *identical* bytes.
 | File | Change | Ticket |
 |---|---|---|
 | `lmcache/v1/cache_controller/controllers/kv_controller.py` | Multi-instance lookup: `lookup()` reports per-instance matched-token counts for every holder, not just `kv_pool[key][0]` | [#4](https://github.com/BenEpstein/caching-in-llms/issues/4) |
-| `vllm_router/routers/routing_logic.py` | `loadaware` placement policy: `LOADAWARE` enum + factory branch + a `LoadAwareRouter` that routes by `α·cache_hit_benefit − β·load_penalty` over every endpoint. Additions only — `KvawareRouter` is untouched | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
+| `vllm_router/routers/routing_logic.py` | `loadaware` placement policy: `LOADAWARE` enum + factory branch + a `LoadAwareRouter` that routes by `cache_hit_benefit − β·relative_load` over every endpoint. Additions only — `KvawareRouter` is untouched | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
 | `vllm_router/parsers/parser.py` | One-line widening of `--routing-logic`'s hard-coded `choices` list to accept `loadaware`. Without it argparse rejects the flag and the router exits before the factory runs | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
 
 ## Tunable parameters (`loadaware`)
 
-The score is `α · (matched_tokens / prompt_tokens) − β · (in_prefill + in_decoding)`, argmax
-over all endpoints, ties broken by lexicographic URL.
+The score is
+
+```
+score(i) = matched_tokens(i)/prompt_tokens  −  β · relative_load(i)
+relative_load(i) = (load(i) − mean_load) / max(1, mean_load)
+load(i) = in_prefill(i) + in_decoding(i)
+```
+
+argmax over all endpoints, ties broken by lexicographic URL. **Both terms are
+dimensionless** — a fraction of this prompt, and a fraction of this fleet's mean load — so β
+carries no unit from the deployment and the same value is the same policy at any request
+rate, prompt length, GPU or engine count.
 
 | Parameter | Env var | Default | Meaning |
 |---|---|---|---|
-| α | `LOADAWARE_ALPHA` | `1.0` | Weight on cache-hit benefit, the **fraction** of the prompt already cached on that instance (0–1) |
-| β | `LOADAWARE_BETA` | `0.1` | Weight on load penalty, the instance's in-flight requests. `1/β` reads as "how many in-flight requests cancel a full cache hit" — at the default, 10 |
+| β | `LOADAWARE_BETA` | `1.0` | Weight on the load penalty. Reads as "an endpoint sitting **100% above fleet-average load** forfeits one full cache hit". β=0 is cache-only placement (the ablation arm); larger β diverts sooner |
+
+**There is no α.** An argmax is invariant under positive scaling, so `α·benefit − β·load` and
+`benefit − (β/α)·load` are the same policy: only the ratio was ever a free parameter. It was
+1.0 in every run this project recorded, and removing it changes no placement decision.
 
 Set them without a restart-and-reinstall:
 
 ```bash
-oc set env deploy/stack-deployment-router -n cache-llm LOADAWARE_ALPHA=1.0 LOADAWARE_BETA=0.25
+oc set env deploy/stack-deployment-router -n cache-llm LOADAWARE_BETA=0.5
 ```
 
 Environment rather than a CLI flag on purpose: `--kv-aware-threshold` and friends are
 registered in `vllm_router/parsers/parser.py` and consumed in `app.py`, so a flag would make
 this a **three**-file patch to mount and keep in sync. `initialize_routing_logic` still
-forwards `loadaware_alpha` / `loadaware_beta` kwargs when present, so adding the flag later
+forwards the `loadaware_beta` kwarg when present, so adding the flag later
 needs no change to `routing_logic.py`.
 
 `kv_aware_threshold` is accepted for interface compatibility but **not applied** by

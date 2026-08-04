@@ -8,6 +8,69 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 (night) - beta is dimensionless: load normalized against the fleet mean
+
+Branch `feat/relative-load-normalization`, off `feat/evaluation-runs`. Code + docs only,
+no runs yet. Builds directly on the evening sweep below.
+
+### Decided
+- **`alpha` is removed.** An argmax is invariant under positive scaling, so
+  `alpha*benefit - beta*load` and `benefit - (beta/alpha)*load` are the same policy: alpha and
+  beta were never two parameters, only their ratio. Every run in `results/` used alpha=1.0, so
+  nothing measured changes. A test now asserts it cannot come back.
+- **Load is normalized against the live fleet mean**, `(load - mean) / max(1, mean)`, so both
+  terms of the score are dimensionless and beta carries no unit from the deployment. The old
+  formulation could not ship a default: an absolute in-flight count has no bounded scale, so a
+  fleet running 400 in-flight where ours ran 47 turns a beta tuned here into a penalty ~8.5x
+  larger than the entire [0,1] benefit term, and placement silently collapses to least-loaded
+  with the cache ignored - with nothing in the logs to announce it. This is the §4 "tunable
+  parameters exposed and documented" requirement and the upstream-merge path (§4 grade-100),
+  not a tidy-up.
+- **`DEFAULT_LOADAWARE_BETA = 1.0`**, read as "an endpoint 100% above fleet-average load
+  forfeits one full cache hit". No hardware, model, rate or fleet size in that sentence, which
+  is what makes it defensible without a probe.
+- **`load_gate.beta_from()` is deleted.** It solved `beta*delta_load = alpha*trigger` from ONE
+  probe's absolute concurrency, and the residual `trigger=0.5` was itself arbitrary. Evidence
+  it had to go: two probes at the same offered rate gave delta_load 39.46 and 14.69 (beta
+  0.013 and 0.034) because they caught the fleet at 39.5 vs 20.8 mean concurrency. Replaced by
+  `relative_imbalance()`, which **reports** the quantity the policy acts on instead of
+  calibrating a parameter from it.
+
+### Added
+- Evidence, computed from the committed prom scrapes - **no new cluster time**. Across the four
+  **untreated** rate-16 cells (probe A, probe B, `kvaware` n=20, `loadaware-b0` n=20) the
+  absolute calibration spans **2.69x** and the relative one **1.41x**; across the three cells at
+  comparable fleet load it spans **1.06x** (0.500 / 0.501 / 0.529). The residual is entirely
+  probe B, a 13-sample 66 s probe that caught the fleet at half the concurrency of the others.
+  Treated cells are excluded as circular - their imbalance is the residual *after* the policy
+  acted.
+- **The evening sweep's two optima both sit next to the new default**, via
+  `beta_rel = beta_abs * live_fleet_mean`: the TTFT optimum `beta_abs=0.034` (mean load
+  26.6-27.3) is **beta_rel 0.90-0.93**, and the ITL optimum `beta_abs=0.068` (mean load 19.65)
+  is **beta_rel 1.34**. So beta=1.0 lands between the two measured optima, and the published
+  n=20 headline was already run within ~8% of it. That is the confidence argument for the
+  rerun, and it is the reason the new grid is {0, 0.5, 1.0, 1.5} rather than a decade wide.
+- Router tests 56 → 60: scale invariance (same decision at 10x load), fleet-relative load at
+  n=4 engines, the near-idle clamp, and "there is no alpha". `test_load_gate.py` gains four
+  `relative_imbalance` cases. **120 tests pass.**
+- **A more transferable §5 statement**: treated cells sit at relative imbalance 0.069 / 0.122
+  against 0.47-0.50 untreated, i.e. the load term cuts relative imbalance **4-7x**.
+
+### Known gaps
+- **Untested above 2 engines in anger.** With n=2, `(load-mean)/mean` is ±r by construction and
+  only encodes which side of the mean an engine is on; larger fleets have real structure. Unit
+  tests cover n=4 on the pure `select_url` path, but no cluster has run it.
+- **The load SIGNAL is unchanged** - still a request count, not Dynamo's unique KV blocks. This
+  fixes the scale, not the deduplication. `docs/upstream-findings.md` Finding 5 stands as the
+  named next experiment.
+- **No runs yet.** The headline and grid must be re-measured at rate 16. `kvaware` and
+  `loadaware-b0` are unaffected (beta=0 zeroes the load term either way) and are NOT rerun.
+  Old runs stay in `results/` for the before/after comparison.
+- **The evening sweep's beta cells become historical.** Their beta values are in the old
+  absolute units and are only comparable to the new ones through the live-mean conversion
+  above, which holds at the mean and not per-decision (the router now recomputes the mean every
+  request). Reported as a conversion, never as a re-label.
+
 ## 2026-08-04 (evening) - Sweep complete: beta curve has an interior tradeoff
 
 ### Added

@@ -17,7 +17,7 @@ import json
 import pytest
 
 from analyze import seed_stats
-from load_gate import MIN_ASYMMETRY, _engine_series, beta_from, gate
+from load_gate import MIN_ASYMMETRY, _engine_series, gate, relative_imbalance
 
 # --------------------------------------------------------------------------
 # fixtures: a minimal run directory
@@ -203,23 +203,40 @@ def test_min_asymmetry_is_the_documented_threshold():
 # --------------------------------------------------------------------------
 
 
-def test_beta_triggers_diversion_at_the_intended_benefit_fraction():
-    """beta*delta_load == alpha*trigger, i.e. a diversion happens exactly when
-    `trigger` of a full cache hit is at stake."""
-    beta = beta_from(delta_load=20.0, alpha=1.0, trigger=0.5)
-    assert beta == pytest.approx(0.025)
-    assert beta * 20.0 == pytest.approx(1.0 * 0.5)
+def test_relative_imbalance_is_the_gap_as_a_fraction_of_the_fleet_mean():
+    """The quantity the policy acts on, and the one §5 reports."""
+    assert relative_imbalance(mean_busiest=48.0, mean_fleet=32.0) == pytest.approx(0.5)
+    assert relative_imbalance(mean_busiest=32.0, mean_fleet=32.0) == pytest.approx(0.0)
 
 
-def test_beta_scales_inversely_with_load_gap():
-    """The reason beta cannot be carried across rates: benefit is normalized to
-    [0,1] but load is a raw count, so doubling the gap halves beta."""
-    assert beta_from(40.0) == pytest.approx(beta_from(20.0) / 2)
+def test_relative_imbalance_is_invariant_to_the_absolute_load_level():
+    """Why it replaced `beta_from()`.
+
+    The old calibration read beta off the ABSOLUTE gap, so the same shape of
+    imbalance at a different concurrency produced a different beta: two probes
+    at the same offered rate gave delta_load 39.46 and 14.69, i.e. beta 0.013
+    and 0.034. Ten times the load with the same shape is the same imbalance.
+    """
+    assert relative_imbalance(48.0, 32.0) == pytest.approx(
+        relative_imbalance(480.0, 320.0)
+    )
 
 
-def test_beta_refuses_a_non_positive_gap():
-    with pytest.raises(ValueError):
-        beta_from(0.0)
+def test_relative_imbalance_of_a_dead_fleet_is_zero_not_a_division_error():
+    assert relative_imbalance(0.0, 0.0) == 0.0
+
+
+def test_the_gate_reports_relative_imbalance_alongside_the_absolute_gap(tmp_path):
+    """Both are emitted: the absolute number stays comparable with the older
+    runs in results/, the relative one is what the policy sees."""
+    run = _write_run(
+        tmp_path,
+        running={"engine-a": [(105.0, 48.0)], "engine-b": [(105.0, 16.0)]},
+    )
+    r = gate(run)
+    assert r["delta_load"] == pytest.approx(32.0)
+    assert r["mean_fleet"] == pytest.approx(32.0)
+    assert r["relative_imbalance"] == pytest.approx(0.5)
 
 
 # --------------------------------------------------------------------------

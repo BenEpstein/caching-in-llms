@@ -38,7 +38,7 @@ if [ $# -gt 0 ]; then RATES=("$@"); else RATES=(4 8 12 14 16 18 20); fi
 echo "==> deploying kvaware for the pilot"
 helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" \
   -f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml"
-oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_ALPHA- LOADAWARE_BETA-
+oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   "$BENCH_DIR/cold_start.sh"

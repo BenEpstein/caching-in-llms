@@ -38,13 +38,26 @@ counter can fire without harming anyone, whereas measured degradation cannot.
 
 The per-seed windowing is deliberately the same code path as
 `export_summary.per_seed_imbalance`: a mean taken over the raw dump would
-include warm-up and engine-restart time, diluting mean in-flight toward zero -
-and that number feeds the beta calibration directly, so a diluted delta yields a
-beta that is too large.
+include warm-up and engine-restart time, diluting mean in-flight toward zero,
+which biases both the reported imbalance and the degradation ratios.
+
+### This gate no longer sets beta (2026-08-04)
+
+It used to: `beta_from()` solved for beta from one probe's absolute in-flight
+count, and the sweep took the number it printed. That is gone, because beta is
+now dimensionless - the router normalizes load against the live fleet mean, so
+the same beta is the same policy at any rate, prompt length or fleet size. See
+`relative_imbalance()` for the failure that forced the change and
+`LoadAwareRouter` for the formulation.
+
+The gate's remaining job is unchanged and is the one it was written for: decide
+whether a rate produces load worth routing around. It now also reports the
+RELATIVE imbalance, which is what the policy acts on and the quantity §5
+should report.
 
 Usage:
   python3 load_gate.py results/probe/<ts>-kvaware [...]
-  python3 load_gate.py results/probe/* --alpha 1.0
+  python3 load_gate.py results/probe/*
 """
 
 from __future__ import annotations
@@ -173,14 +186,17 @@ def gate(run_dir: str) -> Dict:
     ) >= MIN_DEGRADATION
 
     asymmetric = asym >= MIN_ASYMMETRY
+    mean_fleet = sum(means.values()) / len(means)
     return {
         "run": run_dir,
         "rate": _rate(run_dir),
         "mean_busiest": means[busiest],
         "mean_idlest": means[idlest],
+        "mean_fleet": mean_fleet,
         "max_busiest": maxes[busiest],
         "asymmetry": asym,
         "delta_load": delta_load,
+        "relative_imbalance": relative_imbalance(means[busiest], mean_fleet),
         "waiting_p95": wait_p95,
         "preemptions": preempt_delta,
         "ttft_p95": ttft_p95,
@@ -206,32 +222,33 @@ def _rate(run_dir: str) -> Optional[float]:
     return json.load(open(path)).get("rate_req_s")
 
 
-def beta_from(delta_load: float, alpha: float = 1.0, trigger: float = 0.5) -> float:
-    """beta such that a diversion triggers at `trigger` of a full cache hit.
+def relative_imbalance(mean_busiest: float, mean_fleet: float) -> float:
+    """How far the busiest engine sits above the fleet mean, as a fraction.
 
-    score(i) = alpha*benefit(i) - beta*load(i), benefit in [0, 1]. A request is
-    diverted off its holder when the load gap outweighs the benefit gap:
+    This replaces the old `beta_from()` calibration, and the replacement is the
+    point rather than a tidy-up. That function solved `beta * delta_load =
+    alpha * trigger` for beta, i.e. it read beta off ONE probe's absolute
+    in-flight count - so beta could not be carried to another rate, another
+    workload or another cluster, and the router shipped a number that was only
+    ever true on the machine that measured it. Two probes at the same offered
+    rate demonstrated the failure directly: delta_load 39.46 and 14.69, i.e.
+    beta 0.013 and 0.034, a 2.6x disagreement about the same system.
 
-        beta * delta_load  =  alpha * trigger
-
-    `trigger=0.5` means "divert when at least half the prompt's cache benefit is
-    at stake", evaluated at the load asymmetry actually measured at this rate.
-
-    This is why beta cannot be carried over from another rate: benefit is
-    normalized to [0, 1] but load is a RAW in-flight count, so beta's meaning is
-    tied to absolute concurrency (a known limitation - see the report's
-    discussion of a relative-load formulation).
+    `loadaware` now normalizes load against the fleet mean inside the router,
+    so beta is dimensionless and needs no calibration at all - the default 1.0
+    means "100% above fleet-average load costs one full cache hit". What is
+    left to REPORT, not to calibrate, is the imbalance the policy is acting on,
+    which is this quantity. Measured over the four untreated rate-16 cells it
+    spans 0.353-0.500 where delta_load spans 14.69-39.46.
     """
-    if delta_load <= 0:
-        raise ValueError("delta_load must be positive - no asymmetry to calibrate against")
-    return alpha * trigger / delta_load
+    if mean_fleet <= 0:
+        return 0.0
+    return (mean_busiest - mean_fleet) / mean_fleet
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("run_dirs", nargs="+")
-    ap.add_argument("--alpha", type=float, default=1.0)
-    ap.add_argument("--trigger", type=float, default=0.5)
     a = ap.parse_args()
 
     results = [gate(d) for d in a.run_dirs]
@@ -246,7 +263,10 @@ def main() -> int:
               f"   (max busiest {r['max_busiest']:.0f})")
         print(f"   asymmetry         {r['asymmetry']:.2f}x   "
               f"{'OK' if r['asymmetric'] else f'FAIL (< {MIN_ASYMMETRY})'}")
-        print(f"   delta_load        {r['delta_load']:.2f} requests")
+        print(f"   delta_load        {r['delta_load']:.2f} requests "
+              f"(absolute - reported, no longer calibrated on)")
+        print(f"   rel. imbalance    {r['relative_imbalance']:+.3f} "
+              f"(busiest vs fleet mean {r['mean_fleet']:.2f} - this is what beta acts on)")
         print(f"   waiting p95       {r['waiting_p95']:.2f}   preemptions {r['preemptions']:.0f}"
               f"   (both structurally 0 here - compute-bound, see module docstring)")
         if not r["measurable"]:
@@ -260,8 +280,6 @@ def main() -> int:
         print(f"   degraded          {'OK' if r['degraded'] else f'FAIL (< {MIN_DEGRADATION}x idle)'}")
         print(f"   GATE              {'PASS' if r['pass'] else 'FAIL'}")
         if r["pass"]:
-            print(f"   -> beta           {beta_from(r['delta_load'], a.alpha, a.trigger):.4f}"
-                  f"   (alpha={a.alpha}, trigger={a.trigger})")
             passing.append(r)
 
     if not passing:
@@ -270,10 +288,13 @@ def main() -> int:
         return 1
 
     best = min(passing, key=lambda r: r["rate"] if r["rate"] is not None else float("inf"))
-    beta = beta_from(best["delta_load"], a.alpha, a.trigger)
     print(f"\n==> lowest passing rate: {best['rate']}  "
-          f"(asymmetry {best['asymmetry']:.2f}x, delta_load {best['delta_load']:.2f})")
-    print(f"==> BETA_HEADLINE={beta:.3g}  BETA_HIGH={2 * beta:.3g}")
+          f"(asymmetry {best['asymmetry']:.2f}x, relative imbalance "
+          f"{best['relative_imbalance']:+.3f})")
+    print("==> beta is NOT read off this probe. It is dimensionless since the "
+          "router normalizes load against the fleet mean, so the sweep runs a "
+          "fixed grid around the documented default:")
+    print("==>   BETA_HEADLINE=1.0   BETA_HIGH=2.0   (grid: 0, 0.25, 0.5, 1.0, 2.0)")
     return 0
 
 

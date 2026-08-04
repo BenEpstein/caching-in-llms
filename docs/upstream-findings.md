@@ -223,12 +223,23 @@ Three differences that matter to us, in descending order:
    systematic bias toward one engine whenever benefit ties - the likely mechanism behind
    `loadaware-b0`'s imbalance of 3.1–5.2.
 
-Units also differ: their terms are all blocks, so `prefill_load_scale = overlap_score_credit = 1.0`
-are meaningful defaults; our score adds a fraction in [0,1] to a request count, so β is an exchange
-rate that has to be swept. Converting β to their axis needs the blocks-per-in-flight-request factor,
-which prefix dedup makes workload- and rate-dependent (0.69 at 10.5 req/s, 0.45 at 7.5), so the two
-parameterizations are **not** related by a constant. Under that approximation their default sits near
-β ≈ 0.45–0.7, past the optimum our sweep found (`fig7-beta-tradeoff.png`).
+Units differ, and this is the difference we acted on. Their terms are all blocks, so
+`prefill_load_scale = overlap_score_credit = 1.0` are meaningful defaults. Our score originally
+added a fraction in [0,1] to a raw request count, so β was an exchange rate with no bounded scale:
+it had to be re-derived per operating point, and two probes at the same rate disagreed by 2.6x
+(β 0.013 vs 0.034). **Amended 2026-08-04:** `loadaware` now normalizes load against the live fleet
+mean, `(load − mean) / max(1, mean)`, so both terms are dimensionless and β = 1.0 is a shippable
+default meaning "100% above fleet-average load costs one full cache hit". Measured over the four
+untreated rate-16 cells, that parameterization spans 1.41x where the absolute one spans 2.69x, and
+1.06x across the three cells at comparable fleet load.
+
+This closes the *scale* gap with Dynamo but not the *signal* gap: their load term counts unique KV
+blocks, ours counts requests. Converting β to their axis still needs the blocks-per-in-flight-request
+factor, which prefix dedup makes workload-dependent (0.69 at 10.5 req/s, 0.45 at 7.5), so the two
+are **not** related by a constant. Under that approximation their default sits near β ≈ 0.5 on our
+old axis, past the optimum our sweep found (`fig7-beta-tradeoff.png`) - a measured result about
+where block-denominated load overcharges, not a defect in the policy. See the Discussion paragraph
+below, which is unaffected: it is about deduplication, which remains future work.
 
 ### Drop-in Discussion paragraph (§6)
 

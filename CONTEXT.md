@@ -20,7 +20,8 @@ words with exactly these meanings. Implementation details live elsewhere.
   requests); the quantity kvaware ignores.
 - **Placement Policy** — the router's rule for choosing an instance. `kvaware` = baseline
   placement policy (pure cache-hit benefit, first-match). **`loadaware`** = our enhanced
-  placement policy: `α·cache_hit_benefit − β·load_penalty`. Framing rule: this is
+  placement policy: `cache_hit_benefit − β·relative_load`, where relative_load is the
+  engine's in-flight count as a signed fraction of the fleet mean. Framing rule: this is
   *KV-cache-aware request placement*, never headlined "load balancing".
 - **Lookup Extension** — extending the Controller's lookup from "first instance holding
   the prefix" to per-instance match info for all instances. Core infrastructure for any

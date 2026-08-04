@@ -81,7 +81,7 @@ def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
         lo, hi = min(ttft_p95s(c)), max(ttft_p95s(c))
         ax.axhspan(lo, hi, color=color, alpha=0.08, zorder=0)
 
-    ax.set_xlabel(r"$\beta$  (load weight; $\alpha$ fixed at 1.0)")
+    ax.set_xlabel(r"$\beta$  (load weight; full cache hits per 100% above fleet-mean load)")
     ax.set_ylabel("TTFT p95 (s)")
     # seed counts differ by cell (headline pair 10, sweep cells 3) - state the
     # range rather than a number that is wrong for half the points
@@ -207,7 +207,7 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
 
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     ax.plot(betas, hit, "o-", color="tab:green", lw=2, label="prefix cache hit rate")
-    ax.set_xlabel(r"$\beta$  (load weight; $\alpha$ fixed at 1.0)")
+    ax.set_xlabel(r"$\beta$  (load weight; full cache hits per 100% above fleet-mean load)")
     ax.set_ylabel("vLLM prefix cache hit rate", color="tab:green")
     ax.tick_params(axis="y", labelcolor="tab:green")
     ax.set_ylim(0.6, 1.0)
@@ -231,10 +231,13 @@ def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
     opposite slope, which is why it is worth a figure of its own.
 
     `cand` MUST be passed or inferred; it used to default to the literal
-    "loadaware-b0.1" and return silently when that cell was absent. Since beta is
-    now calibrated per-rate (0.034 at rate 16), that default would have produced
-    no headline figure at all, with no error - the caller would have shipped a
-    figure set quietly missing its centerpiece. Absent a match, raise.
+    "loadaware-b0.1" and return silently when that cell was absent. A hard-coded
+    beta cell had already gone stale once (the pre-2026-08-04 per-rate
+    calibration produced "loadaware-b0.034"), and the failure mode was silent:
+    no headline figure at all, no error, a figure set quietly missing its
+    centerpiece. beta is a fixed grid again now that it is dimensionless, but
+    the inference stays - a default that can silently match nothing is the
+    defect, not the particular value. Absent a match, raise.
     """
     if cand is None:
         loadaware = [x["cell"] for x in cells

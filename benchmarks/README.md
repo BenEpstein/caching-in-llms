@@ -5,7 +5,7 @@
 
 Measures **client-observed** latency for the routing-policy comparison on the gapu-2
 cluster (2×A10, vLLM Production Stack + LMCache). Pre-registered headline: *loadaware as
-shipped (α=1.0, β=0.1) reduces TTFT p95 vs kvaware* under a Zipfian shared-prefix
+shipped (β=1.0) reduces TTFT p95 vs kvaware* under a Zipfian shared-prefix
 workload at fixed load.
 
 ## Layout
@@ -40,10 +40,10 @@ every cell:
 
 | Cell | Arm | Router image |
 |---|---|---|
-| `loadaware-b0` | loadaware α=1.0 β=0 (cache-only ablation) | CI-built, SHA-tagged |
-| `loadaware-b0.1` | loadaware α=1.0 β=0.1 (**shipped defaults - headline**) | CI-built, SHA-tagged |
-| `loadaware-b0.5` | loadaware α=1.0 β=0.5 | CI-built, SHA-tagged |
-| `loadaware-b1.0` | loadaware α=1.0 β=1.0 | CI-built, SHA-tagged |
+| `loadaware-b0` | loadaware β=0 (cache-only ablation) | CI-built, SHA-tagged |
+| `loadaware-b0.25` | loadaware β=0.25 | CI-built, SHA-tagged |
+| `loadaware-b1.0` | loadaware β=1.0 (**shipped default - headline**) | CI-built, SHA-tagged |
+| `loadaware-b4.0` | loadaware β=4.0 | CI-built, SHA-tagged |
 | `kvaware` | baseline (headline comparator) | pinned stock |
 | `roundrobin` | baseline | pinned stock |
 
@@ -69,7 +69,7 @@ python3 benchmarks/analyze.py compare results/<...loadaware-b0.1> results/<...kv
 
 Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values (chart
 **pinned to 0.1.11** - the installed version; 0.1.12+ has schema drift) → dev-overlay
-check (a mounted `router-patch` ConfigMap is auto-reverted - validity rule 2) → α/β via
+check (a mounted `router-patch` ConfigMap is auto-reverted - validity rule 2) → β via
 `oc set env` (chart 0.1.11 ignores `routerSpec.env`; baselines get the vars *removed* so
 a stale β can't leak through the three-way merge) → router-Service controller-port patch
 (deploy/README gotcha #0) → **router image asserted against the cell's label** (validity
@@ -92,7 +92,7 @@ results/<ts>-<cell>/
   prom/*.json               vllm:num_requests_running/waiting, request_queue_time, kv_cache_usage,
                             lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution
   dcgm.csv                  GPU_UTIL / POWER_USAGE / MEM_COPY_UTIL per GPU, ~5 s samples
-  run.json                  arm, α/β, rate, image + imageID, git commit, workload manifest, window
+  run.json                  arm, β, rate, image + imageID, git commit, workload manifest, window
 ```
 
 `analyze.py compare` refuses to pair two runs whose `run.json` rate or workload manifest
@@ -106,7 +106,7 @@ artifacts are **force-added** to git (`git add -f`, rather than punching holes i
 
 | Committed | Why |
 |---|---|
-| `results/<run>/run.json` | arm, α/β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
+| `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
 | `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
 
 Between them a reader can reproduce every figure, every percentile, and both co-primary
@@ -138,7 +138,7 @@ router overhead). Router `gpu_prefix_cache_*` gauges are dead (0.0) in this buil
 
 1. Error requests are **excluded from latency stats but counted**; a seed with **> 1%
    errors invalidates the run** (`analyze.py validate` enforces this).
-2. Wrong image/config state (unexpected router image, patch overlay mounted, α/β not as
+2. Wrong image/config state (unexpected router image, patch overlay mounted, β not as
    labeled) = **discard the run, never "correct" it**. `run.json` records image + imageID
    for the audit.
 3. A run without a passing registry probe + warm-up gate is not a measurement (#13:
