@@ -43,6 +43,24 @@ METRICS = [
     # saturate regardless of routing, so they cannot stand in for these.
     "vllm:prefix_cache_queries_total",
     "vllm:prefix_cache_hits_total",
+    # ENGINE-SIDE latency (added 2026-08-04). The driver's ttft_s is measured
+    # client-side with perf_counter, so it carries the laptop->cluster network
+    # round trip. That link is a WAN: measured RTT min 18.7 / avg 44.4 / max
+    # 132 ms, stddev 39.7 ms, and it degraded ~220 ms over the evening of
+    # 2026-08-04. The effect is a CONSTANT offset per request, which is why it
+    # shifted client TTFT ~55% while leaving ITL untouched (a constant cancels
+    # in a difference between consecutive chunk arrivals) and E2E nearly
+    # untouched (~6 s of decode dominates it). Over the same period these
+    # engine-side series were flat: 0.168 -> 0.180 s.
+    #
+    # These are therefore the TTFT of record for any cross-cell comparison.
+    # The client-side number stays in the CSVs as the user-observed latency,
+    # but it must not be used to compare arms measured at different times.
+    "vllm:time_to_first_token_seconds_bucket",
+    "vllm:time_to_first_token_seconds_sum",
+    "vllm:time_to_first_token_seconds_count",
+    "vllm:request_prefill_time_seconds_sum",
+    "vllm:request_prefill_time_seconds_count",
     "lmcache:num_hit_tokens_total",
     "lmcache:lookup_hit_rate",
     # request_cache_hit_rate is a HISTOGRAM in this lmcache build (verified on
