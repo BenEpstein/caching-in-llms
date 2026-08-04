@@ -1,8 +1,16 @@
 """Materialize + verify the frozen benchmark workloads (methodology, issue #3).
 
-The methodology fixes ONE dataset: a 128-prefix x 2048-token Zipfian pool
-(s=0.9, pool_seed=42), replayed as up to 10 seeds x 500 requests (cells replay
-a prefix of that seed list - see run_sweep.sh). The JSONL files are
+The methodology fixes ONE dataset: a 128-prefix Zipfian pool (s=0.9,
+pool_seed=42), replayed as up to 20 seeds x 500 requests (cells replay
+a prefix of that seed list - see run_sweep.sh).
+
+`prefix_tokens=2048` below is the generator's REQUEST, not the result: `_filler`
+emits `approx_tokens * 0.75` words, so the shared prefix is **1544 tokens** and
+the full prompt (ISL) is **1578**, verified against the engine's /tokenize
+endpoint and against `usage.prompt_tokens` on every recorded request. The knob
+keeps its name so the frozen manifest's checksums stay valid; report 1544/1578.
+
+The JSONL files are
 ~6 MB each, so they are NOT committed; what is committed is `workloads/manifest.json`
 holding the exact config + a SHA-256 per seed file. Generation is deterministic,
 so regenerate-and-verify gives bit-identical frozen workloads on any machine - the runner (`run_cell.sh`) calls this before every cell and refuses to measure

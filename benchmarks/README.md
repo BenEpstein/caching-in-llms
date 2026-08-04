@@ -25,8 +25,25 @@ workload at fixed load.
 
 ## The frozen workload
 
-ONE dataset (issue #3): 20 prefixes × 2048 tokens (+32-token unique suffix), Zipf s=1.2
-(`pool_seed=42`), replayed as **6 seeds × 500 requests**. Seeds share the prefix pool and
+ONE dataset (issue #3, as amended): **128 prefixes**, Zipf **s=0.9** (`pool_seed=42`),
+replayed as **20 seeds × 500 requests**.
+
+Sequence lengths, **measured on the engine's own tokenizer** rather than taken from the
+config, because the generator's knobs are approximate: `_filler` emits `approx_tokens *
+0.75` words, so `prefix_tokens: 2048` yields a **1544-token** shared prefix, not 2048.
+
+| | tokens | source |
+|---|---|---|
+| shared prefix (cacheable) | **1544** | `/tokenize` on the prefix substring |
+| unique suffix | **34** | difference |
+| **ISL** (full prompt) | **1578** | `/tokenize`, and `usage.prompt_tokens` on every request |
+| **OSL** | **64** | `--max-tokens 64` with `ignore_eos: true`, so it is exact |
+
+ISL is constant across every request in every seed (min = median = max = 1578), so prompt
+length can never confound an arm. 97.8% of each prompt is cacheable. Quote these numbers,
+not the config knobs.
+
+Seeds share the prefix pool and
 vary only sampling order + suffixes, so one warm-up covers every seed. The JSONL files
 (~6 MB each) are not committed; `workloads/manifest.json` **is** - it pins the exact
 config + SHA-256 per seed file, and generation is deterministic, so

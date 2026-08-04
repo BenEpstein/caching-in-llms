@@ -8,6 +8,73 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 (night, later) - TTFT measures the WAN, not the system under test
+
+### Decided
+- **The driver's client-side `ttft_s` is not comparable across cells run at different times,
+  and the TTFT co-primary is contaminated for every run in the project.** `load_driver.py`
+  measures with `perf_counter` from send to first chunk, over the laptop->cluster link. That
+  link is a WAN: RTT min 18.7 / avg 44.4 / max 132 ms, stddev 39.7 ms. Over the evening of
+  2026-08-04 non-engine overhead went 258 -> 478 ms while **engine-side TTFT stayed flat**
+  (0.168 -> 0.180 s). Evidence it is a constant per-request offset and not the policy: client
+  TTFT rose uniformly including **p10 (2.0x)** - a floor shift, where a policy or GPU effect
+  moves the tail - while ITL was untouched (a constant cancels in a difference between
+  consecutive chunk arrivals) and E2E nearly untouched (~6 s of decode dominates).
+  Ruled out first, verified not assumed: dataset (manifest byte-identical, 20/20 sha256),
+  recording code (`load_driver`/`workload_gen`/`freeze_workloads`/`warmup`/`collectors`
+  byte-identical), requests actually sent (`prefix_id` and `prompt_tokens` identical, schedule
+  within 20 ms), engine (queue 0.01 ms, 0 preemptions, KV usage down, hit rate up), router
+  (RSS/CPU flat, restarts every cell).
+- **Load imbalance is derived from Prometheus, server-side, and is therefore immune.** This is
+  now a mechanism rather than an observation, and it explains why imbalance reached p<0.0001
+  while TTFT was a null in every sweep the project has run.
+- **The metric of record is an open question, deferred to Ben.** Options and the per-seed
+  windowing unlock that preserves the paired design are in
+  `docs/handoffs/feat-relative-load-normalization.md`.
+
+### Added
+- **Engine-side TTFT collected from now on** (`prom_dump.METRICS`) and **backfilled into all 10
+  rate-16 cells** from live retention. Prometheus storage is an `emptyDir`, so this was hours
+  from unrecoverable. Engine-side p95: the two `b0.034` replicates 13 h apart agree to **1.8%**
+  (0.336 / 0.342) where the client-side comparison across the same gap was off by 76% *with the
+  sign inverted*.
+- **Four cells at rate 16**, all valid: `loadaware-b1.0` n=20, `b0.5` n=3, `b0.25` n=3, and a
+  `kvaware` n=3 **drift control** - the control is what exposed all of the above.
+
+### Fixed
+- **The prefix is 1544 tokens, not 2048, and ISL is 1578.** `workload_gen._filler` emits
+  `approx_tokens * 0.75` words, so the `prefix_tokens: 2048` knob is a request to the
+  generator and not its output. Verified two ways: the engine's `/tokenize` endpoint on the
+  prefix substring (1544) and on the full prompt (1578), and `usage.prompt_tokens` on every
+  recorded request (1578, min = median = max). "A misrouted request pays a full 2048-token
+  prefill" appears in earlier entries and in `docs/handoffs/` - it is ~31% too large; the
+  mechanism is unaffected but the number is wrong. `benchmarks/README.md` (which was also
+  still claiming 20 prefixes and s=1.2) and `freeze_workloads.py` now carry the measured
+  values. The knob keeps its name so the frozen manifest's checksums stay valid.
+- **Which hit counter means what, settled by measurement.**
+  `vllm:prefix_cache_{hits,queries}_total` count **TOKENS, not blocks** - queries/request is
+  1573.8, tracking ISL 1578. Engine-side reuse on the `kvaware` n=20 cell is therefore
+  **1435 of 1578 tokens per request (90.9%)**, or 92.9% of the 1544-token shared prefix.
+  `lmcache:num_hit_tokens_total` is a **different tier** (CPU offload) and reads ~99
+  tokens/request because KV never became scarce; it is not the cache-hit quantity and must
+  not stand in for it.
+- **Known gap: the router's `matched_tokens` is not recorded anywhere.** It is the actual
+  input to `score_endpoint`, arrives via the Controller's `layout_info`, and surfaces only in
+  a `logger.debug` while the deployment runs `logLevel: INFO`. So the realized ceiling of the
+  benefit term is **unverified** - an earlier claim in this session that it caps at 0.973 was
+  chunk arithmetic, not measurement, and is retracted. Evidence points the other way: the
+  smoke test in `docs/handoff-core-implementation.md` got a **2048-token match on a
+  ~2000-token prompt**, i.e. longer than the prompt, which is why `score_endpoint` has a
+  `min()` guard. Difference is <=2.7% on the crossover either way, well under run-to-run
+  noise, so it does not justify regenerating the frozen dataset. Documented in
+  `LoadAwareRouter.score_endpoint`; resolving it needs a live probe with router debug logging.
+- Two conclusions issued earlier this session and then withdrawn, both from cross-time
+  comparisons: "beta=1.0 over-diverts and costs TTFT" and "the relative formulation costs
+  double the cache hits". Neither survives the control. **Do not reinstate without re-deriving
+  on the engine-side metric.**
+- The 400-in-flight worked example conflated the load ratio (400/47 = 8.5) with the
+  penalty-to-benefit ratio (0.034 x 400 = 13.6 against a benefit capped at 1.0).
+
 ## 2026-08-04 (night) - beta is dimensionless: load normalized against the fleet mean
 
 Branch `feat/relative-load-normalization`, off `feat/evaluation-runs`. Code + docs only,

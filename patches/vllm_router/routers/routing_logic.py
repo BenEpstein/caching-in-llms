@@ -563,6 +563,38 @@ class LoadAwareRouter(KvawareRouter):
         property of the parameterization. Larger fleets dilute the gap; the
         per-endpoint reading in the module-level default is the one that
         generalizes.
+
+        **What the benefit term actually ranges over (measured 2026-08-04).**
+        The workload's ISL is 1578 tokens, of which 1544 are the shared
+        cacheable prefix and 34 a unique suffix - measured on the engine's
+        `/tokenize`, not read off `workload_gen`'s `prefix_tokens: 2048`, which
+        is a request to the generator (`_filler` emits `approx_tokens * 0.75`
+        words) and not its output. Engine-side, vLLM's HBM prefix cache served
+        **1435 of 1578 tokens per request** (90.9%) over the `kvaware` n=20
+        cell - `vllm:prefix_cache_{hits,queries}_total` count TOKENS, not
+        blocks, which is confirmable from queries/request = 1573.8 tracking ISL.
+        (`lmcache:num_hit_tokens_total` is a different tier - CPU offload - and
+        reads ~99 tokens/request because KV never became scarce. It is not this
+        number and must not be substituted for it.)
+
+        **`matched_tokens` itself is NOT recorded anywhere**, which is a gap
+        worth naming rather than papering over: it reaches this function from
+        the Controller's `layout_info`, and the only place it surfaces is the
+        `logger.debug` below, while the deployment runs at `logLevel: INFO`.
+        So the realized ceiling of `benefit` is unverified. Do not quote one.
+
+        The open question that ceiling turns on is whether `layout_info` rounds
+        a match UP to the 256-token LMCache chunk boundary or truncates DOWN.
+        1544 tokens is 6.03 chunks: truncating gives 1536 (benefit caps at
+        0.973), rounding up gives 1792 (`min()` clamps it, benefit reaches
+        1.0). The evidence points to rounding up - the smoke test in
+        docs/handoff-core-implementation.md sent a ~2000-token prompt and got a
+        2048-token match, i.e. a match LONGER than the prompt, which is the
+        whole reason the `min()` guard below exists. Not yet confirmed on this
+        workload; measuring it needs a live probe with router debug logging.
+        Either way the difference is <=2.7% on the crossover, far under this
+        cluster's run-to-run noise, so it is a documentation defect and not a
+        reason to touch the frozen dataset.
         """
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
         return benefit - self.beta * relative_load
