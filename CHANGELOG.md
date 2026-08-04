@@ -13,7 +13,24 @@ with a pointer to the evidence — those matter as much as code.
   and the `prom/*.json` scrapes for every run, so a collaborator or grader can inspect the
   evidence behind every figure without rerunning the cluster.
 
+- **Finding 5 in `docs/upstream-findings.md`** - our load term vs NVIDIA Dynamo's KV-router,
+  with a drop-in §6 Discussion paragraph. Measured the prefix-dedup factor in our own workload
+  (0.69 at 10.5 req/s, 0.45 at 7.5) by reconstructing the in-flight set from the driver CSVs.
+
 ### Decided
+- **Do not adopt Dynamo-style deduplicated-block load accounting; document it as a limitation.**
+  It needs per-worker block tracking plus a completion hook (i.e. patching `request.py`), which
+  invalidates every run in `results/`, and the headroom is ~9% on imbalance and ~5% on hit rate
+  since neither ever became scarce (KV usage max 33%, `num_requests_waiting` 0, round-robin ties
+  the cache-aware arms at 0.95 hit rate). Revisit only under a cache-scarcity rerun
+  (`benchmarks/scarcity_gate.sh`). Evidence: `docs/upstream-findings.md` Finding 5.
+- **Accept the router's leaked `in_prefill` counters in the committed runs.** 39 backend
+  disconnects (`results/router-errors.log`) hit a path where `on_request_complete` is skipped, so
+  the router's own in-flight gauge drifts +4 to +7 on one engine over a run (floor of
+  `vllm:num_requests_running{job="router"}` minus the engine gauge). Bias runs *against* the
+  extension, is ~10x smaller than the reported imbalance effect, and the zero-failure cell
+  `20260803-163350-loadaware-b0.1` reproduces the result. Fix upstream (`on_request_complete` into
+  a `finally`) only if we rerun above the knee.
 - **Commit raw run artifacts, keep frozen workloads out.** `.gitignore` now ignores only
   `results/**/*.jsonl` - the 2.5 MB `rate-pilot/pilot-seed999.jsonl` is regenerable from
   `benchmarks/workloads/manifest.json`, which is the existing checksum-manifest policy for
