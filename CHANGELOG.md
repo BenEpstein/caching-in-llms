@@ -21,9 +21,10 @@ no runs yet. Builds directly on the evening sweep below.
 - **Load is normalized against the live fleet mean**, `(load - mean) / max(1, mean)`, so both
   terms of the score are dimensionless and beta carries no unit from the deployment. The old
   formulation could not ship a default: an absolute in-flight count has no bounded scale, so a
-  fleet running 400 in-flight where ours ran 47 turns a beta tuned here into a penalty ~8.5x
-  larger than the entire [0,1] benefit term, and placement silently collapses to least-loaded
-  with the cache ignored - with nothing in the logs to announce it. This is the §4 "tunable
+  beta of 0.034, tuned where the busiest engine ran ~47 in-flight, yields a penalty of **13.6**
+  on a fleet running 400 - against a benefit term capped at 1.0, so the cache stops mattering
+  and placement silently collapses to least-loaded, with nothing in the logs to announce it.
+  This is the §4 "tunable
   parameters exposed and documented" requirement and the upstream-merge path (§4 grade-100),
   not a tidy-up.
 - **`DEFAULT_LOADAWARE_BETA = 1.0`**, read as "an endpoint 100% above fleet-average load

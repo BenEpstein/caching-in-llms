@@ -457,10 +457,12 @@ class LoadAwareRouter(KvawareRouter):
     2. **Load is normalized too**, against the fleet's own mean, and this is
        what lets a single beta ship. An absolute in-flight count has no bounded
        scale: it depends on request rate, prompt length and GPU, so the same
-       beta is a different policy on every deployment. Concretely, a fleet
-       running 400 in-flight requests where ours ran 47 turns a beta tuned here
-       into a penalty ~8.5x larger than the entire [0, 1] benefit term, and
-       placement silently collapses to least-loaded with the cache ignored - a failure with nothing in the logs to announce it. Measured on this
+       beta is a different policy on every deployment. Concretely: this
+       project's beta of 0.034 was tuned where the busiest engine ran ~47
+       in-flight. On a fleet running 400 it yields a load penalty of 13.6
+       against a benefit term that is capped at 1.0, so the cache stops
+       mattering entirely and placement silently collapses to least-loaded -
+       a failure with nothing in the logs to announce it. Measured on this
        project's own runs: across four untreated rate-16 cells the absolute
        calibration spans 2.69x while the relative one spans 1.41x, and across
        the three cells at comparable fleet load it spans **1.06x** (0.500,
