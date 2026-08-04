@@ -83,6 +83,13 @@ def seed_stats(csv_path: str) -> Dict:
     comp_tokens = sum(int(r["completion_tokens"] or 0) for r in ok)
     s = {
         "file": os.path.basename(csv_path),
+        # The seed number is carried, never inferred from list position. It used
+        # to be: read_run sorted the glob LEXICOGRAPHICALLY (seed10 before seed2)
+        # while callers labelled rows with enumerate(), so every printed and
+        # plotted "seed N" above N=1 named the wrong seed. Pairing was unaffected
+        # - both arms were mis-ordered identically - so the statistics were right
+        # and only the labels lied, which is the hard kind of bug to notice.
+        "seed": seed_id(csv_path),
         "n": len(rows),
         "ok": len(ok),
         "errors": len(rows) - len(ok),
@@ -101,12 +108,34 @@ def seed_stats(csv_path: str) -> Dict:
     return s
 
 
+def seed_id(csv_path: str):
+    """Seed number from a driver CSV path: driver-seed13.csv -> 13.
+
+    None when the name carries no digits. seed_stats is also used on ad-hoc CSVs
+    (tests, one-off probes) whose names encode no seed, and those must not crash
+    - but read_run, which pairs arms by seed, refuses such a file outright.
+    """
+    digits = "".join(c for c in os.path.basename(csv_path) if c.isdigit())
+    return int(digits) if digits else None
+
+
 def read_run(run_dir: str) -> List[Dict]:
-    """Seed stats for every driver CSV in a run dir, ordered by seed number."""
-    paths = sorted(glob.glob(os.path.join(run_dir, "driver-seed*.csv")))
+    """Seed stats for every driver CSV in a run dir, ordered by seed NUMBER.
+
+    Sorted numerically, not lexicographically: a plain sorted(glob) yields
+    seed1, seed10, seed11 ... seed2, seed20, which made list position and seed
+    number diverge everywhere downstream.
+    """
+    paths = glob.glob(os.path.join(run_dir, "driver-seed*.csv"))
     if not paths:
         raise SystemExit(f"no driver-seed*.csv in {run_dir}")
-    return [seed_stats(p) for p in paths]
+    unnumbered = [p for p in paths if seed_id(p) is None]
+    if unnumbered:
+        raise SystemExit(
+            f"cannot read seed numbers from {sorted(unnumbered)} - "
+            "paired analysis needs every driver CSV to name its seed"
+        )
+    return [seed_stats(p) for p in sorted(paths, key=seed_id)]
 
 
 def flagged_seeds(seeds: List[Dict]) -> List[str]:
@@ -249,8 +278,20 @@ def check_comparable(cand_dir: str, base_dir: str) -> None:
 def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
     check_comparable(cand_dir, base_dir)
     cand, base = read_run(cand_dir), read_run(base_dir)
-    if len(cand) != len(base):
-        raise SystemExit(f"seed count mismatch: {len(cand)} vs {len(base)}")
+    # Match on the seed SET, not just its size. Equal counts do not imply equal
+    # seeds - two cells could each hold 20 CSVs drawn from different seeds and
+    # zip() would pair them silently, which is a wrong paired test that reports
+    # a clean p-value. The whole method rests on comparing like with like.
+    cand_seeds = [s["seed"] for s in cand]
+    base_seeds = [s["seed"] for s in base]
+    if cand_seeds != base_seeds:
+        only_c = sorted(set(cand_seeds) - set(base_seeds))
+        only_b = sorted(set(base_seeds) - set(cand_seeds))
+        raise SystemExit(
+            f"seed mismatch: {len(cand)} vs {len(base)} seeds; "
+            f"only in candidate {only_c or 'none'}, only in baseline {only_b or 'none'} "
+            "- a paired test requires the same seeds in both arms"
+        )
     bad = invalid_seeds(cand) + invalid_seeds(base)
     if bad:
         for problem in bad:
@@ -279,8 +320,8 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
     test = wilcoxon_exact_one_sided(diffs)
     effect = bootstrap_ci_median_rel_reduction(c, b)
     print(f"metric: {metric}   candidate: {cand_dir}   baseline: {base_dir}")
-    for i, (ci, bi) in enumerate(zip(c, b), 1):
-        print(f"  seed {i}: {ci:.4f} vs {bi:.4f}  (Δ {ci - bi:+.4f})")
+    for sid, ci, bi in zip(cand_seeds, c, b):
+        print(f"  seed {sid}: {ci:.4f} vs {bi:.4f}  (Δ {ci - bi:+.4f})")
     print(
         f"Wilcoxon signed-rank (one-sided, exact): W+={test['w_plus']:.1f} "
         f"n={test['n']} p={test['p']:.4f} "

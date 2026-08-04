@@ -91,7 +91,7 @@ def main() -> None:
         run = json.load(open(manifest_path))
         imb = per_seed_imbalance(run_dir)
         for s in read_run(run_dir):
-            seed = int("".join(c for c in s["file"] if c.isdigit()))
+            seed = s["seed"]
             rows.append({
                 "run": os.path.basename(run_dir.rstrip("/")),
                 "cell": run["cell"], "arm": run["arm"],

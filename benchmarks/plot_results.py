@@ -247,14 +247,23 @@ def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
             f"{[x['cell'] for x in cells]}"
         )
     cs, bs = ttft_p95s(c), ttft_p95s(b)
+    # Label with the carried seed number, never with enumerate() position - see
+    # analyze.seed_stats. The two diverged, so this figure named the wrong seed
+    # on every point but the first, and a mislabelled figure ships into the report.
+    seeds = [s["seed"] for s in c["seeds"]]
+    if seeds != [s["seed"] for s in b["seeds"]]:
+        raise SystemExit(
+            f"fig_paired: arms hold different seeds - candidate {seeds}, "
+            f"baseline {[s['seed'] for s in b['seeds']]}; a paired figure is meaningless"
+        )
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
-    for i, (bv, cv) in enumerate(zip(bs, cs), start=1):
+    for sid, bv, cv in zip(seeds, bs, cs):
         improved = cv < bv
         ax.plot([0, 1], [bv, cv], "o-",
                 color="tab:blue" if improved else "tab:red",
                 alpha=0.85, lw=1.6, zorder=2)
-        ax.annotate(f"seed {i}", (1, cv), textcoords="offset points",
+        ax.annotate(f"seed {sid}", (1, cv), textcoords="offset points",
                     xytext=(6, 0), fontsize=7, va="center",
                     color="tab:blue" if improved else "tab:red")
     ax.set_xticks([0, 1])

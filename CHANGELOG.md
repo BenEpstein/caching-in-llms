@@ -8,6 +8,45 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-04 (later) - Headline + ablation measured; seed labels were lying
+
+### Added
+- **`kvaware` n=20 at rate 16** (`results/20260804-151901-kvaware`) - the comparator the
+  sweep had been missing. Pooled error 0.56%, all validity rules pass.
+- **`loadaware-b0` n=20 at rate 16** (`results/20260804-155356-loadaware-b0`) - the ablation.
+- `results/summary-per-seed.csv` regenerated: 154 seed rows across 17 cells.
+
+### Decided
+- **The load term is the mechanism, not the routing implementation.** Median load imbalance:
+  `kvaware` 2.680, `loadaware` beta=0 **2.646** (p=0.2979, 9/20 - indistinguishable from the
+  baseline), `loadaware` beta=0.034 **1.296**. Latency agrees: beta=0 vs kvaware is p=0.8529
+  on TTFT p95 and p=0.4927 on ITL p95. Turning beta on produces the entire effect. This was
+  pre-declared as falsifiable - a beta=0 result near 1.30 would have voided the headline.
+- **Pre-registered headline (issue #3 comment, posted before the comparator ran):** load
+  imbalance **-48.3%, p<0.0001, 19/20 seeds**, replicated across both candidate cells
+  (-52.7% against the 00:29 cell). **TTFT p95 is a null** (p=0.1305, median -8.2%, CI spans
+  zero). Co-primary threshold 0.025 (Bonferroni over 2).
+- **`itl_p95` stays a SECONDARY and is not promoted.** It is nominally significant against
+  kvaware (p=0.0291) and against beta=0 (p=0.0060, CI [0.5%, 34.1%]), but it crosses the
+  line between replicate cells (p=0.0570 vs the 00:29 cell), and promoting a metric after
+  seeing its p-value is the same error as adding seeds. Reported as supporting evidence.
+
+### Fixed
+- **Per-seed labels named the wrong seed everywhere they were printed or plotted.**
+  `read_run` sorted the glob LEXICOGRAPHICALLY (`seed1, seed10, seed11 … seed2, seed20`)
+  while `cmd_compare` and `fig_paired` labelled rows with `enumerate()`, so every "seed N"
+  above N=1 was wrong (printed "seed 2" was really seed 10). **Pairing was unaffected** -
+  both arms were mis-ordered identically - so every p-value, median and CI in the project
+  is correct, and only the labels lied. Verified by re-running the headline under numeric
+  ordering: p=0.1305, W+=74.0, identical. The committed `summary-per-seed.csv` also escaped
+  (it derived the seed from the filename); all 74 pre-existing rows re-verified byte-identical.
+  `docs/figures/fig4-paired-seeds.png` IS mislabelled and awaits regeneration with the full
+  cell set. Fixed at the root: the seed number is now a carried field on `seed_stats`.
+- **`compare` matched on seed COUNT, not seed SET.** Two cells could each hold 20 CSVs drawn
+  from different seeds and `zip()` would pair them silently, reporting a clean p-value for a
+  comparison that never happened. Now matches the set and names the offenders; `fig_paired`
+  guards the same way. 116 tests (was 110).
+
 ## 2026-08-04 - Confirmatory sweep at the knee: driver bug fixed, load gate added
 
 ### Fixed

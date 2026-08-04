@@ -12,6 +12,9 @@ import pytest
 
 from analyze import (
     HARD_ERROR_RATE,
+    cmd_compare,
+    read_run,
+    seed_id,
     error_bias,
     flagged_seeds,
     MAX_ERROR_RATE,
@@ -183,3 +186,57 @@ def test_bias_needs_both_a_ratio_and_an_absolute_gap(tmp_path):
     bias = error_bias(cand, base)
     assert bias["ratio"] == float("inf")
     assert bias["biased"] is False
+
+
+# ---- seed identity ----------------------------------------------------------
+# Regression guard for the 2026-08-04 mislabelling defect: read_run sorted the
+# glob lexicographically (seed10 before seed2) while callers labelled rows with
+# enumerate(), so every printed and plotted "seed N" above N=1 named the wrong
+# seed. Pairing was unaffected - both arms mis-ordered identically - so the
+# statistics stayed correct and only the labels lied. Nothing failed loudly.
+
+def _run_dir(tmp_path, name, seeds):
+    d = tmp_path / name
+    d.mkdir()
+    for s in seeds:
+        _write_csv(d / f"driver-seed{s}.csv", [_row(i, 0.1 * s, 1.0) for i in range(4)])
+    return str(d)
+
+
+def test_seed_id_parses_the_number_not_the_position():
+    assert seed_id("results/x/driver-seed13.csv") == 13
+    assert seed_id("driver-seed1.csv") == 1
+
+
+def test_read_run_orders_numerically_not_lexicographically(tmp_path):
+    """sorted(glob) gives 1,10,11..19,2,20,3..9 - the trap that caused the bug."""
+    d = _run_dir(tmp_path, "cell", range(1, 21))
+    assert [s["seed"] for s in read_run(d)] == list(range(1, 21))
+
+
+def test_list_position_equals_seed_number_after_the_fix(tmp_path):
+    """The invariant the labels relied on, now actually true rather than assumed."""
+    d = _run_dir(tmp_path, "cell", range(1, 21))
+    for i, s in enumerate(read_run(d), start=1):
+        assert s["seed"] == i, f"position {i} carries seed {s['seed']}"
+
+
+def test_seed_stats_carries_its_seed(tmp_path):
+    d = _run_dir(tmp_path, "cell", [7])
+    assert read_run(d)[0]["seed"] == 7
+
+
+def test_compare_rejects_equal_counts_drawn_from_different_seeds(tmp_path):
+    """Equal length is not equal seeds: zip() would pair seed 5 against seed 21
+    and report a clean p-value for a comparison that never happened."""
+    cand = _run_dir(tmp_path, "cand", [1, 2, 3])
+    base = _run_dir(tmp_path, "base", [1, 2, 99])
+    with pytest.raises(SystemExit) as e:
+        cmd_compare(cand, base, "ttft_p95")
+    assert "seed mismatch" in str(e.value)
+
+
+def test_compare_accepts_matching_seed_sets(tmp_path):
+    cand = _run_dir(tmp_path, "cand", [1, 2, 3])
+    base = _run_dir(tmp_path, "base", [1, 2, 3])
+    assert cmd_compare(cand, base, "ttft_p95") == 0
