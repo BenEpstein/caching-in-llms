@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The confirmatory sweep (methodology, issue #3 as amended 2026-08-04): 4 cells,
-# 63 seed-replays x 500 requests, one unattended batch (~85 min at a rate at or
-# above the knee). Requires the rate from rate_pilot.sh plus LOADAWARE_TAG for
-# the loadaware cells. beta is no longer an input: it is dimensionless, so the
-# grid is fixed (see below).
+# The confirmatory sweep (methodology, issue #3 as amended 2026-08-05): 5 cells,
+# 100 seed-replays x 500 requests, one unattended batch (~1 h 41 min at rate 16).
+# Requires the rate from rate_pilot.sh plus LOADAWARE_TAG for the loadaware
+# cells. beta is no longer an input: it is dimensionless, so the grid is fixed
+# (see below).
 #
 # Usage:
 #   LOADAWARE_TAG=<sha> ./run_sweep.sh <rate> [results-root]
@@ -25,24 +25,29 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # req/s was frozen as "75% of a knee" the pilot had never reached. beta had
 # nothing to act on. This sweep runs at or above the knee, where it does.
 #
-#   n=20 on the three inferential cells - n=10 returned p=0.0527 on the headline,
-#           which is underpowered, and ten more seeds cost ~8 min per cell.
-#           Requires SEEDS=1..20 in freeze_workloads.py (done, purely additive).
-#   kept    loadaware-b0 at n=20 - this is the ABLATION, the only cell that
-#           isolates what beta buys. It must match the headline's n or the
-#           b<headline>-vs-b0 paired test cannot be run at all.
-#   kept    TWO off-headline beta cells at n=3 - the tradeoff curve. Unlike the
-#           pre-2026-08-04 formulation, beta is now dimensionless (the router
-#           normalizes load against the live fleet mean), so a curve measured
-#           here is a statement about the POLICY rather than about this rate,
-#           and the grid does not have to be re-derived per operating point.
-#           Three seeds is enough for a direction.
-#   dropped roundrobin - already measured at 10.5 req/s (TTFT p95 5.502 s, 18x
-#           worse, 25 preemptions, 0.709 hit rate). It is a context baseline, not
-#           a hypothesis test, and at the knee it is expected to breach the 1%
-#           error gate. Set INCLUDE_ROUNDROBIN=1 to add it back at n=2 (~9 min);
-#           a breach is then REPORTED as a saturation finding, per the
-#           pre-registered carve-out, never treated as a run failure.
+#   n=20 EVERYWHERE - see the note above CELL_SEEDS. Short version: the exact
+#           Wilcoxon cannot reach the 0.025 threshold below n=6 whatever the
+#           effect size, and n=10 is the first that survives one reversal.
+#   kept    loadaware-b0 at n=20 - the ABLATION, the only cell that isolates
+#           what beta buys, and pre-declared falsifiable. It must match the
+#           headline's n or the b<headline>-vs-b0 paired test cannot be run.
+#   dropped roundrobin - a context baseline, not a hypothesis test, and at rate
+#           16 it SATURATES (10.74 req/s achieved against 16 offered, 67%), so
+#           it is not at the same operating point as the other arms. Already
+#           measured; cite that cell rather than spending 20 min re-confirming
+#           it. Report the throughput shortfall as the honest headline for that
+#           arm, never the latency ratio.
+#   dropped beta=0.25 - measured 2026-08-04 at imbalance 2.257 against a
+#           same-hour kvaware control of 2.113, i.e. no effect. The useful
+#           range starts at 0.5.
+#
+# OSL is 64 (run_cell.sh MAX_TOKENS). Piloted 2026-08-05: at OSL 128 the fleet
+# saturates (65% of offered achieved) and at 256 it breaches the catastrophic
+# error ceiling (11.4%, KV pegged at 1.000, 231 preemptions). Imbalance is also
+# NON-monotonic in load - 2.99x at OSL 64, 3.98x at 128, 1.89x at 256 - because
+# once both engines pin at capacity there is nowhere better to send anything.
+# The window where load-aware routing can help closes at BOTH ends, and on this
+# 2xA10 fleet rate 16 / OSL 64 sits inside it.
 #
 # ---- the beta grid ----------------------------------------------------------
 #
@@ -64,26 +69,38 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # A decade-wide grid would put one point in that region and spend the rest of
 # the cluster time confirming the collapse we already saw at 10.5 req/s. This
 # also answers the "beta grid too coarse" gap on PR #22.
-BETA_HEADLINE="${BETA_HEADLINE:-1.0}"
-BETA_LOW="${BETA_LOW:-0.5}"
-BETA_HIGH="${BETA_HIGH:-1.5}"
-INCLUDE_ROUNDROBIN="${INCLUDE_ROUNDROBIN:-0}"
-
+BETA_GRID="${BETA_GRID:-0 0.5 1.0 2.0}"
 SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 
-CELL_SEEDS=(
-  "loadaware-b${BETA_HEADLINE}:${SEEDS_FULL}"
-  "kvaware:${SEEDS_FULL}"
-  "loadaware-b0:${SEEDS_FULL}"
-  "loadaware-b${BETA_LOW}:1 2 3"
-  "loadaware-b${BETA_HIGH}:1 2 3"
-)
-[ "$INCLUDE_ROUNDROBIN" = "1" ] && CELL_SEEDS+=("roundrobin:1 2")
+# n=20 on EVERY cell, including the curve arms. The exact one-sided Wilcoxon's
+# resolution is bounded by the pair count, not by the effect size: at n=3 the
+# smallest attainable p is 0.125, at n=5 it is 0.031, so against the Bonferroni
+# threshold of 0.025 those cannot reach significance however large the effect.
+# n=10 is the first that survives a single reversal (p=0.0107) and the published
+# imbalance headline was 19/20, i.e. one reversal. n=20 buys the margin for two
+# or three. Seeds are also nearly free - 0.57 min each against 8.75 min of fixed
+# setup per cell - so trimming them saves little and spends the whole reversal
+# budget to do it.
+#
+# ORDER: kvaware first, then beta ascending. Ascending order means beta is
+# confounded with wall-clock time if the cluster drifts, and 2026-08-04 showed
+# it can (client TTFT rose ~55% over an evening on identical config). The
+# mitigation is the MANUAL kvaware re-run after this sweep: it brackets the
+# whole run, so a drift shows up as kvaware-vs-kvaware rather than masquerading
+# as a beta effect. Do not skip it.
+CELL_SEEDS=("kvaware:${SEEDS_FULL}")
+for b in $BETA_GRID; do
+  CELL_SEEDS+=("loadaware-b${b}:${SEEDS_FULL}")
+done
 
 for entry in "${CELL_SEEDS[@]}"; do
   SEEDS="${entry#*:}" "$BENCH_DIR/run_cell.sh" "${entry%%:*}" "$RATE" "$RESULTS_ROOT"
 done
 echo "==> sweep complete under $RESULTS_ROOT"
-echo "    headline:  python3 benchmarks/analyze.py compare <loadaware-b${BETA_HEADLINE}-dir> <kvaware-dir>"
-echo "    ablation:  python3 benchmarks/analyze.py compare <loadaware-b${BETA_HEADLINE}-dir> <loadaware-b0-dir>"
-echo "    placement: python3 benchmarks/analyze.py compare <loadaware-b0-dir> <kvaware-dir>"
+echo "    NEXT, do not skip: re-run kvaware as the closing drift control -"
+echo "      SEEDS=\"$SEEDS_FULL\" ./benchmarks/run_cell.sh kvaware $RATE $RESULTS_ROOT"
+echo "    then, with beta* = the pre-registered grid pick:"
+echo "      headline:  python3 benchmarks/analyze.py compare <loadaware-b<beta*>-dir> <kvaware-dir>"
+echo "      ablation:  python3 benchmarks/analyze.py compare <loadaware-b<beta*>-dir> <loadaware-b0-dir>"
+echo "      placement: python3 benchmarks/analyze.py compare <loadaware-b0-dir> <kvaware-dir>"
+echo "      drift:     python3 benchmarks/analyze.py compare <kvaware-closing-dir> <kvaware-opening-dir>"

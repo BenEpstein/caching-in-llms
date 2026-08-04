@@ -53,6 +53,19 @@ ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 PROM_PORT="${PROM_PORT:-19090}"
 DCGM_PORT="${DCGM_PORT:-19400}"
 
+# OSL - output sequence length, pinned per request with `ignore_eos` so it is
+# exact rather than a cap. It was never passed before, so every cell up to
+# 2026-08-04 silently used the driver default of 64 AND recorded no trace of it
+# in run.json - a first-order experimental parameter that was invisible in the
+# provenance record. It is a runtime flag, not part of the frozen workload, so
+# changing it costs no dataset regeneration and the manifest stays valid.
+#
+# OSL is the main lever on per-request work: it sets decode time, hence in-flight
+# concurrency at a fixed rate (L = lambda*W), hence KV pressure. At 64 the
+# mechanism by which imbalance hurts is dormant (waiting 0, preempt 0, KV
+# 20-27%); raising it is how that mechanism is reached without touching the rate.
+MAX_TOKENS="${MAX_TOKENS:-64}"
+
 # ---- cell → helm args -------------------------------------------------------
 # USES_LOOKUP: does this arm route via the KV registry? Gates the registry
 # probe and the layout_info warm-up check; roundrobin ignores the registry so
@@ -80,7 +93,7 @@ esac
 
 OUT="$RESULTS_ROOT/$(date +%Y%m%d-%H%M%S)-$CELL"
 mkdir -p "$OUT"
-echo "==> cell $CELL (arm=$ARM beta=${BETA:-n/a}) rate=$RATE → $OUT"
+echo "==> cell $CELL (arm=$ARM beta=${BETA:-n/a}) rate=$RATE osl=$MAX_TOKENS → $OUT"
 
 PIDS=()
 cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
@@ -207,7 +220,7 @@ for seed in $SEEDS; do
   python3 "$BENCH_DIR/load_driver.py" \
     --base-url "$BASE_URL" --model "$MODEL" --insecure \
     --workload "$BENCH_DIR/workloads/seed-$seed.jsonl" \
-    --rate "$RATE" --seed "$seed" \
+    --rate "$RATE" --seed "$seed" --max-tokens "$MAX_TOKENS" \
     --out "$OUT/driver-seed$seed.csv"
 done
 CELL_END=$(date +%s)
@@ -241,7 +254,7 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
-export CELL ARM BETA RATE CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
+export CELL ARM BETA RATE MAX_TOKENS CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
 python3 - <<'PY'
 import json, os
 env = os.environ
@@ -251,6 +264,7 @@ run = {
     "arm": env["ARM"],
     "beta": env["BETA"] or None,
     "rate_req_s": float(env["RATE"]),
+    "osl_tokens": int(env["MAX_TOKENS"]),
     "window": {"start_ts": int(env["CELL_START"]), "end_ts": int(env["CELL_END"])},
     "router_image": env["ROUTER_IMAGE"],
     "router_image_id": env["ROUTER_IMAGE_ID"],
