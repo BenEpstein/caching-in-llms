@@ -4,6 +4,10 @@ benchmarks/workloads/*.jsonl
 # results/ is tracked (raw CSVs + prom JSON) so runs are reviewable without rerunning.
 # Frozen workload jsonl stays out - reproduce it from benchmarks/workloads/manifest.json.
 results/**/*.jsonl
+# The raw Job log (#27) is the TRANSPORT for the driver CSVs, not a result: ~2.4 MB of
+# base64 per cell that decodes to the driver-seed*.csv already tracked beside it. Kept on
+# disk for debugging, out of git.
+results/**/job.log
 .DS_Store
 CLAUDE.local.md
 __pycache__/

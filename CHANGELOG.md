@@ -8,6 +8,54 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - The measured replay moves into the cluster: no WAN in TTFT (#27)
+
+### Added
+- **`Dockerfile.bench` + `.github/workflows/bench-image.yml`** - the in-cluster driver image
+  (`python:3.12-slim` pinned by digest + httpx + the driver path), built and SHA-tagged in CI
+  and pushed to the public `quay.io/rhl193000/bench-driver`, mirroring the router-image path.
+  Its verify step runs `verify_dataset.sh` **inside the built image**, so "the frozen dataset
+  is reconstructible from source" becomes a tested claim on every push rather than an asserted
+  one (0.84 s for all 20 seeds).
+- **`benchmarks/in_pod.sh` + `verify_dataset.sh` + `bench_job.sh` + `collect_job.py`** - the
+  replay now runs as a Job against `stack-router-service.<ns>.svc.cluster.local:80`. The pod
+  regenerates and SHA-256-verifies the 20 seed files rather than being shipped 126 MB, and
+  returns CSVs through its log as one gzip+base64 frame per seed. 12 new tests (132 total).
+
+### Changed
+- **`run_cell.sh` step 8 only.** helm, cold start, registry probe, warm-up gate, Prometheus
+  dump, DCGM and the validity gate are untouched and still laptop-side. `BENCH_TAG` joins
+  `LOADAWARE_TAG` as required on **every** cell, both arms. `run.json` gains a `driver` block
+  (location, node, image, target), which is what separates in-cluster cells from the WAN ones
+  already under `results/`.
+- **The measurement window now comes from the pod's clock**, not the laptop's: image pull plus
+  dataset verification sit between warm-up and the first request, and a laptop-clock window
+  would have dragged warm-up traffic into the Prometheus dump and contaminated the imbalance
+  co-primary.
+
+### Decided
+- **Fix the instrument, keep the metric.** 45-59% of every recorded TTFT was WAN (RTT avg
+  44.4 ms), and the non-engine component swung 121 -> 195 ms between two cells an hour apart -
+  a per-cell systematic offset larger than the 10-60 ms effect under study, so more seeds could
+  never fix it. That is the complete explanation for TTFT being a null in every sweep while
+  load imbalance (server-side, therefore immune) reached p<0.0001. Switching to engine-side
+  Prometheus histograms as the primary was **rejected**: it is metric-switching after seeing a
+  null, and over half of all requests land in one 150 ms-wide bucket against a 10-30 ms effect,
+  with p99 where under 2% of the mass lives - §3 requires per-request p95/p99 and interpolated
+  percentiles there are manufactured. Subtracting an RTT baseline was rejected as an
+  unverifiable per-request correction. Engine-side is retained as a labelled secondary and as
+  the cross-check that the driver pod is not perturbing the engines.
+- **Results travel through the pod log, framed per seed with a checksum.** One channel for
+  progress and data, and it survives pod GC. Per-seed frames rather than one blob so truncation
+  is detectable per seed; `collect_job.py` is all-or-nothing, because a partially-recovered cell
+  would enter the paired stats looking like a real observation. Measured 2.4 MB per 20-seed cell
+  against kubelet's 10 Mi rotation - the issue's original 1.4 MB estimate was optimistic by 1.7x.
+- **No CPU limit on the driver pod, and no anti-affinity.** CFS throttling would inflate client
+  TTFT exactly the way the WAN did. Anti-affinity is unsatisfiable anyway: gapu-2 has two
+  schedulable nodes with an engine on each, and worker0 at 93% CPU / 99% memory requested means
+  the driver deterministically lands on worker1. The control is the engine-side cross-check, not
+  a scheduling rule; the node is recorded in `run.json`.
+
 ## 2026-08-05 - Front door part 1: figures are reproducible, benchmarks/README stops lying (#26)
 
 ### Fixed

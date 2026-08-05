@@ -1,0 +1,45 @@
+# The in-cluster benchmark driver image (#27).
+#
+# Why this exists: `load_driver.py` times TTFT with `perf_counter` on the client side. Run
+# from a laptop over a WAN (RTT min 18.7 / avg 44.4 / max 132 ms) that put 45-59% of every
+# recorded TTFT outside the system under test, and the non-engine component swung
+# 121 -> 195 ms between two cells an hour apart - a per-cell systematic offset LARGER than
+# the 10-60 ms effect under study, so more seeds cannot fix it. Running the SAME driver from
+# a pod on the cluster network removes that term without changing the metric.
+#
+# Build and push happen in CI (.github/workflows/bench-image.yml), not on a laptop - same
+# discipline as the router image: a grader reproduces it by pushing a commit rather than
+# trusting an artifact someone built by hand.
+
+# Pinned by digest, not tag, for the same reason `Dockerfile` is: a floating tag makes the
+# measurement instrument unauditable after the fact. This is python:3.12-slim as of
+# 2026-08-05.
+FROM docker.io/library/python@sha256:646fb0bca3dd3ea1bcc6feb72c17ed16eed6e10cffc732fcc1478bd3e7f02d7b
+
+# httpx is the ONLY non-stdlib import on the driver path. Same floor as requirements.txt so
+# the pod and the laptop run the same client.
+RUN pip install --no-cache-dir "httpx>=0.27"
+
+WORKDIR /app
+
+# analyze.py is not optional: load_driver.py imports `percentile` from it (load_driver.py:29).
+# workload_gen.py + freeze_workloads.py + manifest.json are what let the pod REGENERATE and
+# self-verify the frozen dataset rather than shipping a 126 MB blob - no PVC, no ConfigMap,
+# no transfer, and it proves the dataset is reconstructible from source on every single run.
+COPY benchmarks/load_driver.py benchmarks/analyze.py benchmarks/workload_gen.py \
+     benchmarks/freeze_workloads.py benchmarks/verify_dataset.sh benchmarks/in_pod.sh /app/
+COPY benchmarks/workloads/manifest.json /app/workloads/manifest.json
+
+# OpenShift's restricted SCC runs the pod as an arbitrary uid, so /app must be world-readable
+# and nothing may be written under it. That is why the JSONLs go to /tmp/workloads
+# (verify_dataset.sh) and why the Job sets PYTHONDONTWRITEBYTECODE - CPython would otherwise
+# try to drop __pycache__ next to these files. Same failure class as #21.
+RUN chmod -R a+rX /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+LABEL org.opencontainers.image.title="in-cluster benchmark driver" \
+      org.opencontainers.image.description="Replays the frozen benchmark workload against the \
+router's ClusterIP from inside the cluster, so client-side TTFT contains no WAN (BGU final project)" \
+      org.opencontainers.image.source="https://github.com/BenEpstein/caching-in-llms"
