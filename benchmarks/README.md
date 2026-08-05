@@ -55,6 +55,40 @@ config + SHA-256 per seed file, and generation is deterministic, so
 `python3 freeze_workloads.py` reproduces them bit-identically and fails loudly on drift.
 `run_cell.sh` runs that check before every cell.
 
+## The second profile: novel prompts (cache overhead)
+
+The guidelines name **two** workload profiles. The Zipfian dataset above is the first
+(repetitive prompts, stressing hit/miss). The second is *novel long prompts, unlikely to be
+cached* — there to measure what the cache **costs**, not what it saves.
+
+`workloads/novel/` holds 6 seeds × 500 requests where **every prompt is unique from its first
+token**, pinned by its own `workloads/novel/manifest.json`. Prompt sizing mirrors the Zipfian
+profile so the only difference between the two workloads is reuse.
+
+```bash
+python3 benchmarks/freeze_workloads.py --profile novel      # verify against the manifest
+WORKLOAD_PROFILE=novel benchmarks/run_cell.sh <cell> <arm> <rate>
+```
+
+`WORKLOAD_PROFILE` threads all the way through: `run_cell.sh` pre-flights it, `bench_job.sh`
+puts it in the pod environment, `verify_dataset.sh` reconstructs the right dataset in-cluster,
+and it lands in `run.json` as provenance. Each profile is a **directory containing its own
+`manifest.json`**, which is what lets `verify_dataset.sh` keep copying the manifest into a
+writable directory — `/app` is read-only under the restricted SCC.
+
+Two manifests rather than one config with a flag: the Zipfian manifest stores
+`dataclasses.asdict(WorkloadConfig)` per seed, so adding a field to that dataclass would change
+every committed hash and the runner would refuse to measure. `NovelWorkloadConfig` is a separate
+class for exactly that reason, and a unit test pins the field list of the original.
+
+`freeze_workloads.py` **asserts a reuse factor of exactly 1.0** on every novel seed before it
+writes the manifest. A workload that quietly started sharing prefixes would measure cache
+benefit while claiming to measure cache cost — and nothing in the resulting numbers would look
+wrong.
+
+The cache-off comparator and its pre-registered expectation are in
+[`deploy/nocache-arm.md`](../deploy/nocache-arm.md). Ticket: #25.
+
 ## Sweep design
 
 6 cells × 6 seeds × 500 requests, identical frozen workload and fixed Poisson rate in

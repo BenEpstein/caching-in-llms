@@ -1,8 +1,14 @@
 # Requirements Audit — every clause of the Final Project Guidelines
 
-> status: live · 2026-08-04 · clause-by-clause audit of `docs/references/Final Project
-> Guidelines.pdf` against the repo as of `1691acb` (+ this branch). Verified against files and `results/`,
-> not against the CHANGELOG's claims. Re-run the checks before trusting it after new commits.
+> status: live · **2026-08-05** · clause-by-clause audit of `docs/references/Final Project
+> Guidelines.pdf` against the **integration branch** (`feat/relative-load-normalization`) plus
+> this branch. Verified against files and `results/`, not against the CHANGELOG's claims.
+> Re-run the checks before trusting it after new commits.
+>
+> **Revised 2026-08-05** after the policy changed underneath it: α was removed, the load term is
+> now normalized against the fleet mean, the driver moved in-cluster (#27), and utilization
+> reporting landed via #35. Rows that referenced α, β = 0.034, or WAN-measured latency have been
+> corrected rather than left to rot.
 
 Ordered **by rubric weight**, not by section number. Correctness + Reproducibility = 70%.
 
@@ -18,19 +24,19 @@ Legend: ✅ done · 🟡 partial · ❌ missing
 | 2 | §4 Cleanly-factored code on a **feature branch** | ✅ | `feat/loadaware-routing` (PR #17, merged), `feat/multi-instance-lookup` (#15), `feat/evaluation-runs` (#22, open) |
 | 3 | §4 Unit tests covering the new policy | ✅ | `tests/` loads `patches/` directly with `lmcache` stubbed — no cluster/GPU needed |
 | 4 | §4 Compatible with the baseline cache interface | ✅ | `patches/` mirror in-image paths; `LoadAwareRouter` subclasses the stock routing-logic contract |
-| 5 | §4 Tunable parameters exposed | ✅ | `LOADAWARE_ALPHA` / `LOADAWARE_BETA` env + ctor args, `routing_logic.py:65-66,477-485` |
-| 6 | §4 …**and documented** | ✅ | Code + `docs/project-brief.md:73-82` + a tunables table in the top-level README (α, β, defaults, meaning, how to set them live) |
-| 7 | §4 …demonstrating their impact on performance | ✅ | β sweep {0, 0.1, 0.5, 1.0}, `fig7-beta-tradeoff.png` |
+| 5 | §4 Tunable parameters exposed | ✅ | `LOADAWARE_BETA` env + ctor arg. α was **removed** — with the benefit term normalized to the cached fraction, a second weight was a redundant scale factor |
+| 6 | §4 …**and documented** | ✅ | Docstring, README tunables table with the `1/(2β)` cancellation rule, and the report's Extension Design |
+| 7 | §4 …demonstrating their impact on performance | ✅ | β sweep {0, 0.5, 1.0, 2.0} at n=20 each; imbalance 2.647 → 1.262 → 1.209 → 1.188 |
 | 8 | §3 Metric: per-request latency mean/p95/p99 | ✅ | `analyze.py` → `summary-per-seed.csv` (+ p50, p90, ITL percentiles) |
 | 9 | §3 Metric: cache hit rate | ✅ | `fig3-hit-rate.png` from `lmcache:lookup_hit_rate` |
 | 10 | §3 Metric: throughput (req/s, tok/s) | ✅ | `throughput_req_s`, `throughput_tok_s`; `fig9-throughput.png` |
-| 11 | §3 Metric: **memory & CPU/GPU utilization** | ✅ | `fig10-utilization.png` — per-device GPU util, total GPU power, engine RSS and router CPU, read from the `dcgm.csv` and process gauges that were already in every run dir. Reported in the report's Results as a cost check, with 5 unit tests on the readers |
+| 11 | §3 Metric: **memory & CPU/GPU utilization** | ✅ | `benchmarks/utilization.py` + `fig10-utilization.png` (#35, Ben) — GPU SM/power/mem-copy from DCGM, KV-cache memory per engine, router CPU and memory, with a **coverage gate** so gaps are not silently averaged over. Names what is unavailable (vLLM registers no process collector) instead of omitting it |
 | 12 | §3 Workload profile: repetitive/cacheable prompts | ✅ | Zipfian shared-prefix pool, frozen + SHA-pinned (`workloads/manifest.json`) |
-| 13 | §3 Workload profile: **novel long prompts (unlikely to be cached), to measure cache overhead** | 🟡 | **Harness done, run pending.** `NovelWorkloadConfig` + `generate_novel()`, 6 frozen seeds under `workloads/novel/` with their own manifest, reuse-factor 1.0 asserted at freeze time, 7 unit tests, `WORKLOAD_PROFILE=novel` in `run_cell.sh`, cache-off comparator recipe in `deploy/nocache-arm.md`. Needs one cluster run (Ben) |
+| 13 | §3 Workload profile: **novel long prompts (unlikely to be cached), to measure cache overhead** | 🟡 | **Harness done, run pending (#25).** `NovelWorkloadConfig`, 6 frozen seeds under `workloads/novel/` with their own manifest, reuse-factor 1.0 asserted at freeze time, 7 unit tests. `WORKLOAD_PROFILE` threads through `run_cell.sh` → `bench_job.sh` → pod env → `verify_dataset.sh` and lands in `run.json`. Re-verified: the manifest still reproduces bit-identically after `9d14c95` changed `WorkloadConfig`'s defaults |
 | 14 | §3 Benchmark scripts | ✅ | `benchmarks/` — generator, driver, gates, collectors, choreography |
 | 15 | §3 **Integrate into CI so all commits rerun the suite** | ✅ | `pytest-benchmark` declared; `tests/test_bench_routing.py` times the placement hot path (score, fleet scan, id→URL bridge, load read) against the tracked patch files; CI runs the suite with `--benchmark-disable` then a timed `--benchmark-only` pass. README states plainly which part cannot run in CI and why (issue #24) |
 | 16 | §3 README "how to benchmark" + sample CSV/JSON logs | ✅ | `benchmarks/README.md` (operator's manual) + `results/` tracked in git (364 files) |
-| 17 | §5 Vanilla vs extended, identical workload | ✅ | 10.5 req/s (08-03) **and** at the knee, rate 16, 20 seeds/arm (08-04, `1691acb`). `analyze.py compare` refuses to pair runs whose rate or workload manifest differ |
+| 17 | §5 Vanilla vs extended, identical workload | ✅ | 5 arms × 20 seeds at rate 16 on the current policy (`results/20260805-*`), replayed in-cluster. `analyze.py compare` refuses to pair runs whose rate or workload manifest differ |
 | 18 | §5 Sweep key parameters | ✅ | β grid + rate pilot + scarcity/load gates |
 | 19 | §5 Plot latency distributions & hit-rate curves | ✅ | fig1–fig9 (ECDF, percentiles, paired seeds, hit rate, imbalance, β trade-off) |
 | 20 | §5 Relative improvements (e.g. % at p95) | ✅ | Wilcoxon + bootstrap CI, pre-registered; medians and p-values in `results/summary-per-seed.csv` + issue #7 |
@@ -38,12 +44,12 @@ Legend: ✅ done · 🟡 partial · ❌ missing
 | 22 | §5 Deliverable: **a PDF describing the experiments** | ✅ | **Folded into the §6 report** — §4 Results and §5 Discussion carry the experiments, their results, and what each one tells us. Decision recorded here so it is not left implicit |
 | 23 | §6 Clean GitHub repo + README with install & benchmark instructions | ✅ | README rewritten 08-04: headline result with provenance, repo map, install, tests, tunables, **verify-without-a-cluster** path, cluster repro. Stale `benchmarks/README.md` claim that `results/` is gitignored also corrected |
 | 24 | §6 Dockerfile / environment.yml | ✅ | `Dockerfile` + `.github/workflows/router-image.yml` builds it in CI (needs the Quay secrets set to also push) |
-| 25 | §6 **Report PDF, 8–12 pages, six named sections** | 🟡 | Full draft at `docs/report/report.md`, all six named sections, **9 pages verified in CI** (+ appendix), glyph-checked. Needs Eliad's editorial read before it is called done |
+| 25 | §6 **Report PDF, 8–12 pages, six named sections** | 🟡 | Full draft, all six sections, built to PDF in CI and glyph-checked. Rewritten 08-05 for the post-α policy. **The latency row is deliberately open** pending #31's in-cluster re-run; everything else is written |
 | 26 | §6 Appendix referencing all code and data artifacts | ✅ | Appendix A: artifact table, run-provenance table (arm → run dir → rate → seeds), and a copy-pasteable reproduce block |
 | 27 | §6 Formatting (≥10 pt, labelled axes, legends, captions) | ✅ | 11 pt body, captions on every figure, labelled axes and legends throughout. `fig4-paired-seeds` labels now de-collide with leader lines back to their points; `fig10`'s legend no longer sits on a bar |
 | 28 | §2 **One-page baseline justification** (features, **default eviction policy**) | ✅ | `docs/baseline-justification.md` — both recommended criteria, main features, **default eviction policy LRU** (pluggable `POLICY_MAPPING`, `LMCACHE_CACHE_POLICY`), the gap we chose to close, and rejected alternatives |
 | 29 | §4 Upstream PR — the explicit **grade-100 carrot** | ✅ | **[vllm-project/production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029)** filed 2026-08-04 — router Service never exposed the LMCache controller reply/heartbeat ports the same chart points engines at. DCO-signed, `[Bugfix]`-prefixed, `helm template` proof that defaults render byte-identically. Merge is upstream's call; *filed* is the evidence |
-| 30 | §7 Performance gain, statistically significant (15%) | ✅ | At the knee: load imbalance **−48.3% median, p<0.0001, 19/20 seeds**; TTFT p95 a null (8.2% median, CI [−8.6%, +32.2%], p=0.1305). Imbalance was a **pre-registered co-primary in #3, not promoted after the TTFT null** — the report must say so in the same breath as the headline. The β=0 ablation supplies the mechanism. See Gap A |
+| 30 | §7 Performance gain, statistically significant (15%) | ✅ | Load imbalance **−43.7% median, p<0.0001, 20/20 seeds** at β=0.5, with the β=0 ablation null — the mechanism is the load term, not the rewrite. Imbalance was a **pre-registered co-primary in #3, not promoted after the latency null**. Latency itself is being re-measured on a fixed instrument (#31) rather than reported from WAN-polluted data |
 
 ---
 
