@@ -1,0 +1,305 @@
+==> cell loadaware-b0.1 (arm=loadaware alpha=1.0 beta=0.1) rate=10.5 → results/20260803-210741-loadaware-b0.1
+seed 1: 66fbf91f9cb1f749…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 0f671c9071e007d3…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: b1788c9dc9e74ce2…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 76bb2478a78a8709…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: 9646e8fb9d647156…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: d634081a6d585ef7…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+seed 7: 790362a8e68e8c08…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-7.jsonl
+seed 8: ff448842b6d51953…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-8.jsonl
+seed 9: 9633605cc46241f4…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-9.jsonl
+seed 10: 5a2e165ba25158fc…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-10.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 21:07:44 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 27
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> draining engines to 0 (no live engine may register with the new router)
+deployment.apps/stack-llm-deployment-vllm scaled
+==> restarting the router into an empty cluster (kv_pool starts clean)
+deployment.apps/stack-deployment-router restarted
+Waiting for deployment spec update to be observed...
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> bringing engines back to 2
+deployment.apps/stack-llm-deployment-vllm scaled
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for exactly 2 worker registrations
+==> cold start clean: 2 registrations, all live
+==> 4 identical requests, seed 1785780927
+    stack-llm-deployment-vllm-58c7ddcdd5-cnltr: 0/4
+    stack-llm-deployment-vllm-58c7ddcdd5-fqqtp: 4/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 128/128 ok in 26.9s
+pass 2/2: 128/128 ok in 5.7s
+==> warm-up gate ok (128 cache-path routings)
+==> seed 1 / 10
+n=500 ok=500 err=0 wall=50.6s req/s=9.88 tok/s=632.6
+TTFT  p50=0.177s p95=0.309s p99=0.996s
+E2E   p50=2.470s p95=4.068s p99=4.843s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed1.csv
+==> seed 2 / 10
+n=500 ok=497 err=3 wall=52.2s req/s=9.53 tok/s=609.9
+TTFT  p50=0.198s p95=0.363s p99=1.526s
+E2E   p50=2.761s p95=5.060s p99=5.648s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed2.csv
+==> seed 3 / 10
+n=500 ok=500 err=0 wall=49.8s req/s=10.03 tok/s=642.0
+TTFT  p50=0.203s p95=0.298s p99=0.337s
+E2E   p50=3.080s p95=4.865s p99=4.998s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed3.csv
+==> seed 4 / 10
+n=500 ok=500 err=0 wall=55.1s req/s=9.08 tok/s=581.3
+TTFT  p50=0.191s p95=0.316s p99=0.532s
+E2E   p50=2.952s p95=3.924s p99=4.093s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed4.csv
+==> seed 5 / 10
+n=500 ok=499 err=1 wall=51.3s req/s=9.73 tok/s=622.5
+TTFT  p50=0.204s p95=0.326s p99=0.426s
+E2E   p50=3.290s p95=4.956s p99=5.337s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed5.csv
+==> seed 6 / 10
+n=500 ok=499 err=1 wall=52.7s req/s=9.47 tok/s=605.8
+TTFT  p50=0.182s p95=0.268s p99=0.295s
+E2E   p50=2.993s p95=3.990s p99=4.156s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed6.csv
+==> seed 7 / 10
+n=500 ok=500 err=0 wall=48.7s req/s=10.27 tok/s=657.0
+TTFT  p50=0.195s p95=0.305s p99=0.361s
+E2E   p50=3.244s p95=4.739s p99=4.888s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed7.csv
+==> seed 8 / 10
+n=500 ok=500 err=0 wall=53.8s req/s=9.29 tok/s=594.5
+TTFT  p50=0.177s p95=0.265s p99=0.371s
+E2E   p50=2.785s p95=3.955s p99=4.183s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed8.csv
+==> seed 9 / 10
+n=500 ok=500 err=0 wall=50.7s req/s=9.86 tok/s=630.8
+TTFT  p50=0.194s p95=0.320s p99=0.772s
+E2E   p50=3.587s p95=4.958s p99=5.650s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed9.csv
+==> seed 10 / 10
+n=500 ok=499 err=1 wall=51.5s req/s=9.70 tok/s=620.6
+TTFT  p50=0.183s p95=0.279s p99=0.353s
+E2E   p50=3.105s p95=4.865s p99=5.214s
+wrote results/20260803-210741-loadaware-b0.1/driver-seed10.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-210741-loadaware-b0.1/run.json
+run valid: all seeds under the error threshold
+==> cell loadaware-b0.1 complete: results/20260803-210741-loadaware-b0.1
+==> cell kvaware (arm=kvaware alpha=n/a beta=n/a) rate=10.5 → results/20260803-212450-kvaware
+seed 1: 66fbf91f9cb1f749…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 0f671c9071e007d3…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: b1788c9dc9e74ce2…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 76bb2478a78a8709…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: 9646e8fb9d647156…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: d634081a6d585ef7…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+seed 7: 790362a8e68e8c08…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-7.jsonl
+seed 8: ff448842b6d51953…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-8.jsonl
+seed 9: 9633605cc46241f4…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-9.jsonl
+seed 10: 5a2e165ba25158fc…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-10.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 21:24:52 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 28
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> draining engines to 0 (no live engine may register with the new router)
+deployment.apps/stack-llm-deployment-vllm scaled
+==> restarting the router into an empty cluster (kv_pool starts clean)
+deployment.apps/stack-deployment-router restarted
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> bringing engines back to 2
+deployment.apps/stack-llm-deployment-vllm scaled
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for exactly 2 worker registrations
+==> cold start clean: 2 registrations, all live
+==> 4 identical requests, seed 1785781957
+    stack-llm-deployment-vllm-58c7ddcdd5-gwtwp: 4/4
+    stack-llm-deployment-vllm-58c7ddcdd5-m24tj: 0/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 128/128 ok in 26.0s
+pass 2/2: 128/128 ok in 5.1s
+==> warm-up gate ok (128 cache-path routings)
+==> seed 1 / 10
+n=500 ok=499 err=1 wall=50.5s req/s=9.87 tok/s=632.0
+TTFT  p50=0.190s p95=0.297s p99=0.367s
+E2E   p50=2.317s p95=4.344s p99=4.661s
+wrote results/20260803-212450-kvaware/driver-seed1.csv
+==> seed 2 / 10
+n=500 ok=499 err=1 wall=51.7s req/s=9.65 tok/s=617.6
+TTFT  p50=0.199s p95=0.300s p99=0.372s
+E2E   p50=3.142s p95=4.131s p99=4.428s
+wrote results/20260803-212450-kvaware/driver-seed2.csv
+==> seed 3 / 10
+n=500 ok=500 err=0 wall=49.7s req/s=10.06 tok/s=644.1
+TTFT  p50=0.236s p95=0.467s p99=0.690s
+E2E   p50=3.490s p95=10.069s p99=10.570s
+wrote results/20260803-212450-kvaware/driver-seed3.csv
+==> seed 4 / 10
+n=500 ok=499 err=1 wall=54.7s req/s=9.12 tok/s=583.8
+TTFT  p50=0.189s p95=0.303s p99=0.352s
+E2E   p50=2.700s p95=4.302s p99=5.206s
+wrote results/20260803-212450-kvaware/driver-seed4.csv
+==> seed 5 / 10
+n=500 ok=499 err=1 wall=50.9s req/s=9.81 tok/s=628.0
+TTFT  p50=0.209s p95=0.341s p99=0.426s
+E2E   p50=3.308s p95=5.309s p99=6.080s
+wrote results/20260803-212450-kvaware/driver-seed5.csv
+==> seed 6 / 10
+n=500 ok=499 err=1 wall=52.7s req/s=9.46 tok/s=605.7
+TTFT  p50=0.195s p95=0.287s p99=0.333s
+E2E   p50=2.899s p95=3.640s p99=3.762s
+wrote results/20260803-212450-kvaware/driver-seed6.csv
+==> seed 7 / 10
+n=500 ok=499 err=1 wall=48.0s req/s=10.40 tok/s=665.9
+TTFT  p50=0.221s p95=0.443s p99=0.779s
+E2E   p50=3.221s p95=8.808s p99=8.994s
+wrote results/20260803-212450-kvaware/driver-seed7.csv
+==> seed 8 / 10
+n=500 ok=499 err=1 wall=54.2s req/s=9.20 tok/s=588.8
+TTFT  p50=0.192s p95=0.284s p99=0.321s
+E2E   p50=2.977s p95=3.835s p99=4.097s
+wrote results/20260803-212450-kvaware/driver-seed8.csv
+==> seed 9 / 10
+n=500 ok=499 err=1 wall=50.2s req/s=9.95 tok/s=636.7
+TTFT  p50=0.204s p95=0.336s p99=0.404s
+E2E   p50=3.085s p95=4.720s p99=5.443s
+wrote results/20260803-212450-kvaware/driver-seed9.csv
+==> seed 10 / 10
+n=500 ok=499 err=1 wall=50.8s req/s=9.83 tok/s=629.2
+TTFT  p50=0.203s p95=0.304s p99=0.354s
+E2E   p50=3.267s p95=4.399s p99=4.577s
+wrote results/20260803-212450-kvaware/driver-seed10.csv
+vllm:num_requests_running: 4 series
+vllm:num_requests_waiting: 2 series
+vllm:request_queue_time_seconds_sum: 2 series
+vllm:request_queue_time_seconds_count: 2 series
+vllm:kv_cache_usage_perc: 2 series
+lmcache:num_hit_tokens_total: 2 series
+lmcache:lookup_hit_rate: 2 series
+lmcache:request_cache_hit_rate_sum: 2 series
+lmcache:request_cache_hit_rate_count: 2 series
+process_cpu_seconds_total: 1 series
+process_resident_memory_bytes: 1 series
+router_cpu_usage_percent: 1 series
+router_memory_usage_percent: 1 series
+wrote results/20260803-212450-kvaware/run.json
+run valid: all seeds under the error threshold
+==> cell kvaware complete: results/20260803-212450-kvaware
+==> cell loadaware-b0 (arm=loadaware alpha=1.0 beta=0) rate=10.5 → results/20260803-214156-loadaware-b0
+seed 1: 66fbf91f9cb1f749…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-1.jsonl
+seed 2: 0f671c9071e007d3…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-2.jsonl
+seed 3: b1788c9dc9e74ce2…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-3.jsonl
+seed 4: 76bb2478a78a8709…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-4.jsonl
+seed 5: 9646e8fb9d647156…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-5.jsonl
+seed 6: d634081a6d585ef7…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-6.jsonl
+seed 7: 790362a8e68e8c08…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-7.jsonl
+seed 8: ff448842b6d51953…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-8.jsonl
+seed 9: 9633605cc46241f4…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-9.jsonl
+seed 10: 5a2e165ba25158fc…  /Users/benepstein/Code/BGU/caching-in-llms/benchmarks/workloads/seed-10.jsonl
+all workloads match the committed manifest - frozen dataset verified
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.securityContext (map[fsGroup:472 runAsGroup:472 runAsNonRoot:true runAsUser:472])
+coalesce.go:298: warning: cannot overwrite table with non table for vllm-stack.kube-prometheus-stack.grafana.sidecar.securityContext (map[allowPrivilegeEscalation:false capabilities:map[drop:[ALL]] seccompProfile:map[type:RuntimeDefault]])
+Release "stack" has been upgraded. Happy Helming!
+NAME: stack
+LAST DEPLOYED: Mon Aug  3 21:41:59 2026
+NAMESPACE: cache-llm
+STATUS: deployed
+REVISION: 29
+TEST SUITE: None
+deployment.apps/stack-deployment-router updated
+Waiting for deployment spec update to be observed...
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> draining engines to 0 (no live engine may register with the new router)
+deployment.apps/stack-llm-deployment-vllm scaled
+==> restarting the router into an empty cluster (kv_pool starts clean)
+deployment.apps/stack-deployment-router restarted
+Waiting for deployment spec update to be observed...
+Waiting for deployment "stack-deployment-router" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "stack-deployment-router" rollout to finish: 1 old replicas are pending termination...
+deployment "stack-deployment-router" successfully rolled out
+==> bringing engines back to 2
+deployment.apps/stack-llm-deployment-vllm scaled
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 out of 2 new replicas have been updated...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "stack-llm-deployment-vllm" rollout to finish: 1 of 2 updated replicas are available...
+deployment "stack-llm-deployment-vllm" successfully rolled out
+==> waiting for exactly 2 worker registrations
+==> cold start clean: 2 registrations, all live
+==> 4 identical requests, seed 1785782989
+    stack-llm-deployment-vllm-58c7ddcdd5-74hcj: 4/4
+    stack-llm-deployment-vllm-58c7ddcdd5-qh26p: 0/4
+==> registry LIVE — all 4 pinned to one instance
+pass 1/2: 128/128 ok in 26.6s
+pass 2/2: 128/128 ok in 5.4s
+==> warm-up gate ok (128 cache-path routings)
+==> seed 1 / 3
+n=500 ok=500 err=0 wall=50.5s req/s=9.90 tok/s=633.7
+TTFT  p50=0.181s p95=0.288s p99=0.332s
+E2E   p50=2.478s p95=4.026s p99=4.150s
+wrote results/20260803-214156-loadaware-b0/driver-seed1.csv
+==> seed 2 / 3
+n=500 ok=500 err=0 wall=51.8s req/s=9.65 tok/s=617.3
+TTFT  p50=0.210s p95=0.334s p99=0.366s
+E2E   p50=3.230s p95=5.337s p99=5.461s
+wrote results/20260803-214156-loadaware-b0/driver-seed2.csv
+==> seed 3 / 3
+n=500 ok=500 err=0 wall=49.7s req/s=10.06 tok/s=644.1
+TTFT  p50=0.229s p95=0.457s p99=0.536s
+E2E   p50=3.637s p95=8.004s p99=8.645s
+wrote results/20260803-214156-loadaware-b0/driver-seed3.csv
+ERROR querying vllm:num_requests_running: <urlopen error [Errno 61] Connection refused>

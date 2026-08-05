@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> status: live · 2026-08-05 · standing instructions for agent sessions; keep it current, it is read
+> at the start of every session
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this repo is
@@ -44,8 +47,9 @@ vanilla-vs-extended runs so differences are attributable to the policy alone.
 
 Baseline = **vLLM Production Stack + LMCache** (KV-cache layer + its router). The project:
 extend LMCache's controller lookup to per-instance match info, add a `loadaware` routing
-strategy scoring cache-hit benefit vs. live instance load, and (stretch) hot-prefix KV
-replication. Full design: `docs/project-brief.md`. Code-level feasibility evidence with
+strategy scoring cache-hit benefit vs. live instance load. Hot-prefix KV replication was
+considered as a second optimization and is **parked** - see `CONTEXT.md` ("Replication Policy")
+and `docs/decisions/second-optimization.md` (frozen). Full design: `docs/project-brief.md`. Code-level feasibility evidence with
 file/line references: `docs/feasibility-verification.md` (also the raw material for the
 §2 justification deliverable). Deployment configs for the 2×A10 OpenShift cluster: `deploy/`.
 
@@ -57,8 +61,9 @@ parallel stack.
 
 ## Collaboration
 
-Two people work on this repo. **Always `git pull` from the remote before starting work** so you're
-building on the latest code, and pull again before pushing to avoid conflicts.
+Several branches and agent sessions run against this repo in parallel. **Always `git pull` from the
+remote before starting work** so you're building on the latest code, and pull again before pushing
+to avoid conflicts. Check for open PRs touching your files before you edit them.
 
 ## Changelog discipline
 

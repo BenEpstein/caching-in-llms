@@ -2,8 +2,7 @@
 
 Change 1 of the project: `KVController.lookup()` must report how much of a
 request's prefix *every* Instance holds, not just the first holder of each
-chunk. See docs/handoff-core-implementation.md §3 and CONTEXT.md
-("Lookup Extension", "Cache-Hit Benefit").
+chunk. See CONTEXT.md ("Lookup Extension", "Cache-Hit Benefit") and issue #4.
 
 No cluster, no GPU, no lmcache install — conftest.py loads the tracked patch
 file with the lmcache import surface stubbed out.

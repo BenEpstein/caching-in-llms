@@ -1,4 +1,16 @@
 # Runtime + test dependencies for the benchmark harness.
-# Everything else in benchmarks/ is stdlib-only (Python >= 3.10).
+# Everything else in benchmarks/ is stdlib-only (Python >= 3.10) - notably analyze.py, which
+# implements the exact Wilcoxon and the bootstrap CI itself rather than pulling in scipy.
 httpx>=0.27
 pytest>=8.0
+
+# §3 Automation: "integrate into CI so all commits rerun the suite". The cluster sweep cannot
+# run per-commit; the pure placement-scoring path can, and that is where a regression would be
+# silent - it runs once per request over every endpoint in the router's event loop.
+# tests/test_bench_routing.py.
+pytest-benchmark>=4.0
+
+# Figures only (plot_results.py, the sole generator of docs/figures/). Listed because every
+# figure has to be regenerable from a clean clone - "matplotlib was already installed" is not
+# reproducible.
+matplotlib>=3.7

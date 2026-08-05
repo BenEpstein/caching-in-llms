@@ -1,0 +1,1 @@
+{"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {"__name__": "process_cpu_seconds_total", "instance": "stack-router-service:80", "job": "router"}, "values": [[1785602637, "26.36"], [1785602642, "26.52"], [1785602647, "26.74"]]}]}}

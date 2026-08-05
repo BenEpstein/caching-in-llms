@@ -17,7 +17,7 @@ import asyncio
 import concurrent.futures
 import enum
 import math
-import os  # LOADAWARE PATCH: alpha/beta are read from the environment
+import os  # LOADAWARE PATCH: beta is read from the environment
 import random
 import threading
 import uuid
@@ -59,11 +59,19 @@ class RoutingLogic(str, enum.Enum):
     LOADAWARE = "loadaware"  # LOADAWARE PATCH: our placement policy
 
 
-# LOADAWARE PATCH: defaults for the two tunable parameters of the `loadaware`
-# placement policy (§4 requires them exposed and documented). See
-# `LoadAwareRouter` for the score they weight and for how they are overridden.
-DEFAULT_LOADAWARE_ALPHA = 1.0
-DEFAULT_LOADAWARE_BETA = 0.1
+# LOADAWARE PATCH: the single tunable parameter of the `loadaware` placement
+# policy (§4 requires it exposed and documented). See `LoadAwareRouter` for the
+# score it weights and for how it is overridden.
+#
+# There is no `alpha`. An argmax is invariant under positive scaling, so
+# `alpha * benefit - beta * load` and `benefit - (beta/alpha) * load` are the
+# same policy: alpha and beta were never two parameters, only their ratio.
+#
+# beta = 1.0 reads as: an endpoint sitting 100% above fleet-average load is
+# docked one full cache hit's worth of preference. That statement mentions no
+# hardware, model, request rate or fleet size, which is what makes it a
+# defensible default rather than a number calibrated on one cluster.
+DEFAULT_LOADAWARE_BETA = 1.0
 
 
 def loadaware_param(env_name: str, override: Optional[float], default: float) -> float:
@@ -431,25 +439,40 @@ class LoadAwareRouter(KvawareRouter):
     reported in `layout_info` and sends the request there however busy that
     instance is. `loadaware` scores **every** endpoint
 
-        score(i) = alpha * matched_tokens(i) / prompt_tokens  -  beta * load(i)
+        score(i) = matched_tokens(i) / prompt_tokens  -  beta * relative_load(i)
+
+        relative_load(i) = (load(i) - mean_load) / max(1, mean_load)
 
     and routes to the argmax, so a warm-but-saturated instance can lose to a
     cold-but-idle one. It subclasses `KvawareRouter` and overrides only the
     selection step: `KvawareRouter` must stay **byte-identical** because it is
     the baseline arm of the experiment.
 
-    Three deliberate departures from `kvaware`, all report material:
+    Four deliberate departures from `kvaware`, all report material:
 
     1. **Benefit is normalized** to the fraction of the prompt already cached
-       ([0, 1]) rather than a raw token count. Raw counts make alpha/beta scale
-       with prompt length, so one (alpha, beta) pair would mean different
-       policies for a 500- and a 4000-token prompt — unusable for the §5
-       sensitivity sweep. Normalized, `beta` reads directly as "how many
-       in-flight requests cancel out a full cache hit" (1/beta).
-    2. **Every endpoint is scored**, not only the holders in `layout_info`. An
-       endpoint absent from `layout_info` scores benefit 0 — that is what makes
+       ([0, 1]) rather than a raw token count. Raw counts make beta scale with
+       prompt length, so one beta would mean different policies for a 500- and
+       a 4000-token prompt - unusable for the §5 sensitivity sweep.
+    2. **Load is normalized too**, against the fleet's own mean, and this is
+       what lets a single beta ship. An absolute in-flight count has no bounded
+       scale: it depends on request rate, prompt length and GPU, so the same
+       beta is a different policy on every deployment. Concretely: this
+       project's beta of 0.034 was tuned where the busiest engine ran ~47
+       in-flight. On a fleet running 400 it yields a load penalty of 13.6
+       against a benefit term that is capped at 1.0, so the cache stops
+       mattering entirely and placement silently collapses to least-loaded -
+       a failure with nothing in the logs to announce it. Measured on this
+       project's own runs: across four untreated rate-16 cells the absolute
+       calibration spans 2.69x while the relative one spans 1.41x, and across
+       the three cells at comparable fleet load it spans **1.06x** (0.500,
+       0.501, 0.529) - flat. The denominator is clamped at 1 so that a fleet
+       which is essentially idle reports no imbalance to act on: at mean load
+       0.2 a single in-flight request is not a 400%-overloaded engine.
+    3. **Every endpoint is scored**, not only the holders in `layout_info`. An
+       endpoint absent from `layout_info` scores benefit 0 - that is what makes
        "cold but idle beats warm but loaded" expressible at all.
-    3. **`kv_aware_threshold` is not applied.** Upstream needs that band because
+    4. **`kv_aware_threshold` is not applied.** Upstream needs that band because
        it cannot weigh a small match against anything; the argmax can (a small
        match simply loses to load). Keeping the band would also route every
        sub-threshold prompt by QPS in *both* arms, turning that slice of the
@@ -465,7 +488,6 @@ class LoadAwareRouter(KvawareRouter):
         lmcache_controller_port: int,
         session_key: str,
         kv_aware_threshold: int = 2000,
-        loadaware_alpha: Optional[float] = None,
         loadaware_beta: Optional[float] = None,
     ):
         super().__init__(
@@ -473,17 +495,13 @@ class LoadAwareRouter(KvawareRouter):
             session_key,
             kv_aware_threshold if kv_aware_threshold is not None else 2000,
         )
-        #: Weight on cache-hit benefit (fraction of the prompt already cached).
-        self.alpha = loadaware_param(
-            "LOADAWARE_ALPHA", loadaware_alpha, DEFAULT_LOADAWARE_ALPHA
-        )
-        #: Weight on load penalty (in-flight requests on the instance).
+        #: Weight on the load penalty, in units of "full cache hits per 100%
+        #: above fleet-average load". The benefit term carries an implicit
+        #: weight of 1; see the module-level default for why there is no alpha.
         self.beta = loadaware_param(
             "LOADAWARE_BETA", loadaware_beta, DEFAULT_LOADAWARE_BETA
         )
-        logger.info(
-            f"Initialized LoadAwareRouter with alpha={self.alpha}, beta={self.beta}"
-        )
+        logger.info(f"Initialized LoadAwareRouter with beta={self.beta}")
 
     @staticmethod
     def load_penalty(request_stats: Dict[str, RequestStats], url: str) -> int:
@@ -499,10 +517,87 @@ class LoadAwareRouter(KvawareRouter):
             return 0
         return stats.in_prefill_requests + stats.in_decoding_requests
 
-    def score_endpoint(self, matched_tokens: int, prompt_tokens: int, load: int) -> float:
-        """`alpha * cache_hit_benefit - beta * load_penalty` for one endpoint."""
+    @classmethod
+    def relative_loads(
+        cls, request_stats: Dict[str, RequestStats], endpoints: List[EndpointInfo]
+    ) -> Dict[str, float]:
+        """Each endpoint's load as a signed fraction of the fleet mean.
+
+        `(load - mean) / max(1, mean)`, so 0.0 is "average", +1.0 is "twice the
+        fleet average" and -1.0 is "idle while the fleet is busy". The fleet
+        mean is recomputed per request from the same live `request_stats` the
+        raw counts come from, which is what makes `beta` self-calibrating: the
+        router measures its own scale instead of inheriting one from whoever
+        tuned it last.
+
+        Clamping the denominator at 1 keeps a near-idle fleet quiet. Without it
+        a mean of 0.1 turns one in-flight request into `relative_load = 9.0`,
+        and the policy would thrash on noise at exactly the load level where
+        there is nothing worth balancing.
+        """
+        loads = {
+            endpoint.url: cls.load_penalty(request_stats, endpoint.url)
+            for endpoint in endpoints
+        }
+        if not loads:
+            return {}
+        mean = sum(loads.values()) / len(loads)
+        return {url: (load - mean) / max(1.0, mean) for url, load in loads.items()}
+
+    def score_endpoint(
+        self, matched_tokens: int, prompt_tokens: int, relative_load: float
+    ) -> float:
+        """`cache_hit_benefit - beta * relative_load` for one endpoint.
+
+        Both terms are dimensionless: benefit is a fraction of *this prompt*,
+        relative_load a fraction of *this fleet's* mean. So beta is a pure
+        exchange rate between the two and carries no unit from the deployment.
+
+        With two engines the arithmetic is worth stating, because it is what
+        the sweep grid means. One engine at +r forces the other to -r, so the
+        load gap is `2 * beta * r` and a full cache hit is exactly cancelled at
+        `r = 1/(2*beta)`. At the default beta = 1.0 that is r = 0.5, and the
+        untreated cells of this project measured a relative imbalance of
+        0.47-0.50 - so the default lands on the crossover for the imbalance it
+        was built to correct, which is a coincidence of this cluster and not a
+        property of the parameterization. Larger fleets dilute the gap; the
+        per-endpoint reading in the module-level default is the one that
+        generalizes.
+
+        **What the benefit term actually ranges over (measured 2026-08-04).**
+        The workload's ISL is 1578 tokens, of which 1544 are the shared
+        cacheable prefix and 34 a unique suffix - measured on the engine's
+        `/tokenize`, not read off `workload_gen`'s `prefix_tokens: 2048`, which
+        is a request to the generator (`_filler` emits `approx_tokens * 0.75`
+        words) and not its output. Engine-side, vLLM's HBM prefix cache served
+        **1435 of 1578 tokens per request** (90.9%) over the `kvaware` n=20
+        cell - `vllm:prefix_cache_{hits,queries}_total` count TOKENS, not
+        blocks, which is confirmable from queries/request = 1573.8 tracking ISL.
+        (`lmcache:num_hit_tokens_total` is a different tier - CPU offload - and
+        reads ~99 tokens/request because KV never became scarce. It is not this
+        number and must not be substituted for it.)
+
+        **`matched_tokens` itself is NOT recorded anywhere**, which is a gap
+        worth naming rather than papering over: it reaches this function from
+        the Controller's `layout_info`, and the only place it surfaces is the
+        `logger.debug` below, while the deployment runs at `logLevel: INFO`.
+        So the realized ceiling of `benefit` is unverified. Do not quote one.
+
+        The open question that ceiling turns on is whether `layout_info` rounds
+        a match UP to the 256-token LMCache chunk boundary or truncates DOWN.
+        1544 tokens is 6.03 chunks: truncating gives 1536 (benefit caps at
+        0.973), rounding up gives 1792 (`min()` clamps it, benefit reaches
+        1.0). The evidence points to rounding up - the 2026-08-01 smoke test
+        (CHANGELOG, 2026-08-05 entry) sent a ~2000-token prompt and got a
+        2048-token match, i.e. a match LONGER than the prompt, which is the
+        whole reason the `min()` guard below exists. Not yet confirmed on this
+        workload; measuring it needs a live probe with router debug logging.
+        Either way the difference is <=2.7% on the crossover, far under this
+        cluster's run-to-run noise, so it is a documentation defect and not a
+        reason to touch the frozen dataset.
+        """
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
-        return self.alpha * benefit - self.beta * load
+        return benefit - self.beta * relative_load
 
     def matched_tokens_by_url(self, layout_info: Dict) -> Dict[str, int]:
         """Re-key the Controller's answer from instance_id to engine URL.
@@ -554,15 +649,17 @@ class LoadAwareRouter(KvawareRouter):
         to route to, which the caller turns into the upstream fallback.
         """
         matched_by_url = self.matched_tokens_by_url(layout_info)
+        relative = self.relative_loads(request_stats, endpoints)
         best_url = None
         best_score = -math.inf
         for info in sorted(endpoints, key=lambda e: e.url):
             matched_tokens = matched_by_url.get(info.url, 0)
-            load = self.load_penalty(request_stats, info.url)
-            score = self.score_endpoint(matched_tokens, prompt_tokens, load)
+            relative_load = relative.get(info.url, 0.0)
+            score = self.score_endpoint(matched_tokens, prompt_tokens, relative_load)
             logger.debug(
                 f"loadaware score {info.url}: matched={matched_tokens}/{prompt_tokens} "
-                f"load={load} score={score:.4f}"
+                f"load={self.load_penalty(request_stats, info.url)} "
+                f"rel_load={relative_load:+.3f} score={score:.4f}"
             )
             if score > best_score:
                 best_score = score
@@ -666,7 +763,7 @@ class LoadAwareRouter(KvawareRouter):
     ) -> str:
         """
         Route the request to the engine with the best
-        `alpha * cache_hit_benefit - beta * load_penalty`.
+        `cache_hit_benefit - beta * relative_load`.
 
         Args:
             endpoints (List[EndpointInfo]): The list of engine URLs
@@ -841,16 +938,15 @@ def initialize_routing_logic(
         return router
     elif routing_logic == RoutingLogic.LOADAWARE:
         # LOADAWARE PATCH: mirrors the KVAWARE branch (construct, then start the
-        # kv manager). alpha/beta are passed through when present; absent, the
-        # router falls back to LOADAWARE_ALPHA/LOADAWARE_BETA in the environment
-        # and then to the documented defaults — note `kwargs.get(...)` yields
-        # None, so the defaults must live in the callee, not in the signature.
+        # kv manager). beta is passed through when present; absent, the router
+        # falls back to LOADAWARE_BETA in the environment and then to the
+        # documented default - note `kwargs.get(...)` yields None, so the
+        # default must live in the callee, not in the signature.
         logger.info("Initializing loadaware routing logic")
         router = LoadAwareRouter(
             kwargs.get("lmcache_controller_port"),
             kwargs.get("session_key"),
             kwargs.get("kv_aware_threshold"),
-            kwargs.get("loadaware_alpha"),
             kwargs.get("loadaware_beta"),
         )
         router.start_kv_manager()

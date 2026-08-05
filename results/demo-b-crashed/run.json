@@ -1,0 +1,15 @@
+{
+  "cell": "demo-b",
+  "arm": "loadaware-overlay-DEMO",
+  "alpha": "1.0",
+  "beta": "0.1",
+  "rate_req_s": 4.0,
+  "window": {
+    "start_ts": 1785602711,
+    "end_ts": 1785602784
+  },
+  "router_image": "lmcache/lmstack-router:0.1.9... (+dev overlay - NOT a valid measurement)",
+  "workload_manifest": {
+    "note": "mini demo: 3 seeds x 100 req, pool_seed 42"
+  }
+}

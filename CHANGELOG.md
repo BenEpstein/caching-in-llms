@@ -8,6 +8,862 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - PR #23 re-landed on the integration branch (#36)
+
+### Changed
+- **PR #23 was rebuilt, not replayed.** Its base moved three times underneath it (#26, #27, #29,
+  #35), so the 19-commit rebase was abandoned in favour of re-applying the surviving work onto
+  `feat/relative-load-normalization`. Two of its commits are **deliberately dropped**:
+  `fig10-utilization` and its tests (#35 does this properly, with a shared `utilization.py`, a
+  coverage gate, and KV-cache memory per engine), and the old `run_cell.sh` edits (#27 turned the
+  replay into an in-cluster Job).
+- **README rewritten for the post-α policy** (#32): one knob, `LOADAWARE_BETA`, the
+  `1/(2β)` cancellation rule, in-cluster measurement, 168 tests, current provenance paths. The
+  latency row states plainly that it is pending #31 rather than quoting WAN-polluted numbers.
+- **Report rewritten** for the same: relative-load formula and the reason α was removed;
+  Results carry the settled imbalance co-primary (**−43.7%, 20/20 seeds, p<0.0001** at β=0.5)
+  and hold the latency row open; resource cost re-derived from `utilization.py`.
+
+### Added
+- **The novel-prompt profile re-landed** (#25) and re-verified against the new harness: both
+  manifests still reproduce bit-identically after `9d14c95` changed `WorkloadConfig`'s defaults.
+  `WORKLOAD_PROFILE` now threads run_cell.sh → bench_job.sh → pod env → verify_dataset.sh, and
+  is recorded in `run.json`.
+- **Micro-benchmarks rewritten for the post-α API** (#24): `score_endpoint` lost its α argument
+  and `relative_loads` is new - it recomputes the fleet mean per request, so it is the piece
+  whose cost grows with fleet size and it gets its own benchmark. Measured: the router's CPU is
+  0.212 / 0.213 / 0.214 core-s/s across kvaware / β=0 / β=0.5, i.e. the policy is free at this
+  scale.
+
+### Fixed
+- **A regression caught while porting: the `--profile` refactor resolved the manifest from the
+  repo tree instead of from `--out-dir`.** That silently breaks `verify_dataset.sh`, which copies
+  the committed manifest into a writable directory because `/app` is read-only under the
+  restricted SCC - i.e. it would have broken the in-cluster Job. Each profile is now a directory
+  **containing** its manifest, so `--out-dir` keeps its contract. All three paths verified.
+
+### Decided
+- **The report's latency co-primary stays empty until #31 runs.** Engine-side TTFT shows β=0.5
+  improving ~9% at p=0.0053, but it was chosen after seeing the client-side null, so it is
+  exploratory by construction and is reported as a named secondary only. Substituting it would be
+  the same error as adding seeds until a p-value cooperates.
+- **The relative-load normalization is recorded in §6 as a design change made in response to a
+  measured weakness, not to a result** - β was previously tied to absolute concurrency and two
+  probes at the same rate disagreed (0.034 vs 0.013). Future-work item 1 changed accordingly:
+  the open question is now fleets larger than two engines, where the argmax can chase a single
+  idle instance.
+
+
+## 2026-08-05 - Utilization is §3's last unreported metric family, and it is a result (#35)
+
+### Added
+- **`benchmarks/utilization.py`** - the §3 utilization readout, plus its coverage gate.
+  Most of what it reads was already collected in every cell going back weeks and read by
+  **zero** committed code; the two LMCache memory gauges are new here. `report` prints
+  GPU / GPU-memory / CPU / host-memory per cell; `coverage --update-run-json` records how
+  much of the measured window each series actually observed. 22 tests, including the #27
+  pilot's tail truncation as a regression case.
+- **`fig10-utilization.png`** (`plot_results.py`) - four panels, one per §3 resource.
+  KV-cache occupancy is the load-bearing one: it separates the arms monotonically in β
+  (kvaware spreads **1.70×** across the two engines, b0.5 **1.18×**, b2.0 **1.11×**) because
+  it is the resource the policy contends for.
+- **`lmcache:local_cache_usage` + `lmcache:active_memory_objs_count`** added to `prom_dump.py`
+  and both read. The former (~3.8 GB/engine, confirmed live) is the engine-side *memory*
+  number the project believed it did not have. Deliberately only two: #35 exists because six
+  series were collected for weeks and read by nothing, so adding unread ones would have
+  reproduced the thing it fixes.
+
+### Decided
+- **DCGM stays the source of record for GPU utilization**, against the standing proposal to
+  drop it for Prometheus. vLLM's `/metrics` exposes **113 metric names and no SM% or power**
+  (checked at the endpoint), so there is no Prometheus substitute for that half of §3.
+  Evidence and full metric map: [#35](https://github.com/BenEpstein/caching-in-llms/issues/35).
+- **The `nvidia-gpu-operator` RBAC "wall" was never a permissions problem** - `oc whoami` is
+  `kube:admin` and `can-i list pods -n nvidia-gpu-operator` returns yes. What a ServiceMonitor
+  actually costs is **reproducibility**: `deploy/prometheus.yaml` is a namespaced `Role`, so a
+  grader can `oc apply -f deploy/` into their own namespace; a foreign-namespace RoleBinding
+  (or a cAdvisor `ClusterRole`) makes that need cluster-admin. Recorded because the old
+  rationale would otherwise get re-litigated on a false premise.
+- **Engine host-CPU and engine RSS are reported as unavailable, not substituted.** vLLM
+  registers no `process_*` collector, so the two "CPU (engines) / Memory (engines)" rows that
+  #35 opened with were never collected in any of the 28 cells on disk. The router's CPU is the
+  number that matters anyway - it is the only component the extension changes, and it comes
+  back **flat** across arms (0.199-0.220 core-s/s, RSS 1.013-1.028 GB, kvaware mid-pack), which
+  is the §5 claim that the policy's routing work is free.
+- **Utilization is reported from #31's cells, not the 28 on disk.** All 28 predate #27 (no
+  `driver` block in any `run.json`); quoting latency from one set and utilization from another
+  invites a provenance question in §6 for no gain. The analysis is cell-agnostic, so this costs
+  nothing, and pre-#27 cells stay a valid fallback precisely because utilization is server-side.
+- **The coverage gate warns, never fails.** The driver CSVs are the primary measurement and a
+  cell with good latency data must not be discarded over utilization sampling.
+
+### Fixed
+- **DCGM port-forwards now run under supervisors that reconnect.** A bare `oc port-forward`
+  dies for good when the VPN drops while `dcgm_poll` keeps polling a dead local port - which is
+  how the #27 pilot silently lost the last **171 s of a 712 s cell** (24%, a clean tail
+  truncation, no internal gaps > 12 s). Each supervisor traps `TERM` and kills its own forward,
+  so cleanup cannot orphan one and leave a local port bound for the next cell. `wait "$pf" || true`
+  is load-bearing: `run_cell.sh` runs under `set -e`, so a bare `wait` would kill the supervisor
+  on the first dropped forward it exists to survive. This narrows the exposure; it cannot close
+  it, which is why the coverage gate lands alongside it.
+- **The coverage gate was blind to the failure the supervisors create, and to total loss.**
+  Both found by adversarial review of this branch before merge. A *span* measure scores an
+  internal gap as perfect - and reconnecting forwards turn tail truncations into exactly that
+  shape, so on a real cell dropping 42% of samples mid-window scored **99.8%**. Coverage is now
+  gap-aware. Separately, a source that produced *nothing* got no key at all rather than 0.0, so
+  a cell with no GPU data was indistinguishable from a healthy one; total loss is now scored and
+  flagged. The gap-aware measure also credits the window edges, which fixes a false-warn ceiling
+  of `1 - step/window` that made any cell under ~100 s warn on perfect data.
+- **`counter_rate` reported a restarted router as cheaper.** It differenced the endpoints, and
+  the router is scraped through its Service so a restart does not change the series key. A
+  synthetic restart mid-window read 0.114 against a true 0.2, unflagged - on the exact metric
+  behind "router CPU is flat across arms". Now sums positive deltas.
+- **`fig10` drew missing data as a missing bar**, which matplotlib renders identically to a
+  measured zero. On the CPU panel that is the shape of the §5 no-overhead claim. Missing series
+  are now labelled "no data".
+- **Engine bars were labelled with ReplicaSet hashes** (`rrcpr`, `b2xv8`) and the GPU legend
+  named two different *nodes'* `gpu0` as "GPU 0"/"GPU 1". Engines are now numbered, GPUs named
+  from their own labels, and the GPU count derived rather than hardcoded to two.
+- Also from review: `run.json` is rewritten via write-then-rename rather than truncated in
+  place; series from one pod under different `worker_id`s no longer average together;
+  `utilization.window()` renamed `manifest_window()` (it is a *different interval* from
+  `load_gate._window()`); and `fig_imbalance` now calls `utilization.read_series` instead of
+  carrying a third verbatim copy of the same parse.
+
+## 2026-08-05 - The measured replay moves into the cluster: no WAN in TTFT (#27)
+
+### Added
+- **`Dockerfile.bench` + `.github/workflows/bench-image.yml`** - the in-cluster driver image
+  (`python:3.12-slim` pinned by digest + httpx + the driver path), built and SHA-tagged in CI
+  and pushed to the public `quay.io/rhl193000/bench-driver`, mirroring the router-image path.
+  Its verify step runs `verify_dataset.sh` **inside the built image**, so "the frozen dataset
+  is reconstructible from source" becomes a tested claim on every push rather than an asserted
+  one (0.84 s for all 20 seeds).
+- **`benchmarks/in_pod.sh` + `verify_dataset.sh` + `bench_job.sh` + `collect_job.py`** - the
+  replay now runs as a Job against `stack-router-service.<ns>.svc.cluster.local:80`. The pod
+  regenerates and SHA-256-verifies the 20 seed files rather than being shipped 126 MB, and
+  returns CSVs through its log as one gzip+base64 frame per seed. 12 new tests (132 total).
+
+### Changed
+- **`run_cell.sh` step 8 only.** helm, cold start, registry probe, warm-up gate, Prometheus
+  dump, DCGM and the validity gate are untouched and still laptop-side. `BENCH_TAG` joins
+  `LOADAWARE_TAG` as required on **every** cell, both arms. `run.json` gains a `driver` block
+  (location, node, image, target), which is what separates in-cluster cells from the WAN ones
+  already under `results/`.
+- **The measurement window now comes from the pod's clock**, not the laptop's: image pull plus
+  dataset verification sit between warm-up and the first request, and a laptop-clock window
+  would have dragged warm-up traffic into the Prometheus dump and contaminated the imbalance
+  co-primary.
+
+### Decided
+- **Fix the instrument, keep the metric.** 45-59% of every recorded TTFT was WAN (RTT avg
+  44.4 ms), and the non-engine component swung 121 -> 195 ms between two cells an hour apart -
+  a per-cell systematic offset larger than the 10-60 ms effect under study, so more seeds could
+  never fix it. That is the complete explanation for TTFT being a null in every sweep while
+  load imbalance (server-side, therefore immune) reached p<0.0001. Switching to engine-side
+  Prometheus histograms as the primary was **rejected**: it is metric-switching after seeing a
+  null, and over half of all requests land in one 150 ms-wide bucket against a 10-30 ms effect,
+  with p99 where under 2% of the mass lives - §3 requires per-request p95/p99 and interpolated
+  percentiles there are manufactured. Subtracting an RTT baseline was rejected as an
+  unverifiable per-request correction. Engine-side is retained as a labelled secondary and as
+  the cross-check that the driver pod is not perturbing the engines.
+- **Results travel through the pod log, framed per seed with a checksum.** One channel for
+  progress and data, and it survives pod GC. Per-seed frames rather than one blob so truncation
+  is detectable per seed; `collect_job.py` is all-or-nothing, because a partially-recovered cell
+  would enter the paired stats looking like a real observation. Measured 2.4 MB per 20-seed cell
+  against kubelet's 10 Mi rotation - the issue's original 1.4 MB estimate was optimistic by 1.7x.
+- **No CPU limit on the driver pod, and no anti-affinity.** CFS throttling would inflate client
+  TTFT exactly the way the WAN did. Anti-affinity is unsatisfiable anyway: gapu-2 has two
+  schedulable nodes with an engine on each, and worker0 at 93% CPU / 99% memory requested means
+  the driver deterministically lands on worker1. The control is the engine-side cross-check, not
+  a scheduling rule; the node is recorded in `run.json`.
+
+### Fixed (follow-on, same session)
+- **The Job progress tail was silently dead - twice, for two different reasons.** The throwaway
+  cell produced a fully correct result with zero pod output on the operator's terminal:
+  `oc logs -f job/<name>` ran straight after `oc apply` and lost a race, because the Job exists
+  before its pod does and kubectl's selector then matches nothing. Resolving the pod first walked
+  into the second mode - `oc logs -f pod/<name>` against a still-`ContainerCreating` pod returns
+  `BadRequest`, which is what a fresh (uncached) image tag guarantees. The first fix had passed
+  only because that run's image happened to be cached from the previous cell. `--pod-running-timeout`
+  fixes neither: it governs waiting when a **selector** resolves pods, not a pod named directly,
+  so it was dead code that looked load-bearing. Now one loop waits for the pod to exist **and** to
+  leave `Pending`. Cosmetic both times - collection is a plain `oc logs` at the end, which
+  re-reads the whole log and is idempotent, so the b0.5 pilot collected all 20 seeds correctly
+  with no tail at all.
+
+### Verified
+- **20-seed `loadaware-b0.5` pilot** closed the four gaps the 3-seed throwaway could not:
+  log volume at full size (**2.35 MiB measured against 2.34 predicted**, 4.3x under kubelet's
+  10 Mi), the dotted job name (`bench-loadaware-b0-5-<epoch>`) accepted by the API server,
+  `LOADAWARE_TAG` + `BENCH_TAG` live together, and ~12 min of Job runtime without eviction. All
+  20 seeds at 500 rows, pooled error rate 0.36%, validity gate exit 0. It also survived an
+  unplanned network blip mid-run: the `oc wait` retry loop absorbed it and collection completed.
+
+## 2026-08-05 - Doc truth sweep: handoffs removed, alpha purged, a claim un-inverted (#29)
+
+### Decided
+- **Session handoffs are not repo artifacts. All six were deleted and the path gitignored**
+  (`docs/handoffs/`, `docs/handoff-*.md`). They were going to be frozen in place; deleting is
+  the stronger move because it *enforces* the rule `CLAUDE.md` already states - rationale lives
+  in GitHub issues + this changelog, `docs/` holds artifacts only. Five of the six still
+  pre-registered **β=0.1 at rate 7.5/10.5** as the headline against a shipped operating point of
+  **β=0.5 at rate 16**, and a grader finding a pre-registration that does not match the reported
+  result will reasonably suspect post-hoc selection. Removed: `handoff-cache-sizing.md`,
+  `handoff-core-implementation.md`, `handoffs/cache-sizing-decisions.md`,
+  `handoffs/claude-wayfinder-3-e533a3{,-decisions}.md`, `handoffs/feat-relative-load-normalization.md`.
+  All in git history.
+- **The `upstream-findings.md` §6 drop-in paragraph is frozen, not re-derived.** It is quantified
+  entirely at 7.5/10.5 req/s and is *written to be pasted into the report*, so as it stood it would
+  have contradicted the report's own data. Re-deriving it at rate 16 is possible - all four
+  quantities have backing on disk, including a 20-seed `roundrobin` cell - but doing it here would
+  mean another ad-hoc in-session number feeding the report, which is the exact defect #28 exists to
+  fix. The section now carries a do-not-paste banner naming the four quantities and the files they
+  come from; reviving it belongs to #28, with committed code.
+
+### Fixed
+- **The `kv_aware_threshold` claim was stated backwards in three docs, and the code says the
+  opposite.** `routing_logic.py:396` tests `matched_tokens < max(len(token_ids) - self.threshold, 0)`.
+  At ISL **1578** with the threshold defaulting to **2000**, `max(1578-2000, 0) == 0`, so the test
+  reduces to `matched_tokens < 0` and **can never fire**: kvaware takes the cache path for every
+  request with any holder, at any `matched_tokens`. The three docs asserted that prompts must exceed
+  2000 tokens or kvaware never takes the cache path, and presented that as *the reason* the workload
+  uses long prefixes. Results are unaffected - kvaware takes the cache path either way - but the
+  stated design rationale was wrong. All three sites were deleted with the handoffs; the corrected
+  explanation now lives in `patches/README.md`, which held a **fourth, live** copy of the same
+  inverted reasoning in the ⚠️ baseline-measurement warning. That warning's *conclusion* (revert the
+  patch before measuring the baseline arm) stands - it costs one script and removes an assumption -
+  but its stated mechanism did not.
+- **`alpha` purged from every live doc.** `project-brief.md` (which `CLAUDE.md` calls the design
+  source of truth) and `feasibility-verification.md` (the §2 deliverable's raw material) both still
+  carried `score = α·matched_tokens − β·load`, un-normalized on both terms. Now
+  `matched_tokens/prompt_tokens − β·relative_load`. Surviving `α` references are deliberate: the
+  "there is no α" explanations, and `docs/decisions/second-optimization.md`, which is frozen history.
+- **`project-brief.md` named the wrong model and the wrong offload buffer**: `llama8b` /
+  `meta-llama/Llama-3.1-8B-Instruct` and `cpuOffloadingBufferSize: "20"`, against the shipped
+  `Qwen/Qwen2.5-3B-Instruct` and `"4"` in `deploy/values-baseline-kvaware.yaml`.
+- **`CONTEXT.md` defined two core terms against the code.** "Load Penalty" was "running **+ queued**
+  requests"; the code is `in_prefill_requests + in_decoding_requests` with no queue term
+  (`num_requests_waiting` is a run diagnostic and does not enter the score). "Cache-Hit Benefit" was
+  a token *count*; it is a *fraction*, which is what makes β dimensionless. Added "Relative Load" as
+  its own entry, since that is the term β actually weighs.
+- **`CLAUDE.md`**: "Two people work on this repo" replaced with the parallel-branch reality plus a
+  check-open-PRs instruction; the "(stretch) hot-prefix KV replication" line dropped, since
+  `CONTEXT.md` records that policy parked.
+- **Dangling references created by the deletion**, all repointed: `routing_logic.py:591`,
+  `tests/test_kv_controller_lookup.py`, `tests/test_loadaware_routing.py`,
+  `docs/decisions/second-optimization.md`. `README.md`'s repo-layout row still names
+  `handoff-core-implementation.md`, but PR #23 already removes it, so it was left alone rather than
+  conflict with #26.
+
+### Changed
+- **Status headers added to 5 files** (`CONTEXT.md`, `CLAUDE.md`, `patches/README.md`,
+  `deploy/README.md`, `deploy/dev/README.md`) and refreshed on the 3 amended `docs/` files. Every
+  tracked `.md` now carries one except `README.md` (owned by #26) and `CHANGELOG.md` (an
+  append-only log, not a doc making claims). Note the pattern this sweep found: **every doc
+  carrying a `live` header was stale**, so the header is worth only as much as the re-verification
+  behind it.
+- **Disambiguated a numeric collision in `upstream-findings.md`.** Dynamo's default converts to
+  β ≈ 0.5 **on the retired absolute axis**, and the project ships β=0.5 **on the normalized axis**.
+  The two are numerically equal and semantically unrelated, and as written the passage read as
+  evidence against the shipped configuration.
+
+### Fixed (follow-on, same session)
+- **The stale workload parameters were chased to their last two homes.** The map's #3 entry recorded
+  the frozen workload as "s=1.2, 20×2048 tok" and `WorkloadConfig` still *defaulted* to
+  `prefix_pool_size=20, zipf_s=1.2` (duplicated again in `workload_gen.py`'s argparse). The frozen
+  dataset is **128 prefixes at s=0.9, 500 requests, 20 seeds**; s=1.2 with a 20-prefix pool were
+  exploratory values that outlived the freeze. No recorded result moves - `freeze_workloads.py`
+  always passed every value explicitly, so the defaults never reached the data, and regenerating all
+  20 seeds after the change reproduces the committed manifest SHA-256s exactly ("all workloads match
+  the committed manifest - frozen dataset verified", exit 0).
+- **The real skew is much gentler than the retired figures implied.** Measured over all 20 frozen
+  seeds (10,000 requests): **top-1 prefix = 14.8% of requests, top-3 = 28.0%, top-10 = 47.9%**,
+  matching Zipf theory at s=0.9/N=128 to within 0.1 pp. The figures quoted at s=1.2 were 35% / 57%.
+  This matters for §3: the hot prefix carries about a seventh of traffic, not a third.
+- **`test_defaults_match_the_frozen_manifest`** now pins `WorkloadConfig`'s defaults to
+  `workloads/manifest.json` field by field, so the two cannot drift apart again, and the argparse
+  defaults reference the dataclass instead of re-stating literals. 121 tests pass.
+
+## 2026-08-05 - Front door part 1: figures are reproducible, benchmarks/README stops lying (#26)
+
+### Fixed
+- **`matplotlib` was missing from `requirements.txt`**, and `plot_results.py` is the sole
+  generator of all 9 figures in `docs/figures/` - so on a clean clone every §5 figure died on
+  `ModuleNotFoundError` while working on the author's machine. Verified in a fresh venv:
+  install → `pytest benchmarks/ tests/ -q` 120 passed → all 9 figures regenerate, exit 0.
+  Audited the rest: `httpx`, `pytest`, `matplotlib` are the only third-party imports across
+  `benchmarks/` + `tests/`; `analyze.py` and `export_summary.py` are stdlib-only, confirmed.
+- **`benchmarks/README.md` had the TTFT source inverted.** It argued engine-side histograms
+  "miss router overhead" and that driver CSVs are the trustworthy source - the opposite of what
+  was measured (45-59% of client `ttft_s` is laptop-to-cluster network; per-cell offset larger
+  than the effect). Now states the WAN finding, keeps engine-side as the per-seed-windowable
+  cross-check with its coarseness named, and points at #27 as the fix to the instrument.
+- **`benchmarks/README.md` contradicted `.gitignore`** about where the data is: it claimed
+  `results/` was gitignored with two artifacts force-added. `results/` is tracked in full -
+  1069 files, ~67 MB, sole exclusion `results/**/*.jsonl`. A grader reading the old text would
+  not have gone looking for raw data that is sitting in the repo.
+
+### Decided
+- **The `README.md` half of #26 is deferred, not dropped.** PR #23 already rewrote it (plus
+  `requirements.txt`), so writing a second front door here would guarantee a conflict. #23's
+  version is itself stale on this branch - it documents `LOADAWARE_ALPHA` and β=0.034, and α no
+  longer exists - and with benchmarking and the final architecture still open, a README that
+  declares the project complete would be wrong today. Tracked as its own ticket; evidence in
+  [#26](https://github.com/BenEpstein/caching-in-llms/issues/26).
+
+## 2026-08-05 - Confirmatory sweep: the load term is the mechanism, beta=0.5 is the knee
+
+Five cells, n=20 each, rate 16, OSL 64, one unattended batch 00:52-02:33. All valid
+(pooled error 0.29-0.50%). Throughput flat at 14.33-14.54 req/s across every arm, so all
+arms sat at the same operating point and latency differences are attributable to placement.
+
+| cell | imbalance | ttft p95 | itl p95 | e2e p95 | hit rate |
+|---|---|---|---|---|---|
+| `kvaware` | 2.630 | 0.411 | 0.158 | 6.866 | 0.9118 |
+| `loadaware-b0` | 2.647 | 0.463 | 0.184 | 8.196 | 0.9102 |
+| **`loadaware-b0.5`** | **1.262** | **0.401** | **0.146** | **6.052** | 0.9035 |
+| `loadaware-b1.0` | 1.209 | 0.417 | 0.151 | 6.064 | 0.8772 |
+| `loadaware-b2.0` | 1.189 | 0.454 | 0.163 | 6.387 | 0.8725 |
+
+### Decided
+- **The load term is the mechanism, and the ablation is unambiguous.** beta=0 is
+  indistinguishable from the baseline on imbalance (2.647 vs 2.630, **7/20 seeds, p=0.8847**)
+  - cache-aware placement alone does nothing for load balance. Every beta >= 0.5 lands
+  **19-20/20 at p<0.0001** against both `kvaware` and `beta=0`. One parameter, same binary,
+  effect present only when it is non-zero: there is no room for an implementation artifact.
+- **beta = 0.5 is the operating point.** It captures ~95% of the achievable balance for
+  **0.7 pp of cache hit rate**, where beta=1.0 costs 3.3 pp and beta=2.0 costs 3.8 pp for a
+  further 4% of imbalance. It is also best on every latency metric (TTFT, ITL and E2E).
+  The knee reproduces yesterday's independent n=3 finding.
+- **The headline does not depend on the beta pick.** Imbalance reduction is 44-54% at
+  p<0.0001 for every beta in {0.5, 1.0, 2.0}. Report it as "the load term reduces imbalance
+  ~50%, present at every beta >= 0.5, absent at beta=0" - robust to the operating-point
+  choice, so no pre-registration of a specific beta is needed to defend it.
+- **The beta-selection rule was NOT pre-registered and is ambiguous on this data.** "Within
+  5% of the best reduction" picks beta=0.5 read as percentage points (2.81 pp below best) and
+  beta=1.0 read as relative (5.12% below). Recorded as a defect in the rule, not resolved
+  after the fact. This sweep is therefore **characterization**, not a confirmatory test of a
+  pre-specified beta.
+
+### Added
+- **TTFT decomposed into engine vs non-engine, and the answer changes what is measurable.**
+  Mean TTFT this session: client 254-333 ms, engine 133-159 ms, so **45-59% of measured TTFT
+  never touches the model** (prefill alone is 95-110 ms). The non-engine half swung **121 ms
+  (b0.5) to 195 ms (b1.0) between two cells an hour apart in the same session** - larger than
+  the 10-60 ms arm differences being chased. That is a per-cell systematic offset, not
+  per-request noise, so **more seeds cannot fix it**, and it is the complete explanation for
+  why TTFT has been a null in every sweep this project has run.
+- **Engine-side, the latency signal matches the imbalance signal**: mean engine TTFT
+  `kvaware` 154.7, `b0` 158.9, `b0.5` **132.5**, `b1.0` 137.7, `b2.0` 157.6 ms - beta=0 at the
+  baseline, beta 0.5-1.0 ~14% better. No p-values yet: these are cell-level histogram means,
+  not per-seed pairs. Recovering the pairing needs per-seed histogram windows (each seed's
+  window is derivable from `send_ts`), which is **zero cluster time** and the highest-value
+  next step.
+- Yesterday's drift confirmed as entirely non-engine: 91 ms (15:27) -> 308 ms (20:44) ->
+  276 ms (21:43) while engine-side stayed 118-168 ms.
+- `osl_tokens` added to `export_summary` columns; `results/summary-per-seed.csv` regenerated
+  to **299 rows across 33 cells**.
+
+### Fixed
+- **`loadaware-b0.5` and `loadaware-b1.0` each name TWO DIFFERENT POLICIES** in
+  `summary-per-seed.csv`, discriminated only by `git_commit`: before `7e2dffb` beta multiplied
+  an ABSOLUTE in-flight count, from `7e2dffb` onward a fleet-relative one. They do not convert
+  by a constant. `beta=0` is the only value meaning the same thing on both sides. Warned at
+  the top of `export_summary.FIELDS`, where the file is generated.
+
+## 2026-08-04 (night, later) - TTFT measures the WAN, not the system under test
+
+### Decided
+- **The driver's client-side `ttft_s` is not comparable across cells run at different times,
+  and the TTFT co-primary is contaminated for every run in the project.** `load_driver.py`
+  measures with `perf_counter` from send to first chunk, over the laptop->cluster link. That
+  link is a WAN: RTT min 18.7 / avg 44.4 / max 132 ms, stddev 39.7 ms. Over the evening of
+  2026-08-04 non-engine overhead went 258 -> 478 ms while **engine-side TTFT stayed flat**
+  (0.168 -> 0.180 s). Evidence it is a constant per-request offset and not the policy: client
+  TTFT rose uniformly including **p10 (2.0x)** - a floor shift, where a policy or GPU effect
+  moves the tail - while ITL was untouched (a constant cancels in a difference between
+  consecutive chunk arrivals) and E2E nearly untouched (~6 s of decode dominates).
+  Ruled out first, verified not assumed: dataset (manifest byte-identical, 20/20 sha256),
+  recording code (`load_driver`/`workload_gen`/`freeze_workloads`/`warmup`/`collectors`
+  byte-identical), requests actually sent (`prefix_id` and `prompt_tokens` identical, schedule
+  within 20 ms), engine (queue 0.01 ms, 0 preemptions, KV usage down, hit rate up), router
+  (RSS/CPU flat, restarts every cell).
+- **Load imbalance is derived from Prometheus, server-side, and is therefore immune.** This is
+  now a mechanism rather than an observation, and it explains why imbalance reached p<0.0001
+  while TTFT was a null in every sweep the project has run.
+- **The metric of record is an open question, deferred to Ben.** Options and the per-seed
+  windowing unlock that preserves the paired design are in
+  `docs/handoffs/feat-relative-load-normalization.md`.
+
+### Added
+- **Engine-side TTFT collected from now on** (`prom_dump.METRICS`) and **backfilled into all 10
+  rate-16 cells** from live retention. Prometheus storage is an `emptyDir`, so this was hours
+  from unrecoverable. Engine-side p95: the two `b0.034` replicates 13 h apart agree to **1.8%**
+  (0.336 / 0.342) where the client-side comparison across the same gap was off by 76% *with the
+  sign inverted*.
+- **Four cells at rate 16**, all valid: `loadaware-b1.0` n=20, `b0.5` n=3, `b0.25` n=3, and a
+  `kvaware` n=3 **drift control** - the control is what exposed all of the above.
+
+### Fixed
+- **The prefix is 1544 tokens, not 2048, and ISL is 1578.** `workload_gen._filler` emits
+  `approx_tokens * 0.75` words, so the `prefix_tokens: 2048` knob is a request to the
+  generator and not its output. Verified two ways: the engine's `/tokenize` endpoint on the
+  prefix substring (1544) and on the full prompt (1578), and `usage.prompt_tokens` on every
+  recorded request (1578, min = median = max). "A misrouted request pays a full 2048-token
+  prefill" appears in earlier entries and in `docs/handoffs/` - it is ~31% too large; the
+  mechanism is unaffected but the number is wrong. `benchmarks/README.md` (which was also
+  still claiming 20 prefixes and s=1.2) and `freeze_workloads.py` now carry the measured
+  values. The knob keeps its name so the frozen manifest's checksums stay valid.
+- **Which hit counter means what, settled by measurement.**
+  `vllm:prefix_cache_{hits,queries}_total` count **TOKENS, not blocks** - queries/request is
+  1573.8, tracking ISL 1578. Engine-side reuse on the `kvaware` n=20 cell is therefore
+  **1435 of 1578 tokens per request (90.9%)**, or 92.9% of the 1544-token shared prefix.
+  `lmcache:num_hit_tokens_total` is a **different tier** (CPU offload) and reads ~99
+  tokens/request because KV never became scarce; it is not the cache-hit quantity and must
+  not stand in for it.
+- **Known gap: the router's `matched_tokens` is not recorded anywhere.** It is the actual
+  input to `score_endpoint`, arrives via the Controller's `layout_info`, and surfaces only in
+  a `logger.debug` while the deployment runs `logLevel: INFO`. So the realized ceiling of the
+  benefit term is **unverified** - an earlier claim in this session that it caps at 0.973 was
+  chunk arithmetic, not measurement, and is retracted. Evidence points the other way: the
+  smoke test in `docs/handoff-core-implementation.md` got a **2048-token match on a
+  ~2000-token prompt**, i.e. longer than the prompt, which is why `score_endpoint` has a
+  `min()` guard. Difference is <=2.7% on the crossover either way, well under run-to-run
+  noise, so it does not justify regenerating the frozen dataset. Documented in
+  `LoadAwareRouter.score_endpoint`; resolving it needs a live probe with router debug logging.
+- Two conclusions issued earlier this session and then withdrawn, both from cross-time
+  comparisons: "beta=1.0 over-diverts and costs TTFT" and "the relative formulation costs
+  double the cache hits". Neither survives the control. **Do not reinstate without re-deriving
+  on the engine-side metric.**
+- The 400-in-flight worked example conflated the load ratio (400/47 = 8.5) with the
+  penalty-to-benefit ratio (0.034 x 400 = 13.6 against a benefit capped at 1.0).
+
+## 2026-08-04 (night) - beta is dimensionless: load normalized against the fleet mean
+
+Branch `feat/relative-load-normalization`, off `feat/evaluation-runs`. Code + docs only,
+no runs yet. Builds directly on the evening sweep below.
+
+### Decided
+- **`alpha` is removed.** An argmax is invariant under positive scaling, so
+  `alpha*benefit - beta*load` and `benefit - (beta/alpha)*load` are the same policy: alpha and
+  beta were never two parameters, only their ratio. Every run in `results/` used alpha=1.0, so
+  nothing measured changes. A test now asserts it cannot come back.
+- **Load is normalized against the live fleet mean**, `(load - mean) / max(1, mean)`, so both
+  terms of the score are dimensionless and beta carries no unit from the deployment. The old
+  formulation could not ship a default: an absolute in-flight count has no bounded scale, so a
+  beta of 0.034, tuned where the busiest engine ran ~47 in-flight, yields a penalty of **13.6**
+  on a fleet running 400 - against a benefit term capped at 1.0, so the cache stops mattering
+  and placement silently collapses to least-loaded, with nothing in the logs to announce it.
+  This is the §4 "tunable
+  parameters exposed and documented" requirement and the upstream-merge path (§4 grade-100),
+  not a tidy-up.
+- **`DEFAULT_LOADAWARE_BETA = 1.0`**, read as "an endpoint 100% above fleet-average load
+  forfeits one full cache hit". No hardware, model, rate or fleet size in that sentence, which
+  is what makes it defensible without a probe.
+- **`load_gate.beta_from()` is deleted.** It solved `beta*delta_load = alpha*trigger` from ONE
+  probe's absolute concurrency, and the residual `trigger=0.5` was itself arbitrary. Evidence
+  it had to go: two probes at the same offered rate gave delta_load 39.46 and 14.69 (beta
+  0.013 and 0.034) because they caught the fleet at 39.5 vs 20.8 mean concurrency. Replaced by
+  `relative_imbalance()`, which **reports** the quantity the policy acts on instead of
+  calibrating a parameter from it.
+
+### Added
+- Evidence, computed from the committed prom scrapes - **no new cluster time**. Across the four
+  **untreated** rate-16 cells (probe A, probe B, `kvaware` n=20, `loadaware-b0` n=20) the
+  absolute calibration spans **2.69x** and the relative one **1.41x**; across the three cells at
+  comparable fleet load it spans **1.06x** (0.500 / 0.501 / 0.529). The residual is entirely
+  probe B, a 13-sample 66 s probe that caught the fleet at half the concurrency of the others.
+  Treated cells are excluded as circular - their imbalance is the residual *after* the policy
+  acted.
+- **The evening sweep's two optima both sit next to the new default**, via
+  `beta_rel = beta_abs * live_fleet_mean`: the TTFT optimum `beta_abs=0.034` (mean load
+  26.6-27.3) is **beta_rel 0.90-0.93**, and the ITL optimum `beta_abs=0.068` (mean load 19.65)
+  is **beta_rel 1.34**. So beta=1.0 lands between the two measured optima, and the published
+  n=20 headline was already run within ~8% of it. That is the confidence argument for the
+  rerun, and it is the reason the new grid is {0, 0.5, 1.0, 1.5} rather than a decade wide.
+- Router tests 56 → 60: scale invariance (same decision at 10x load), fleet-relative load at
+  n=4 engines, the near-idle clamp, and "there is no alpha". `test_load_gate.py` gains four
+  `relative_imbalance` cases. **120 tests pass.**
+- **A more transferable §5 statement**: treated cells sit at relative imbalance 0.069 / 0.122
+  against 0.47-0.50 untreated, i.e. the load term cuts relative imbalance **4-7x**.
+
+### Known gaps
+- **Untested above 2 engines in anger.** With n=2, `(load-mean)/mean` is ±r by construction and
+  only encodes which side of the mean an engine is on; larger fleets have real structure. Unit
+  tests cover n=4 on the pure `select_url` path, but no cluster has run it.
+- **The load SIGNAL is unchanged** - still a request count, not Dynamo's unique KV blocks. This
+  fixes the scale, not the deduplication. `docs/upstream-findings.md` Finding 5 stands as the
+  named next experiment.
+- **No runs yet.** The headline and grid must be re-measured at rate 16. `kvaware` and
+  `loadaware-b0` are unaffected (beta=0 zeroes the load term either way) and are NOT rerun.
+  Old runs stay in `results/` for the before/after comparison.
+- **The evening sweep's beta cells become historical.** Their beta values are in the old
+  absolute units and are only comparable to the new ones through the live-mean conversion
+  above, which holds at the mean and not per-decision (the router now recomputes the mean every
+  request). Reported as a conversion, never as a re-label.
+
+## 2026-08-04 (evening) - Sweep complete: beta curve has an interior tradeoff
+
+### Added
+- **`loadaware-b0.068` n=3** (`results/20260804-190542-loadaware-b0.068`) and
+  **`roundrobin` n=3** (`results/20260804-191644-roundrobin`), both rate 16, 0.00% errors.
+  The rate-16 sweep is now complete at 5 arms.
+- All 9 figures regenerated from the full cell set; `fig8`/`fig9` tracked for the first time.
+- `results/summary-per-seed.csv`: 160 rows across 19 cells.
+
+### Decided
+- **beta trades TTFT against ITL, and the optimum differs by metric.** Medians at rate 16:
+
+  | arm | n | TTFT p95 | ITL p95 | imbalance | achieved req/s |
+  |---|---|---|---|---|---|
+  | `roundrobin` | 3 | 11.528 | 0.863 | 1.723 | **10.7** |
+  | `kvaware` | 20 | 0.426 | 0.171 | 2.680 | 14.2 |
+  | beta=0 | 20 | 0.438 | 0.185 | 2.646 | 14.2 |
+  | beta=0.034 | 20 | **0.378** | 0.143 | 1.296 | 14.5 |
+  | beta=0.068 | 3 | 0.550 | **0.097** | **1.061** | 14.7 |
+
+  Raising beta diverts more requests off their cached engine: decode gets faster (smaller,
+  more even batches -> ITL p95 falls 32%) while prefill gets slower (more misses -> TTFT p95
+  rises past the baseline). beta=0.034 sits near the TTFT optimum, beta=0.068 near the ITL
+  optimum. Same mechanism that made beta>=0.5 collapse at 10.5 req/s, caught here while it is
+  still a tradeoff. **n=3, descriptive only** - these cells cannot be paired against the n=20
+  arms and the seed-set check correctly refuses to try.
+- **`roundrobin` is better balanced than the cache-aware baseline (1.723 vs 2.680) and 27x
+  worse on TTFT p95.** It equalises request COUNTS, not work: a misrouted request pays a full
+  2048-token prefill. This is the cleanest statement in the project of what "load" means, and
+  it is why the extension must add load-awareness on top of cache-awareness rather than
+  replacing it. **Caveat: it achieved only 10.7 req/s against 16 offered** while every other
+  arm delivered 14.2-14.7, so it is saturated and not at the same operating point - the
+  throughput shortfall is the honest headline for that arm, not the 27x.
+
+### Fixed
+- Published seed count corrected on issue #7: TTFT p95 improves on **12/20** seeds, not 13/20.
+  p, median and CI unchanged; the endpoint is a null either way. All other published counts
+  re-verified correct (imbalance 19/20 both candidate cells, beta=0 vs kvaware 9/20,
+  beta=0.034 vs beta=0 19/20).
+
+## 2026-08-04 (later) - Headline + ablation measured; seed labels were lying
+
+### Added
+- **`kvaware` n=20 at rate 16** (`results/20260804-151901-kvaware`) - the comparator the
+  sweep had been missing. Pooled error 0.56%, all validity rules pass.
+- **`loadaware-b0` n=20 at rate 16** (`results/20260804-155356-loadaware-b0`) - the ablation.
+- `results/summary-per-seed.csv` regenerated: 154 seed rows across 17 cells.
+
+### Decided
+- **The load term is the mechanism, not the routing implementation.** Median load imbalance:
+  `kvaware` 2.680, `loadaware` beta=0 **2.646** (p=0.2979, 9/20 - indistinguishable from the
+  baseline), `loadaware` beta=0.034 **1.296**. Latency agrees: beta=0 vs kvaware is p=0.8529
+  on TTFT p95 and p=0.4927 on ITL p95. Turning beta on produces the entire effect. This was
+  pre-declared as falsifiable - a beta=0 result near 1.30 would have voided the headline.
+- **Pre-registered headline (issue #3 comment, posted before the comparator ran):** load
+  imbalance **-48.3%, p<0.0001, 19/20 seeds**, replicated across both candidate cells
+  (-52.7% against the 00:29 cell). **TTFT p95 is a null** (p=0.1305, median -8.2%, CI spans
+  zero). Co-primary threshold 0.025 (Bonferroni over 2).
+- **`itl_p95` stays a SECONDARY and is not promoted.** It is nominally significant against
+  kvaware (p=0.0291) and against beta=0 (p=0.0060, CI [0.5%, 34.1%]), but it crosses the
+  line between replicate cells (p=0.0570 vs the 00:29 cell), and promoting a metric after
+  seeing its p-value is the same error as adding seeds. Reported as supporting evidence.
+
+### Fixed
+- **Per-seed labels named the wrong seed everywhere they were printed or plotted.**
+  `read_run` sorted the glob LEXICOGRAPHICALLY (`seed1, seed10, seed11 … seed2, seed20`)
+  while `cmd_compare` and `fig_paired` labelled rows with `enumerate()`, so every "seed N"
+  above N=1 was wrong (printed "seed 2" was really seed 10). **Pairing was unaffected** -
+  both arms were mis-ordered identically - so every p-value, median and CI in the project
+  is correct, and only the labels lied. Verified by re-running the headline under numeric
+  ordering: p=0.1305, W+=74.0, identical. The committed `summary-per-seed.csv` also escaped
+  (it derived the seed from the filename); all 74 pre-existing rows re-verified byte-identical.
+  `docs/figures/fig4-paired-seeds.png` IS mislabelled and awaits regeneration with the full
+  cell set. Fixed at the root: the seed number is now a carried field on `seed_stats`.
+- **`compare` matched on seed COUNT, not seed SET.** Two cells could each hold 20 CSVs drawn
+  from different seeds and `zip()` would pair them silently, reporting a clean p-value for a
+  comparison that never happened. Now matches the set and names the offenders; `fig_paired`
+  guards the same way. 116 tests (was 110).
+
+## 2026-08-04 - Confirmatory sweep at the knee: driver bug fixed, load gate added
+
+### Fixed
+- **The driver recorded NO TTFT at all** (regression from `e29cb4a`). 500 rows with an empty
+  TTFT column while token counts populated normally, so a CSV looked plausible at a glance
+  while missing the primary metric. `stream_options.include_usage` puts a `usage` key on
+  *every* chunk (`null` on token chunks), so the substring test `'"usage"' in data` matched
+  all of them and `continue`d past the TTFT/ITL recording; the final chunk still set the
+  token counts. Fixed by classifying on whether a chunk **carries a token** (`choices`
+  non-empty), extracted as a pure `classify_chunk()`. Verified live: 20 requests x 64 tokens
+  -> 1260 gaps (= 20 x 63). **This makes the 2026-08-04 sweep the first run in the project
+  with a valid ITL measurement**; any ITL figure in PR #22 never existed.
+
+### Added
+- `benchmarks/load_gate.py` - the load analogue of the scarcity gate, run on a short kvaware
+  probe before a sweep is funded. Validated against the known-bad case: it FAILS both
+  2026-08-03 headline cells and reproduces their published 1.68x imbalance.
+- Regression tests for the paths flagged as uncovered in #7 (ITL parsing, old-CSV `.get()`
+  fallback, the `job=vllm-engines` filter that corrupted 17 of 74 seed rows) plus the gate,
+  the chunk classifier, and the amended error rule. **110 tests.**
+- Seeds 10 -> 20 (`freeze_workloads.py`), verified purely additive: seeds 1-10 regenerate
+  bit-identically, only the manifest grows.
+
+### Decided
+- **This system saturates on COMPUTE, not memory - so the baseline's pathology is
+  decode-batch concentration, not queueing.** Measured: at offered 16 and 18 the busiest
+  engine ran 59 and 100 mean concurrent requests with `num_requests_waiting` = 0.00, **0
+  preemptions**, and queue time **0.0 ms/req at every rate including 10.5**. Prefix caching
+  makes concurrency nearly free in KV (~530 tokens per in-flight request against 1578-token
+  prompts), so against the verified 104,624-token pool KV tops out near 0.70 and never
+  exhausts. Confirmed by the gate probe: ITL p95 degraded **4.55x** over idle while TTFT p95
+  degraded 2.69x.
+- **The first load-gate criterion (preemption or waiting > 0) was falsified as
+  unsatisfiable, not strict, and replaced by measured degradation** (TTFT p95 or ITL p95
+  >= 1.25x an idle baseline, plus asymmetry >= 1.5x). Testing the consequence is stricter
+  than testing a counter - a counter can fire without harming anyone.
+- **The rate-selection rule "achieved/offered < 0.90" is falsified**: it picks rate 12,
+  which sits in the flat region (TTFT p95 0.251 s, identical to rates 8 and 10). The ratio
+  declines smoothly from 0.99 with no knee in it. Replaced by departure from the latency
+  plateau -> **rate 16** (asymmetry 2.09x, TTFT p95 2.69x idle, ITL p95 4.55x idle, 0 errors).
+- **Validity rule 1 amended BEFORE the run**: an arm-independent error floor is reported,
+  not fatal; a comparison is voided only when error rates differ materially between arms
+  (> 2x ratio AND > 1pp absolute), with a 10% catastrophic ceiling retained. The 500s are
+  arm-independent (present in roundrobin, which never touches the registry; 16/16 tracebacks
+  are post-routing `ServerDisconnectedError`), and the probe measured exactly 1.0% on one
+  seed - so the old rule would have discarded 85 minutes on noise.
+- **beta = 0.034 at rate 16**, from the measured `delta_load` = 14.69 via
+  `beta * delta_load = alpha * 0.5`. Recorded instability: a second probe at the same rate
+  gave `delta_load` = 39.46 (beta 0.013). The 0.034 figure comes from the only probe whose
+  driver recorded TTFT; the other is UNMEASURABLE by the gate's own criterion. The spread is
+  a direct consequence of beta being tied to absolute concurrency - the §6 limitation the
+  project deliberately chose not to fix mid-experiment.
+- Ben's `results/rate-pilot/` CSVs are **provenance-verified** as the current workload
+  (`max(prefix_id)` = 126, 72 distinct prefixes), so the rate ramp did not need repeating.
+- **Eliad works solo from 2026-08-04**; Ben is off the project. `CLAUDE.md` still says two
+  people and is stale.
+
+### Added (2026-08-03, late)
+- **`results/` is now tracked in git** (364 files, 5.2 MB): raw per-seed driver CSVs, `dcgm.csv`,
+  and the `prom/*.json` scrapes for every run, so a collaborator or grader can inspect the
+  evidence behind every figure without rerunning the cluster.
+
+- **Finding 5 in `docs/upstream-findings.md`** - our load term vs NVIDIA Dynamo's KV-router,
+  with a drop-in §6 Discussion paragraph. Measured the prefix-dedup factor in our own workload
+  (0.69 at 10.5 req/s, 0.45 at 7.5) by reconstructing the in-flight set from the driver CSVs.
+
+### Decided
+- **Do not adopt Dynamo-style deduplicated-block load accounting; document it as a limitation.**
+  It needs per-worker block tracking plus a completion hook (i.e. patching `request.py`), which
+  invalidates every run in `results/`, and the headroom is ~9% on imbalance and ~5% on hit rate
+  since neither ever became scarce (KV usage max 33%, `num_requests_waiting` 0, round-robin ties
+  the cache-aware arms at 0.95 hit rate). Revisit only under a cache-scarcity rerun
+  (`benchmarks/scarcity_gate.sh`). Evidence: `docs/upstream-findings.md` Finding 5.
+- **Accept the router's leaked `in_prefill` counters in the committed runs.** 39 backend
+  disconnects (`results/router-errors.log`) hit a path where `on_request_complete` is skipped, so
+  the router's own in-flight gauge drifts +4 to +7 on one engine over a run (floor of
+  `vllm:num_requests_running{job="router"}` minus the engine gauge). Bias runs *against* the
+  extension, is ~10x smaller than the reported imbalance effect, and the zero-failure cell
+  `20260803-163350-loadaware-b0.1` reproduces the result. Fix upstream (`on_request_complete` into
+  a `finally`) only if we rerun above the knee.
+- **Commit raw run artifacts, keep frozen workloads out.** `.gitignore` now ignores only
+  `results/**/*.jsonl` - the 2.5 MB `rate-pilot/pilot-seed999.jsonl` is regenerable from
+  `benchmarks/workloads/manifest.json`, which is the existing checksum-manifest policy for
+  workload data. Everything else is small enough that reproducibility beats repo size.
+
+## 2026-08-04 - Post-mortem on the amended sweep: the rate was the bug
+
+### Decided
+- **The 10.5 req/s operating point invalidates the latency co-primary, not the policy.** In both
+  headline cells `vllm:num_requests_waiting` is 0.00 mean *and* 0.00 max on both engines, queue
+  time is 0.0-0.8 ms, and KV usage is 15-19%. Nothing queued anywhere, so a load-aware router had
+  no load to be aware of and the 4.7% TTFT gap is residual cache locality alone. Evidence:
+  `results/20260803-{210741-loadaware-b0.1,212450-kvaware}/prom/`.
+- **The knee was never measured.** `rate_pilot.sh` defaulted to 2..10 req/s and TTFT p95 is flat
+  across it (0.212 / 0.259 / 0.251 / 0.249 s at 4/6/8/10). The 20-rate CSVs in
+  `results/rate-pilot/` put the knee at 14-16 (20 offered yields 14.9 achieved), so 10.5 was
+  ~70% of a knee the pilot had not reached, deep in the flat region. Any rerun must be at or just
+  under the knee, and that is a new pre-registration.
+- **Do not cut seeds to shorten a run; cut cells.** Measured on the 2026-08-03 sweep: ~8 min of
+  fixed setup per cell against ~50 s per seed replay, so 6 cells were 48 of the 76 minutes. Cut
+  `loadaware-b1.0` and one roundrobin seed instead, and keep `loadaware-b0` - it is the ablation
+  that isolates what beta buys. Sweep is now 5 cells / 30 replays.
+
+### Fixed
+- **Per-engine imbalance mixed in router-scraped series** (`export_summary.py`, `plot_results.py`).
+  `vllm:num_requests_running` is exported twice: per pod under `job=vllm-engines`, and per backend
+  under `job=router` where every series shares `instance="stack-router-service:80"` and differs
+  only by `server`. Keying on `pod or instance` collapsed both router series into one bucket
+  averaging the two engines, and that synthetic third "engine" entered the max/min. It changed 17
+  of 74 committed seed rows. Corrected, the imbalance co-primary strengthens: median reduction
+  24.8% -> **25.9%**, p 0.0068 -> **0.0049**. `results/summary-per-seed.csv` regenerated.
+
+### Added
+- **Inter-token latency is now measured.** The driver records every inter-token gap
+  (`itls_ms`), and `analyze.py` reports pooled `itl_p50/p95/p99`. Decode is ~92% of E2E at OSL=64
+  and was previously unmeasured except as an aggregate.
+- **`ttft_p90`** in the per-seed stats. On the 2026-08-03 data the policy shifts the whole TTFT
+  body - paired over 10 seeds, p50 p=0.0029 (9/10, 6.9%) and p90 p=0.032 (8/10, 7.4%) - while
+  p95 p=0.0527 and p99 p=0.81. The TTFT outliers arrive in bursts at single instants (loadaware
+  seed 9: five of the six worst all at t=29 s), so per-seed p95/p99 largely counts engine stall
+  events, not routing quality. **Reported for diagnosis; the headline metric stays as
+  pre-registered** - switching it after seeing these p-values would be optional stopping.
+- **`fig8-itl-percentiles.png`** and **`fig9-throughput.png`**; `fig5-percentiles` gains a p90
+  panel and seed-spread whiskers.
+- **Client event-loop lag probe** in the driver, printed per seed. TTFT is timestamped inside the
+  client's event loop, so an effect smaller than the loop's own lag is not measurable; this makes
+  that checkable instead of assumed.
+
+## 2026-08-03 - Amended sweep complete: imbalance significant, TTFT not
+
+### Added
+- Full 6-cell sweep at the amended config (10.5 req/s, 128 prefixes s=0.9, u=0.45):
+  `results/20260803-2*`. `fig7-beta-tradeoff.png` is the new causal figure (hit rate vs β on
+  one axis, TTFT p95 on the other).
+
+### Decided
+- **Headline: `loadaware` β=0.1 achieves significantly better load balance at statistically
+  indistinguishable latency.** TTFT p95 **p=0.0527, NOT significant** (7/10 seeds, median 4.7%,
+  CI [-4.2%, +8.2%]); load imbalance **p=0.0068, significant** (8/10 seeds, median 24.5%,
+  survives Bonferroni for two co-primaries). No seeds added after seeing p=0.0527 - that would
+  be optional stopping. Full write-up:
+  <https://github.com/BenEpstein/caching-in-llms/issues/7#issuecomment-5170943693>.
+- **β≥0.5 blows up 4-6x, and the cause is measured rather than inferred.** Prefix-cache hit rate
+  falls monotonically with β (0.918 → 0.787 → 0.735) because diverting a request off its cached
+  instance now costs a real 2048-token prefill. This is the interior optimum the amended
+  workload was built to expose, and it exists - the pilot's β curve was degenerate.
+- **Cache-aware routing is the dominant effect: `roundrobin` posts TTFT p95 5.502 s, 18x worse
+  than kvaware/b0.1**, with 0.709 hit rate, 25 preemptions and 0.420 s mean queue time. Random
+  placement against a scarce cache is catastrophic.
+- **The pilot's 3.7x kvaware imbalance was substantially a registry artifact.** It falls to 1.68x
+  once prefixes are genuinely spread, because "route to the holder" then spreads load as a side
+  effect. That convergence, not a measurement problem, is why the latency effect shrank from 17%
+  to 4.7%.
+- **The 25 HTTP 500s (0.17%) are NOT the stale-id bug**: they appear in every arm including
+  roundrobin, which never touches the registry. Arm-independent, so they do not bias the
+  comparison. Root cause unidentified - captured tracebacks hold only starlette frames.
+
+### Fixed
+- `run_cell.sh` held the Prometheus port-forward open for the whole cell; it died before the
+  dump and `set -e` discarded three completed cells. Now forwarded at dump time with retries,
+  and a failed dump warns instead of aborting - driver CSVs are the latency source of truth.
+
+### Gaps for the next run
+- `vllm:num_preemptions_total` + vLLM prefix-cache counters missing for the two **headline**
+  cells (collector fixed in ba6caae only after they ran) - so the headline arms are absent from
+  fig7 and preemption is unquantified where it matters most.
+- n=10 is underpowered for a 4.7% effect; pre-register n≈20 before seeing data.
+- β grid too coarse: everything happens between 0 and 0.5. Sample {0.05, 0.1, 0.2, 0.3}.
+- **β=0 posts the lowest p95 (0.289) and highest hit rate (0.918) at n=3.** If pure
+  cache-awareness beats the load-aware variant on latency, that bears on the project's premise
+  and needs n=10, not 3.
+
+## 2026-08-03 - Scarcity gate falsified the first amendment; workload re-derived
+
+### Fixed
+- **The scarcity gate was reading a cumulative metric as if windowed.** vLLM's
+  `Prefix cache hit rate` log field counts from engine start, so a `--since` grep reports the
+  running average, not the window. It read 0.085 mid-warm-up and returned a false PASS where
+  the true windowed rate was 0.889. Now takes a delta of
+  `vllm:prefix_cache_{queries,hits}_total`, and measures under load rather than at warm-up
+  concurrency (with negligible in-flight KV, almost the whole pool is free for retention and
+  the config flatters itself).
+
+### Decided
+- **64 prefixes at s=1.2 is falsified: measured 0.889 under load vs the pilot's ~0.95.** The
+  realised KV pool was 104,624 tok on both engines against a predicted ~99,000, so the
+  calibration held - the design point was wrong. In-flight KV at 7.5 req/s is far below the
+  56k projected from kvaware's concentrated peak, so the hot set still fit.
+- **Scarcity is a count condition before it is a distribution condition.** An LRU simulator
+  over the real generator (validated against the measurement: predicted 0.865, measured 0.889)
+  shows that when the pool fits in cache the exponent does *nothing* - pool=20 gives 0.960 at
+  s=0.9 and 0.960 at s=0.0, identical. And at s=1.2 pool size barely helps: 0.687 even at 256
+  prefixes, because the concentrated head stays resident however long the tail grows. Both
+  conditions are needed.
+- **Workload re-derived: `prefix_pool_size` 64 -> 128, `zipf_s` 1.2 -> 0.9.** Gate PASSES at
+  **0.711** (threshold 0.75). s=0.9 rather than lower is deliberate: s≈1 is the canonical Zipf
+  exponent, so it reads as a normal serving profile, where flatter exponents reach the same
+  scarcity but describe near-uniform prefix popularity that nobody observes. Revision:
+  <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169741456>.
+- **The simulator is a design tool, not a predictor of the metric.** Measured 0.711 vs
+  predicted 0.605 is consistent with effective capacity ~55 rather than 38 prefixes: in-flight
+  KV is smaller than assumed, and vLLM's counter is block-level so a partially-evicted prefix
+  still scores partial hits. It will always read above a whole-prefix simulation.
+- **§6 framing**: the pilot workload could not discriminate the policies and the evaluation
+  workload was re-derived so the working set exceeds cache capacity, with the gate
+  measurements as evidence. Pilot numbers stay in §5 as the contrast.
+
+## 2026-08-03 - Methodology amended (#3): the pilot could not test the hypothesis
+
+### Decided
+- **The 2026-08-03 sweep is demoted to a pilot; #3 is amended and pre-registered before any
+  new data.** Root cause: the per-engine HBM KV pool is 393,744 tokens (13.52 GiB, verified in
+  the engine startup log) and the 20-prefix working set is 40,960 tokens - 10.4% of it. Every
+  engine held every prefix, so there was no placement decision for cache-aware routing to get
+  right. Amendment: <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169437718>.
+- **The earlier "shrink the CPU offload tier" proposal is withdrawn.** It cannot force a
+  recompute: the KV stays resident in HBM regardless, so CPU eviction would only desynchronise
+  the registry from reality. Credit to the cache-sizing handoff session for the correction
+  (`docs/handoffs/cache-sizing-decisions.md`).
+- **HBM-only is dead, not merely blocked.** Only `local_cpu_backend` and `local_disk_backend`
+  emit `KVAdmitMsg`; there is no GPU-resident tracked backend. Without a backend the registry
+  is empty, `lookup()` returns nothing, and both arms collapse to load-only routing (#13).
+- **Scarcity is defined against the Zipf hot set, not the nominal pool.** The handoff's 32
+  prefixes gave retention 1.1x the hot set (16 retained vs 18 hot at s=1.2) - no scarcity where
+  the traffic is. Locked instead: `gpuMemoryUtilization` 0.90 -> **0.45** (~99k tok) and prefix
+  pool 20 -> **64** (hot set 31), giving retention 0.7x the hot set with 1.8x headroom over
+  kvaware's measured peak in-flight KV. The handoff's `u=0.37` was a units error (GB vs GiB);
+  measured calibration is 22.49 GiB total, 6.72 GiB non-KV overhead, 29,123 tok/GiB.
+- **Preemption is a reported outcome, not a run-voiding gate.** Under concentration it is a
+  genuine consequence of the baseline's placement; gating on it would discard the baseline arm
+  systematically and yield no result.
+- **Single-stage run plan, ~1.7-2.3 h instead of ~4.5-5.2 h.** The two-stage design existed to
+  *select* β, but β=0.1 is the shipped default and was already the pre-registered headline - it
+  is being tested, not chosen. Headline pair (b0.1, kvaware) at 10 seeds; β-sweep and
+  roundrobin at 3. Requests/seed stays 500: the 900 figure assumed first-touch prefills that
+  `warmup.py` already eliminates. n=10 on the headline pair is not negotiable - at n=6 one
+  reversal caps exact Wilcoxon at p=0.219 regardless of effect size, which is what the pilot hit.
+  Revision: <https://github.com/BenEpstein/caching-in-llms/issues/3#issuecomment-5169446888>.
+
+### Changed
+- `deploy/values-baseline-kvaware.yaml`: `gpuMemoryUtilization` 0.90 -> 0.45, with the
+  calibration and the verify-from-the-log requirement in-line.
+- `freeze_workloads.py`: 64 prefixes, seeds 1-10; workload regenerated and re-frozen (new
+  manifest SHA-256s). `run_cell.sh` takes a `SEEDS` env var instead of hardcoding 1..6, and
+  `run_sweep.sh` maps each cell to its seed count.
+
+## 2026-08-03 - Ticket #7: full 6-cell evaluation sweep executed on gapu-2
+
+### Added
+- `benchmarks/plot_results.py` + `docs/figures/`: the three §5 figures, built from the same
+  `analyze.py` per-seed stats as the tables so a figure cannot disagree with its table.
+  Centerpiece `fig1` (TTFT p95 vs β) shows β=0.1 is the minimum and β≥0.5 converges onto the
+  baselines.
+- Full sweep at 7.5 req/s, 6 cells × 6 seeds × 500 req, all validated (errors ≤ 0.6%, every
+  registry probe 4/4, every warm-up gate ≥ 20 cache-path routings):
+  `results/20260803-{161908-loadaware-b0,163350-loadaware-b0.1,164940-loadaware-b0.5,170418-loadaware-b1.0,171846-kvaware,174639-roundrobin}`.
+
+### Fixed
+- `run_cell.sh` step 4 (worker-registration gate) is now gated on `USES_LOOKUP`, like the
+  registry probe and warm-up gate already were. A `--routing-logic roundrobin` router never
+  instantiates the LMCache controller (verified: zero controller lines in its log), so no
+  worker ever registers and the gate could only time out - it killed the roundrobin cell on
+  the first sweep attempt. Lookup arms are unaffected, so the five completed cells stand.
+
+### Decided
+- **Cache hit rate cannot be the §5 headline metric at this workload.** `lmcache:lookup_hit_rate`
+  is scraped from the *engines* (`job=vllm-engines`), so it measures each engine's hit rate
+  against its own local cache, not whether the router picked the instance holding the KV. With
+  a 20-prefix pool it saturates at ~0.95 on **every** arm including roundrobin (`fig3`). TTFT
+  is the discriminating metric; `fig3` is kept to document the null, not to claim a win.
+- **The pre-registered headline does not reach significance at n=6, and the seed count is the
+  binding constraint, not the effect.** loadaware β=0.1 vs kvaware: 5/6 seeds improve, median
+  −17.0% TTFT p95, exact one-sided Wilcoxon p=0.219. Seed 2 reverses (0.418 s vs a 0.20 s cell
+  median; its TTFT *mean* is also elevated, so it is a whole-seed excursion, not one bad
+  request). At n=6 a single reversal caps exact Wilcoxon at p=0.219 regardless of effect size -
+  only 6/6 in one direction clears p<0.05. Seed 2 passes every validity rule and is **not**
+  dropped (rule 2 forbids post-hoc exceptions). Raising the seed count is a change to the
+  frozen methodology (#3) and is pending Ben's decision on #7.
+- **Cell position is not a confound.** The two independent kvaware cells - the #21 dry cell and
+  the in-sweep cell 5, ~1.5 h apart - agree closely (median TTFT p95 0.272 s vs 0.259 s), so the
+  ~3 h drift I flagged before the run does not drive the headline.
+
 ## 2026-08-03 - Ticket #21 root-caused: both router-stability issues explained
 
 ### Fixed

@@ -1,6 +1,9 @@
 # Upstream Findings - Production-Stack / LMCache Control Plane
 
-> status: live · 2026-08-01 · input to the upstream-PRs ticket (#10); findings dated 2026-07-04, re-verify against current upstream before filing
+> status: live · 2026-08-05 · input to the upstream-PRs ticket (#10); findings dated 2026-07-04,
+> re-verify against current upstream before filing. **The "Drop-in Discussion paragraph (§6)" section
+> is frozen and must not be pasted into the report** - it is quantified at the retired 7.5/10.5 req/s
+> rates (issue #29).
 
 > Material collected during baseline deployment (2026-07-04) for two later uses:
 > 1. the **final report** (Experimental Setup / Discussion sections — these findings show
@@ -189,6 +192,105 @@ Concrete diagnostics we relied on (worth standardizing in our benchmark harness)
 
 Our baseline validation (2026-07-04): probe showed instance affinity and 0.83s → 0.39s
 latency on the prefix hit.
+
+---
+
+## Finding 5 - Our load term is a request count; the state of the art counts unique KV blocks (Discussion-section material)
+
+> Verified 2026-08-04 against `ai-dynamo/dynamo` @ `main`:
+> `lib/kv-router/src/scheduling/selector.rs` (the cost function),
+> `sequences/prompt_registry.rs` + `sequences/multi_worker.rs` (load accounting),
+> `scheduling/config.rs` (defaults). Newer than the 2026-07-04 findings above.
+
+NVIDIA's Dynamo KV-router is the closest production system to `loadaware`, and it has the same
+skeleton: a cache credit subtracted from a load cost, minimized over workers. `selector.rs:262`:
+
+```
+logit(w) = prefill_load_scale · max(0, raw_prefill_blocks − overlap_credit_blocks)
+         + potential_decode_blocks(w)
+         + decode_active_request_weight · active_requests(w)
+```
+
+Three differences that matter to us, in descending order:
+
+1. **Load is unique KV blocks, not a request count.** `potential_decode_blocks = active_blocks +
+   new_blocks`, where `active_blocks` is documented as the worker's "unique active decode load in
+   blocks" (`prompt_registry.rs:54`) and `new_blocks = query_len − overlap_depth` is only the
+   candidate's blocks *not already resident*. Two in-flight requests sharing a prefix pin one copy,
+   not two. `decode_active_request_weight` - the term closest to ours - defaults to **0.0**.
+   Prompt blocks are counted; output blocks are not (`router_track_output_blocks: false`).
+2. **Cache credit is tiered by location**: device 1.0, host 0.75, disk 0.25. We receive `location`
+   in `layout_info` and discard it.
+3. **Ties are broken randomly** (reservoir sampling, `selector.rs:464`), with an optional
+   `router_temperature` for softmax sampling. We break ties lexicographically, which is a
+   systematic bias toward one engine whenever benefit ties - the likely mechanism behind
+   `loadaware-b0`'s imbalance of 3.1–5.2.
+
+Units differ, and this is the difference we acted on. Their terms are all blocks, so
+`prefill_load_scale = overlap_score_credit = 1.0` are meaningful defaults. Our score originally
+added a fraction in [0,1] to a raw request count, so β was an exchange rate with no bounded scale:
+it had to be re-derived per operating point, and two probes at the same rate disagreed by 2.6x
+(β 0.013 vs 0.034). **Amended 2026-08-04:** `loadaware` now normalizes load against the live fleet
+mean, `(load − mean) / max(1, mean)`, so both terms are dimensionless and β = 1.0 is a shippable
+default meaning "100% above fleet-average load costs one full cache hit". Measured over the four
+untreated rate-16 cells, that parameterization spans 1.41x where the absolute one spans 2.69x, and
+1.06x across the three cells at comparable fleet load.
+
+This closes the *scale* gap with Dynamo but not the *signal* gap: their load term counts unique KV
+blocks, ours counts requests. Converting β to their axis still needs the blocks-per-in-flight-request
+factor, which prefix dedup makes workload-dependent (0.69 at 10.5 req/s, 0.45 at 7.5), so the two
+are **not** related by a constant. Under that approximation their default sits near β ≈ 0.5 **on the
+retired absolute axis**, past the optimum the 7.5 req/s sweep found on that same axis
+(`fig7-beta-tradeoff.png`) - a measured result about where block-denominated load overcharges, not a
+defect in the policy.
+
+> ⚠️ **Do not read that 0.5 as the shipped operating point.** The project ships β=0.5 on the
+> *normalized* axis, where β is a fraction-to-fraction exchange rate. The two 0.5s are numerically
+> equal and semantically unrelated: one is Dynamo's default converted onto an axis this project no
+> longer uses, the other is the knee of the rate-16 sweep on the axis it does. Nothing above is
+> evidence about the shipped configuration.
+
+### Drop-in Discussion paragraph (§6) - FROZEN 2026-08-05, DO NOT PASTE
+
+> 🚫 **This paragraph is quantified entirely at 7.5 and 10.5 req/s, both retired.** The project's
+> operating point is **rate 16, β=0.5, OSL 64**. Pasting it into §6 would put numbers in the report
+> that contradict the report's own data. It is kept as the record of the argument, not as copy.
+>
+> Reviving it means recomputing four quantities on the rate-16 cells, all of which have backing on
+> disk (including a 20-seed `roundrobin` cell at `results/20260804-191644-roundrobin/`):
+>
+> 1. the dedup factor (concurrent requests vs. distinct prefixes in flight), from the rate-16
+>    `driver-seed*.csv`;
+> 2. peak KV utilization, from `prom/vllm_kv_cache_usage_perc.json`;
+> 3. whether `num_requests_waiting` stayed at 0;
+> 4. the `roundrobin` lookup hit rate, from `prom/lmcache_lookup_hit_rate.json`.
+>
+> That recomputation belongs to [issue #28](https://github.com/BenEpstein/caching-in-llms/issues/28)
+> (analysis completeness), with committed code, not to an ad-hoc in-session calculation - which is
+> the exact defect #28 exists to fix. The *argument* below is unaffected: it is about deduplication,
+> which remains future work either way.
+
+> Our load term, `in_prefill + in_decoding`, is a count of in-flight requests, and it is the
+> coarsest part of the policy. NVIDIA's Dynamo router, the closest production system to our design,
+> uses the same overall shape - a cache credit subtracted from a load cost, minimized over workers - > but denominates both terms in KV blocks and counts only *unique* blocks: two in-flight requests
+> sharing a prefix pin one copy of that prefix's KV, not two. Our formulation cannot express this.
+> It charges full price for a request that adds almost no memory to an engine already holding its
+> prefix, pushing traffic away from the cheapest available placement and working against the
+> locality the policy exists to exploit. Reconstructing the in-flight set from our driver logs, the
+> workload carried 30.3 concurrent requests against 20.9 distinct prefixes at 10.5 req/s (18.1
+> against 8.2 at 7.5), so between 31% and 55% of what we counted as load was memory that already
+> existed. The refinement does not bind at our operating point: KV utilization peaked at 33%, so no
+> block was ever evicted and locality was never scarce - round-robin reaches the same 0.95 lookup
+> hit rate as both cache-aware arms - and `num_requests_waiting` was 0 throughout, so no queue
+> formed that a better load estimate could have shortened. We therefore expect deduplicated-block
+> accounting to matter only under cache scarcity, where a count-based load term begins to fight the
+> cache it is meant to exploit. That is the natural next experiment rather than a defect in the
+> present result.
+
+Evidence for the numbers: dedup factor from `results/2026*/driver-seed*.csv` (in-flight set
+reconstructed from `send_ts` + `e2e_s`, distinct `prefix_id` counted); KV utilization and
+`num_requests_waiting` from `results/2026*/prom/`; hit rates from
+`results/2026*/prom/lmcache_lookup_hit_rate.json`.
 
 ---
 
