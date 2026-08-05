@@ -8,6 +8,37 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 (late) - Confirmatory sweep pre-registered and signed off (#31)
+
+### Decided
+- **Pre-registration rev 2 signed off, gate open** - #31 comment
+  [`5196484091`](https://github.com/BenEpstein/caching-in-llms/issues/31#issuecomment-5196484091).
+  Rev 1 (`5196041638`) is superseded and marked as such; it stays unedited as the record of the
+  first sign-off. Nothing runs against rev 1.
+- **Metrics reframed to "what we test" vs "what we show."** Two tested claims at α=0.025
+  (imbalance ratio, TTFT p95), everything else as bar charts with variance bars and no p-values.
+  Per-seed stays the unit of analysis (500 requests inside a seed are not independent; pooling
+  would claim n=10,000) but is banned from the report.
+- **TTFT p95 kept as the latency claim**, p50 rejected as a co-primary. Switching after seeing
+  p50 move further is the error the pre-registration exists to prevent; a p95 null with a p50
+  shift is reported as a labelled exploratory finding.
+- **p10 dropped entirely.** The committed path emits p50/p90/p95/p99; adding p10 would have meant
+  writing analysis code for this run. Rule 6 now forbids that outright.
+- **β=2.0 retained.** Balance saturates by β=0.5; in the prior 20-seed sweep β=2.0 bought 0.07
+  further imbalance reduction and cost ~12% p50 / ~13% p95, landing worse than baseline on both.
+  It is the only cell that shows the tradeoff turning over, and what makes β=0.5 a defended
+  optimum rather than an arbitrary small number.
+- **No closing `kvaware` bracket** (Ben, 2026-08-05). Arm is therefore confounded with position
+  in the window; the residual is declared, with `loadaware-b0` as drift sentinel.
+
+### Fixed
+- **`BENCH_TAG` in #31 was stale at `90dd30a`.** `workload_gen.py` and `freeze_workloads.py` ship
+  inside the bench image and both changed in the #36 re-land, so the 20-seed shakedown does not
+  transfer. Ticket now reads `42e6a32` / `LOADAWARE_TAG=acf43d1`, validated by a 3-seed smoke
+  (in-pod manifest check passed, 0.00% pooled errors, `utilization_coverage` 1.000 on all series).
+- **"Final run" framing removed** from the #31 title and body. Re-runs are expensive, which is the
+  reason to decide precisely now; it is not the project's last cluster time.
+
 ## 2026-08-05 (late) - #30 deletions executed
 
 ### Removed
@@ -69,7 +100,6 @@ with a pointer to the evidence — those matter as much as code.
   is tested, but the copies differ (one windows by seed, one does not) and *this exact parse
   already corrupted 17 of 74 seed rows once*. Consolidating it while #31's sweep is about to
   produce the final numbers would change analysis code underneath the result.
-
 
 ## 2026-08-05 - PR #23 re-landed on the integration branch (#36)
 
