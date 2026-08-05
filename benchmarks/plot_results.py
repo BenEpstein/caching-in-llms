@@ -549,10 +549,44 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+def dump_data(cells: List[Dict], out: str) -> None:
+    """Write the series behind the figures as JSON, for `scripts/reproduce.sh` to diff.
+
+    Figures are NOT diffed as PNG bytes. Matplotlib output moves with font availability,
+    library version and embedded metadata, so a byte-diff would go red on a fresh runner for
+    reasons unrelated to our data - and a check that cries wolf gets muted, which is worse
+    than no check at all (the same argument that keeps a threshold off the micro-benchmarks).
+
+    What a reader actually needs to trust is the numbers behind each figure, and those are
+    exactly what this dumps: the per-seed stats every latency figure is drawn from, plus the
+    per-cell aggregates the rest use. Stable across environments, and it fails loudly when a
+    number moves.
+    """
+    payload = []
+    for c in sorted(cells, key=lambda c: c["cell"]):
+        payload.append({
+            "cell": c["cell"],
+            "arm": c["arm"],
+            "beta": c["beta"],
+            "rate": c["rate"],
+            "seeds": [
+                {k: (round(v, 6) if isinstance(v, float) else v) for k, v in s.items()}
+                for s in sorted(c["seeds"], key=lambda s: s["seed"])
+            ],
+        })
+    with open(out, "w") as f:
+        json.dump(payload, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"wrote figure data for {len(payload)} cells to {out}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--out", default="docs/figures")
+    ap.add_argument("--dump-data", default=None,
+                    help="also write the series behind the figures as JSON, for "
+                         "scripts/reproduce.sh to diff (PNGs are not byte-comparable)")
     ap.add_argument("--cand", required=True,
                     help="headline loadaware cell, e.g. loadaware-b0.5 - the arm the "
                          "pre-registration names as the comparison of record")
@@ -575,6 +609,8 @@ def main() -> None:
     fig_itl(cells, os.path.join(args.out, "fig8-itl-percentiles.png"))
     fig_throughput(cells, os.path.join(args.out, "fig9-throughput.png"))
     fig_utilization(cells, os.path.join(args.out, "fig10-utilization.png"))
+    if args.dump_data:
+        dump_data(cells, args.dump_data)
     print(f"wrote figures to {args.out}")
 
 

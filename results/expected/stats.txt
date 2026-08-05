@@ -1,0 +1,6 @@
+# headline: 20260805-013208-loadaware-b0.5 vs 20260805-005210-kvaware
+Wilcoxon signed-rank (one-sided, exact): W+=65.0 n=20 p=0.0715 ≥ 0.05  ✗ not significant
+median relative reduction: 7.8% (bootstrap 95% CI [-3.2%, 13.9%])
+# ablation: 20260805-011148-loadaware-b0 vs 20260805-005210-kvaware
+Wilcoxon signed-rank (one-sided, exact): W+=124.0 n=20 p=0.7625 ≥ 0.05  ✗ not significant
+median relative reduction: -4.6% (bootstrap 95% CI [-14.8%, 10.3%])
