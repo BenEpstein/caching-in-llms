@@ -1,11 +1,27 @@
 #!/usr/bin/env bash
 # Scarcity gate (methodology amendment, issue #3, 2026-08-03).
 #
+# ⚠️  HISTORICAL / ONE-SHOT. Kept deliberately (#30), not on the sweep path.
+#
+# This script did its job once: run against the 64-prefix s=1.2 pool it FALSIFIED that
+# sizing (hit rate 0.889 against the pilot's ~0.95) and produced the amendment to 128
+# prefixes at s=0.9 that every committed result uses. It is retained as the evidence for
+# how the frozen dataset was chosen, and as the procedure to re-run if the memory config
+# or the model ever changes.
+#
+# Its defaults are the RETIRED ones and are left as-is on purpose, so the script still
+# reproduces the run that produced the amendment:
+#   - the pool it probes is whatever `warmup.py` walks, now 128 prefixes at s=0.9
+#   - PROBE_RATE defaults to 7.5, the retired pilot rate; the current operating point
+#     is 16 req/s. Pass PROBE_RATE=16 to probe today's configuration.
+# Re-deriving sizing? Set PROBE_RATE explicitly rather than trusting the default.
+#
 # Before spending the sweep, prove the memory config actually created scarcity.
 # Deploys ONE arm (roundrobin - routing is irrelevant here, we are measuring the
 # engines), restarts the engines cold, verifies the realised KV pool from the
 # engine's own startup log (validity rule 5), then makes two warm-up passes over
-# the 64-prefix pool and reads vLLM's OWN `Prefix cache hit rate`.
+# the prefix pool (64 at the time this was written; 128 today) and reads vLLM's OWN
+# `Prefix cache hit rate`.
 #
 # Why vLLM's metric and not LMCache's: the LMCache figure is each engine's hit
 # rate against its own CPU tier, which saturated at ~0.95 on every arm in the
@@ -15,7 +31,8 @@
 #         evicting, there is a placement decision to get right, run the sweep.
 # FAIL  = still ~0.95 -> scarcity did not take. Stop. Re-derive the sizing.
 #
-# Usage:  ./scarcity_gate.sh
+# Usage:  ./scarcity_gate.sh          # retired defaults, reproduces the 2026-08-03 run
+#         PROBE_RATE=16 ./scarcity_gate.sh   # probe the current operating point
 set -euo pipefail
 
 NS="${NS:-cache-llm}"
