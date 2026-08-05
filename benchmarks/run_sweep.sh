@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
 # The confirmatory sweep (methodology, issue #3 as amended 2026-08-05): 5 cells,
 # 100 seed-replays x 500 requests, one unattended batch (~1 h 41 min at rate 16).
-# Requires the rate from rate_pilot.sh plus LOADAWARE_TAG for the loadaware
-# cells. beta is no longer an input: it is dimensionless, so the grid is fixed
-# (see below).
+# Requires the rate from rate_pilot.sh, BENCH_TAG for every cell, and
+# LOADAWARE_TAG for the loadaware cells. beta is no longer an input: it is
+# dimensionless, so the grid is fixed (see below).
 #
 # Usage:
-#   LOADAWARE_TAG=<sha> ./run_sweep.sh <rate> [results-root]
+#   LOADAWARE_TAG=<sha> BENCH_TAG=<sha> ./run_sweep.sh <rate> [results-root]
 set -euo pipefail
 
 RATE="${1:?usage: run_sweep.sh <rate> [results-root]}"
 RESULTS_ROOT="${2:-results}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Both tags are checked HERE, before the first helm upgrade, rather than being
+# left to run_cell.sh's own guards. run_cell.sh would catch a missing BENCH_TAG
+# in its first second, but only for the cell it is running: with `set -e` the
+# sweep would then abort mid-batch, and on the loadaware arms that is ~8 min of
+# setup into a cell that was never going to measure anything. The measured
+# replay runs in-cluster from the bench image (#27), so BENCH_TAG is required on
+# BOTH arms - the baseline needs it exactly as much as loadaware does.
+: "${BENCH_TAG:?the sweep needs BENCH_TAG=<git short SHA of the CI-built bench image> - every cell replays from it, both arms}"
+: "${LOADAWARE_TAG:?the sweep needs LOADAWARE_TAG=<git short SHA of the CI-built router image> - ${BETA_GRID:-0 0.5 1.0 2.0} are loadaware cells}"
 
 # ---- why this shape ---------------------------------------------------------
 #

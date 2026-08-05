@@ -53,6 +53,26 @@ with a pointer to the evidence — those matter as much as code.
   the open question is now fleets larger than two engines, where the argmax can chase a single
   idle instance.
 
+## 2026-08-05 - Sweep preflight: both image tags checked before the first helm upgrade
+
+### Fixed
+- **`run_sweep.sh` never mentioned `BENCH_TAG`.** Since #27 moved the measured replay
+  in-cluster, every cell replays from the bench image on **both** arms - but the usage line
+  still read `LOADAWARE_TAG=<sha> ./run_sweep.sh <rate>`. Following it literally, cell 1 died
+  on `run_cell.sh`'s own guard and `set -e` took the rest of the batch with it. Both tags are
+  now asserted in `run_sweep.sh` before the first helm upgrade, so a missing tag costs one
+  second instead of aborting a sweep mid-batch. Found by reading the script, not by burning a
+  cell; all three guard paths (`BENCH_TAG`, `LOADAWARE_TAG`, rate) verified to exit before any
+  cluster action.
+
+### Decided
+- **The sweep's cell order stands as written: `kvaware` first, then beta ascending, with the
+  manual closing `kvaware` as the drift bracket.** Reordering to put the headline pair adjacent
+  was considered and rejected - proximity only *suppresses* drift, while the closing bracket
+  *measures* it as kvaware-vs-kvaware. Consequence for planning: the confirmatory run is **6
+  cells (~2 h 25 min), not 5**, and the pre-registration on #31 must state in advance which
+  `kvaware` cell the headline pairs against (opening, closing, or both) - otherwise that
+  becomes a choice made after seeing the data.
 
 ## 2026-08-05 - Utilization is §3's last unreported metric family, and it is a result (#35)
 
