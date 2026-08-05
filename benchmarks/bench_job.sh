@@ -103,11 +103,28 @@ spec:
 YAML
 
 # ---- progress ---------------------------------------------------------------
-# Progress ONLY. `oc logs -f` dies with the VPN and that must never fail the cell: the data
-# is collected below by a plain `oc logs`, which re-reads the whole log from the start and is
+# Resolve the pod BEFORE following it. `oc logs -f job/<name>` immediately after `oc apply`
+# loses a race: the Job exists but its pod does not yet, so kubectl's selector finds nothing
+# and exits non-zero. With stderr silenced and `|| true` that failure is invisible - the
+# 2026-08-05 throwaway cell ran to a correct result with ZERO pod output on the operator's
+# terminal. --pod-running-timeout does not help; it covers "pod exists but is not Running",
+# not "no pod yet".
+for _ in $(seq 60); do
+  POD=$(oc get pods -n "$NS" -l "job-name=$JOB" \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  [ -n "${POD:-}" ] && break
+  sleep 2
+done
+
+# Progress ONLY, and non-fatal by design. `oc logs -f` dies with the VPN; the data is
+# collected below by a plain `oc logs`, which re-reads the whole log from the start and is
 # therefore idempotent. Reconnecting is "run the command again", not "resume a stream".
 # --pod-running-timeout covers the image pull, which happens before the pod is Running.
-oc logs -f "job/$JOB" -n "$NS" --pod-running-timeout=10m 2>/dev/null || true
+if [ -n "${POD:-}" ]; then
+  oc logs -f "pod/$POD" -n "$NS" --pod-running-timeout=10m || true
+else
+  echo "==> no pod for $JOB after 120s; skipping the progress tail (collection is unaffected)" >&2
+fi
 
 # ---- wait -------------------------------------------------------------------
 # The tail above may have exited early (VPN, pod restart, anything), so completion is waited
