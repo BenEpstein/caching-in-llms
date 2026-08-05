@@ -4,6 +4,11 @@ benchmarks/workloads/*.jsonl
 # results/ is tracked (raw CSVs + prom JSON) so runs are reviewable without rerunning.
 # Frozen workload jsonl stays out - reproduce it from benchmarks/workloads/manifest.json.
 results/**/*.jsonl
+# Session handoffs are working notes, not submission artifacts: per CLAUDE.md, rationale
+# lives in GitHub issues + CHANGELOG.md and docs/ holds artifacts only. Six tracked handoffs
+# were removed 2026-08-05 (issue #29); they survive in git history.
+docs/handoffs/
+docs/handoff-*.md
 .DS_Store
 CLAUDE.local.md
 __pycache__/

@@ -1,4 +1,7 @@
-# Dev loop — iterating on router / LMCache code in-cluster
+# Dev loop - iterating on router / LMCache code in-cluster
+
+> status: live · 2026-08-05 · the ~60 s in-cluster iteration loop; development tooling, not part
+> of the measured benchmark path
 
 Validated end-to-end on `gapu-2` 2026-08-01.
 
