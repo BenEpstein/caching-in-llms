@@ -8,8 +8,9 @@
 # Usage:  ./apply-router-patch.sh <file> [<file> ...]
 # Revert: ./revert-router-patch.sh
 #
-# Only files whose basename matches an entry in PATCH_TARGETS can be applied — the
-# mount path must be the file's real location inside the image.
+# Only files whose basename matches a branch of `patch_target()` can be applied — the
+# mount path must be the file's real location inside the image. (It is a `case`, not an
+# associative array: macOS ships bash 3.2, which has no `declare -A`.)
 set -euo pipefail
 
 NS="${NS:-cache-llm}"

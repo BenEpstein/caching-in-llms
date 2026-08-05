@@ -36,10 +36,10 @@ RESULTS_ROOT="${3:-results}"
 # after ~8 minutes of helm upgrade, cold start and warm-up.
 : "${BENCH_TAG:?every cell needs BENCH_TAG=<git short SHA of the CI-built bench image>}"
 
-# Which frozen seeds this cell replays. The inferential cells run 20 (n=6 cannot
-# survive a single reversal - the pilot proved it - and n=10 then returned
-# p=0.0527); the beta-sweep cells run a 3-seed subset of the SAME frozen files,
-# so there is still exactly one dataset.
+# Which frozen seeds this cell replays. EVERY cell runs the full 20 (run_sweep.sh:85),
+# including the curve arms - n=6 cannot survive a single reversal (the pilot proved it) and
+# n=10 then returned p=0.0527. The earlier 3-seed subset for beta-sweep cells is retired;
+# all cells replay the same frozen files, so there is still exactly one dataset.
 SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

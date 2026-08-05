@@ -4,8 +4,10 @@ Implements the PRE-REGISTERED test from issue #3, in code before any data
 exists:
   - one run (seed replay) = ONE observation; per-request samples are
     queue-correlated and never treated as independent evidence
-  - headline: one-sided exact Wilcoxon signed-rank on the 6 paired per-seed
-    differences (candidate - baseline), H1 = candidate is LOWER, p < 0.05
+  - headline: one-sided exact Wilcoxon signed-rank on the 20 paired per-seed
+    differences (candidate - baseline), H1 = candidate is LOWER. Threshold is
+    0.025, Bonferroni-corrected for two co-primaries (TTFT p95 and imbalance);
+    n was raised 6 -> 20 after n=10 returned p=0.0527, pre-registered on #31
   - effect size: median relative reduction with a bootstrap 95% CI over the
     paired differences
   - validity: error requests are excluded from latency stats but counted;

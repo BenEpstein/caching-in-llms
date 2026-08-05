@@ -13,7 +13,7 @@ workload at fixed load.
 | Piece | Role |
 |---|---|
 | `workload_gen.py` | Zipfian prefix workload generator (pure, seeded, unit-tested) |
-| `freeze_workloads.py` | Materialize + verify the 6 frozen seed files against `workloads/manifest.json` |
+| `freeze_workloads.py` | Materialize + verify the frozen seed files against their manifest (`--profile zipfian` or `novel`) |
 | `load_driver.py` | Async open-loop (Poisson) / closed-loop driver; per-request CSV; streaming TTFT |
 | `in_pod.sh` | The measured replay, run **inside the cluster** by the bench image (#27) |
 | `verify_dataset.sh` | Regenerate + verify the frozen workload; called by `in_pod.sh` and by CI |
@@ -22,10 +22,16 @@ workload at fixed load.
 | `warmup.py` | Unmeasured passes over the prefix pool before each cell |
 | `collectors/prom_dump.py` | Prometheus `query_range` dump for the run window |
 | `collectors/dcgm_poll.py` | GPU util/power/mem-copy CSV via the DCGM exporter |
-| `run_cell.sh` | Per-cell choreography (deploy → gates → warm-up → 6 seeds → collect) |
-| `run_sweep.sh` | All 6 cells, one unattended batch (~3 h) |
+| `run_cell.sh` | Per-cell choreography (deploy → gates → warm-up → 20 seeds → collect); `WORKLOAD_PROFILE` picks the dataset |
+| `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze ~75% of it |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
+| `export_summary.py` | Derives `results/summary-per-seed.csv` — the table every figure and test reads |
+| `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
+| `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
+| `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
+| `scarcity_gate.sh` | One-shot precondition probe. **Historical**: it produced the 128-prefix / s=0.9 amendment; its `PROBE_RATE` default is the retired 7.5 |
+| `cold_start.sh` | Cold-cache variant of a cell |
 | `utilization.py` | §3 utilization readout (GPU / GPU memory / CPU / memory) + the coverage gate |
 
 ## The frozen workload
@@ -91,17 +97,21 @@ The cache-off comparator and its pre-registered expectation are in
 
 ## Sweep design
 
-6 cells × 6 seeds × 500 requests, identical frozen workload and fixed Poisson rate in
-every cell:
+**5 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
+every cell. The grid is `BETA_GRID` in `run_sweep.sh:82`, default `0 0.5 1.0 2.0`:
 
 | Cell | Arm | Router image |
 |---|---|---|
-| `loadaware-b0` | loadaware β=0 (cache-only ablation) | CI-built, SHA-tagged |
-| `loadaware-b0.25` | loadaware β=0.25 | CI-built, SHA-tagged |
-| `loadaware-b1.0` | loadaware β=1.0 (**shipped default - headline**) | CI-built, SHA-tagged |
-| `loadaware-b4.0` | loadaware β=4.0 | CI-built, SHA-tagged |
 | `kvaware` | baseline (headline comparator) | pinned stock |
-| `roundrobin` | baseline | pinned stock |
+| `loadaware-b0` | loadaware β=0 (cache-only ablation) | CI-built, SHA-tagged |
+| `loadaware-b0.5` | loadaware β=0.5 (**configuration of record — headline**) | CI-built, SHA-tagged |
+| `loadaware-b1.0` | loadaware β=1.0 (shipped default) | CI-built, SHA-tagged |
+| `loadaware-b2.0` | loadaware β=2.0 | CI-built, SHA-tagged |
+
+`roundrobin` is run separately as a descriptive framing cell, not as part of the sweep. Cell
+names outside this grid (`b0.1`, `b0.25`, `b0.034`, `b4.0`) appear in older `results/`
+directories and **can no longer be generated** — they came from the retired per-rate β
+calibration, before the load term was normalized against the fleet mean.
 
 Built images only - the dev-loop ConfigMap overlay (`deploy/dev/`) is **never** measured.
 No mock or simulation anywhere: every reported number comes from the real cluster.
@@ -122,7 +132,7 @@ LOADAWARE_TAG=<sha> BENCH_TAG=<sha> benchmarks/run_sweep.sh <rate>
 
 # 3. headline comparison + summaries
 python3 benchmarks/analyze.py summary results/*
-python3 benchmarks/analyze.py compare results/<...loadaware-b0.1> results/<...kvaware>
+python3 benchmarks/analyze.py compare results/<...loadaware-b0.5> results/<...kvaware>
 
 # 4. §3 utilization: GPU, GPU memory, CPU, host memory
 python3 benchmarks/utilization.py report results/*
@@ -299,10 +309,11 @@ with a per-cell constant in it. Load imbalance is unaffected in both, being serv
 
 ## Statistics (pre-registered)
 
-- One seed replay = **one observation** (n=6 per cell). Per-request samples are
-  queue-correlated and never treated as independent evidence.
-- Headline test: one-sided **exact Wilcoxon signed-rank** on the 6 paired per-seed TTFT
-  p95 differences (loadaware-b0.1 − kvaware), p < 0.05.
+- One seed replay = **one observation** (**n=20 per cell**, every cell). Per-request samples
+  are queue-correlated and never treated as independent evidence.
+- Headline test: one-sided **exact Wilcoxon signed-rank** on the 20 paired per-seed TTFT
+  p95 differences (`loadaware-b0.5` − `kvaware`), threshold **0.025** (Bonferroni for two
+  co-primaries; the second is load imbalance). Pre-registered on #31.
 - Effect size: median relative reduction with a bootstrap 95% CI over the paired
   differences (seeded, 10 000 resamples).
 - Any pairwise cell comparison is significance-capable (all cells get all 6 seeds).

@@ -8,6 +8,41 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 (late) - Stale-comment sweep (#30, non-destructive half)
+
+### Fixed
+- **`benchmarks/README.md` sweep description**, the operator's manual a grader follows. It
+  advertised 6 cells x 6 seeds with a grid containing `loadaware-b0.25` and `loadaware-b4.0`;
+  `run_sweep.sh` produces **5 cells at n=20** on `BETA_GRID="0 0.5 1.0 2.0"`. The statistics
+  section still said "n=6 per cell" and named `loadaware-b0.1` as the headline - a cell name
+  the retired per-rate beta calibration produced and which can no longer be generated. Retired
+  names are now listed explicitly as un-generatable rather than silently corrected, since they
+  still appear in older `results/` directories.
+- **The layout table omitted seven executables**, including `plot_results.py`, which generates
+  every committed figure and was mentioned nowhere in the file.
+- `run_cell.sh` claimed the beta-sweep cells replay a 3-seed subset; `run_sweep.sh:85` says
+  n=20 on every cell. The subset is retired.
+- `plot_results.py`'s `--cand` help said beta is calibrated per-rate "so the cell name is not a
+  fixed literal" - contradicting its own docstring, which says the opposite. It now states the
+  real constraint: the 4-point grid has three non-b0 cells, so inference cannot fire.
+- `plot_results.py` documented 5 figures while writing 10. `analyze.py` still described "the 6
+  paired per-seed differences" and p<0.05; it is 20 paired differences at a Bonferroni 0.025.
+- `values-baseline-kvaware.yaml` justified `gpuMemoryUtilization: 0.45` with arithmetic over a
+  retired 64-prefix s=1.2 hot set. The **value is right and is kept**; the comment now says the
+  derivation is historical - re-derive before changing it, not to justify it.
+- `apply-router-patch.sh` and `deploy/dev/README.md` both referenced a `PATCH_TARGETS` map that
+  is a `case` statement (bash 3.2 on macOS has no `declare -A`). `deploy/README.md` cited
+  `values-baseline-kvaware.yaml:58`; the line is 74.
+
+### Decided
+- **Deletions in #30 are held pending sign-off**, per that ticket's step 0. All five
+  "confidently dead" items were re-verified as still dead before proposing them.
+- **The duplicated `job=vllm-engines` parse stays for now.** It is triplicated and only one copy
+  is tested, but the copies differ (one windows by seed, one does not) and *this exact parse
+  already corrupted 17 of 74 seed rows once*. Consolidating it while #31's sweep is about to
+  produce the final numbers would change analysis code underneath the result.
+
+
 ## 2026-08-05 - PR #23 re-landed on the integration branch (#36)
 
 ### Changed
