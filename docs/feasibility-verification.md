@@ -1,6 +1,8 @@
 # Feasibility Verification - Code-Level Findings
 
-> status: live · 2026-08-01 · raw material for the §2 baseline-justification deliverable; re-verify line refs against current upstream before citing
+> status: live · 2026-08-05 · raw material for the §2 baseline-justification deliverable; re-verify
+> line refs against current upstream before citing. The scoring formula was corrected to the shipped
+> policy on 2026-08-05 (issue #29); the upstream findings themselves are unchanged since 2026-07-04.
 
 > Verified 2026-07-04 against `vllm-project/production-stack` @ `1e973a3` (2026-06-26)
 > and `LMCache/LMCache` @ `bf20f51` (2026-07-04). All file/line references are to those commits.
@@ -40,7 +42,7 @@ Every `route_request()` receives `engine_stats: Dict[url, EngineStats]`.
 **`KvawareRouter` ignores it entirely** — it also ignores match-length ordering: it takes
 `list(layout_info.keys())[0]`, i.e. the first instance LMCache happened to return
 (`routing_logic.py:383-387`). The scoring function
-`score = α·matched_tokens − β·load` plugs in exactly there.
+`score = matched_tokens/prompt_tokens − β·relative_load` plugs in exactly there.
 
 ## 3. LMCache lookup semantics — the key discovery
 
@@ -115,6 +117,6 @@ offline without GPUs.
 1. **LMCache (cache layer):** extend controller lookup to return per-instance match info
    — fixes upstream TODO, PR candidate.
 2. **Router:** new `loadaware` strategy scoring cache benefit vs. live load
-   (α/β tunable via config).
+   (β tunable via the `LOADAWARE_BETA` env var; there is no α).
 3. **Stretch:** hot-prefix replication via `MoveMsg(copy=True)` (gated on NIXL check).
 4. **Fallback:** cost-aware `BaseCachePolicy` implementation.

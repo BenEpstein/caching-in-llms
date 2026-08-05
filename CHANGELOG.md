@@ -55,6 +55,90 @@ with a pointer to the evidence — those matter as much as code.
   schedulable nodes with an engine on each, and worker0 at 93% CPU / 99% memory requested means
   the driver deterministically lands on worker1. The control is the engine-side cross-check, not
   a scheduling rule; the node is recorded in `run.json`.
+## 2026-08-05 - Doc truth sweep: handoffs removed, alpha purged, a claim un-inverted (#29)
+
+### Decided
+- **Session handoffs are not repo artifacts. All six were deleted and the path gitignored**
+  (`docs/handoffs/`, `docs/handoff-*.md`). They were going to be frozen in place; deleting is
+  the stronger move because it *enforces* the rule `CLAUDE.md` already states - rationale lives
+  in GitHub issues + this changelog, `docs/` holds artifacts only. Five of the six still
+  pre-registered **β=0.1 at rate 7.5/10.5** as the headline against a shipped operating point of
+  **β=0.5 at rate 16**, and a grader finding a pre-registration that does not match the reported
+  result will reasonably suspect post-hoc selection. Removed: `handoff-cache-sizing.md`,
+  `handoff-core-implementation.md`, `handoffs/cache-sizing-decisions.md`,
+  `handoffs/claude-wayfinder-3-e533a3{,-decisions}.md`, `handoffs/feat-relative-load-normalization.md`.
+  All in git history.
+- **The `upstream-findings.md` §6 drop-in paragraph is frozen, not re-derived.** It is quantified
+  entirely at 7.5/10.5 req/s and is *written to be pasted into the report*, so as it stood it would
+  have contradicted the report's own data. Re-deriving it at rate 16 is possible - all four
+  quantities have backing on disk, including a 20-seed `roundrobin` cell - but doing it here would
+  mean another ad-hoc in-session number feeding the report, which is the exact defect #28 exists to
+  fix. The section now carries a do-not-paste banner naming the four quantities and the files they
+  come from; reviving it belongs to #28, with committed code.
+
+### Fixed
+- **The `kv_aware_threshold` claim was stated backwards in three docs, and the code says the
+  opposite.** `routing_logic.py:396` tests `matched_tokens < max(len(token_ids) - self.threshold, 0)`.
+  At ISL **1578** with the threshold defaulting to **2000**, `max(1578-2000, 0) == 0`, so the test
+  reduces to `matched_tokens < 0` and **can never fire**: kvaware takes the cache path for every
+  request with any holder, at any `matched_tokens`. The three docs asserted that prompts must exceed
+  2000 tokens or kvaware never takes the cache path, and presented that as *the reason* the workload
+  uses long prefixes. Results are unaffected - kvaware takes the cache path either way - but the
+  stated design rationale was wrong. All three sites were deleted with the handoffs; the corrected
+  explanation now lives in `patches/README.md`, which held a **fourth, live** copy of the same
+  inverted reasoning in the ⚠️ baseline-measurement warning. That warning's *conclusion* (revert the
+  patch before measuring the baseline arm) stands - it costs one script and removes an assumption -
+  but its stated mechanism did not.
+- **`alpha` purged from every live doc.** `project-brief.md` (which `CLAUDE.md` calls the design
+  source of truth) and `feasibility-verification.md` (the §2 deliverable's raw material) both still
+  carried `score = α·matched_tokens − β·load`, un-normalized on both terms. Now
+  `matched_tokens/prompt_tokens − β·relative_load`. Surviving `α` references are deliberate: the
+  "there is no α" explanations, and `docs/decisions/second-optimization.md`, which is frozen history.
+- **`project-brief.md` named the wrong model and the wrong offload buffer**: `llama8b` /
+  `meta-llama/Llama-3.1-8B-Instruct` and `cpuOffloadingBufferSize: "20"`, against the shipped
+  `Qwen/Qwen2.5-3B-Instruct` and `"4"` in `deploy/values-baseline-kvaware.yaml`.
+- **`CONTEXT.md` defined two core terms against the code.** "Load Penalty" was "running **+ queued**
+  requests"; the code is `in_prefill_requests + in_decoding_requests` with no queue term
+  (`num_requests_waiting` is a run diagnostic and does not enter the score). "Cache-Hit Benefit" was
+  a token *count*; it is a *fraction*, which is what makes β dimensionless. Added "Relative Load" as
+  its own entry, since that is the term β actually weighs.
+- **`CLAUDE.md`**: "Two people work on this repo" replaced with the parallel-branch reality plus a
+  check-open-PRs instruction; the "(stretch) hot-prefix KV replication" line dropped, since
+  `CONTEXT.md` records that policy parked.
+- **Dangling references created by the deletion**, all repointed: `routing_logic.py:591`,
+  `tests/test_kv_controller_lookup.py`, `tests/test_loadaware_routing.py`,
+  `docs/decisions/second-optimization.md`. `README.md`'s repo-layout row still names
+  `handoff-core-implementation.md`, but PR #23 already removes it, so it was left alone rather than
+  conflict with #26.
+
+### Changed
+- **Status headers added to 5 files** (`CONTEXT.md`, `CLAUDE.md`, `patches/README.md`,
+  `deploy/README.md`, `deploy/dev/README.md`) and refreshed on the 3 amended `docs/` files. Every
+  tracked `.md` now carries one except `README.md` (owned by #26) and `CHANGELOG.md` (an
+  append-only log, not a doc making claims). Note the pattern this sweep found: **every doc
+  carrying a `live` header was stale**, so the header is worth only as much as the re-verification
+  behind it.
+- **Disambiguated a numeric collision in `upstream-findings.md`.** Dynamo's default converts to
+  β ≈ 0.5 **on the retired absolute axis**, and the project ships β=0.5 **on the normalized axis**.
+  The two are numerically equal and semantically unrelated, and as written the passage read as
+  evidence against the shipped configuration.
+
+### Fixed (follow-on, same session)
+- **The stale workload parameters were chased to their last two homes.** The map's #3 entry recorded
+  the frozen workload as "s=1.2, 20×2048 tok" and `WorkloadConfig` still *defaulted* to
+  `prefix_pool_size=20, zipf_s=1.2` (duplicated again in `workload_gen.py`'s argparse). The frozen
+  dataset is **128 prefixes at s=0.9, 500 requests, 20 seeds**; s=1.2 with a 20-prefix pool were
+  exploratory values that outlived the freeze. No recorded result moves - `freeze_workloads.py`
+  always passed every value explicitly, so the defaults never reached the data, and regenerating all
+  20 seeds after the change reproduces the committed manifest SHA-256s exactly ("all workloads match
+  the committed manifest - frozen dataset verified", exit 0).
+- **The real skew is much gentler than the retired figures implied.** Measured over all 20 frozen
+  seeds (10,000 requests): **top-1 prefix = 14.8% of requests, top-3 = 28.0%, top-10 = 47.9%**,
+  matching Zipf theory at s=0.9/N=128 to within 0.1 pp. The figures quoted at s=1.2 were 35% / 57%.
+  This matters for §3: the hot prefix carries about a seventh of traffic, not a third.
+- **`test_defaults_match_the_frozen_manifest`** now pins `WorkloadConfig`'s defaults to
+  `workloads/manifest.json` field by field, so the two cannot drift apart again, and the argparse
+  defaults reference the dataclass instead of re-stating literals. 121 tests pass.
 
 ## 2026-08-05 - Front door part 1: figures are reproducible, benchmarks/README stops lying (#26)
 

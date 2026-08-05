@@ -8,6 +8,11 @@ results/**/*.jsonl
 # base64 per cell that decodes to the driver-seed*.csv already tracked beside it. Kept on
 # disk for debugging, out of git.
 results/**/job.log
+# Session handoffs are working notes, not submission artifacts: per CLAUDE.md, rationale
+# lives in GitHub issues + CHANGELOG.md and docs/ holds artifacts only. Six tracked handoffs
+# were removed 2026-08-05 (issue #29); they survive in git history.
+docs/handoffs/
+docs/handoff-*.md
 .DS_Store
 CLAUDE.local.md
 __pycache__/

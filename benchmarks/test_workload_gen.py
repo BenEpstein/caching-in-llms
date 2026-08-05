@@ -65,3 +65,37 @@ def test_prompt_length_scales_with_prefix_tokens():
     short = build_prefix_pool(WorkloadConfig(prefix_tokens=100, seed=9))[0]
     long = build_prefix_pool(WorkloadConfig(prefix_tokens=2000, seed=9))[0]
     assert len(long) > len(short) * 10
+
+
+def test_defaults_match_the_frozen_manifest():
+    """The generator's defaults must BE the frozen evaluation workload.
+
+    These drifted once: the dataclass kept `prefix_pool_size=20, zipf_s=1.2`
+    long after the freeze pinned 128 prefixes at s=0.9, so anyone reading the
+    code (or instantiating `WorkloadConfig()` directly) got the exploratory
+    values and the wrong skew. The manifest is the authority; this pins the
+    defaults to it so the two cannot separate again.
+    """
+    import json
+    import os
+
+    manifest_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "workloads", "manifest.json"
+    )
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    frozen = next(iter(manifest["seeds"].values()))["config"]
+    defaults = WorkloadConfig()
+    for field in (
+        "num_requests",
+        "prefix_pool_size",
+        "zipf_s",
+        "prefix_tokens",
+        "suffix_tokens",
+        "pool_seed",
+    ):
+        assert getattr(defaults, field) == frozen[field], (
+            f"WorkloadConfig.{field} is {getattr(defaults, field)!r} but the frozen "
+            f"manifest says {frozen[field]!r} — update the default or re-freeze"
+        )

@@ -1,4 +1,7 @@
-# `patches/` — our modified copies of router-image Python files
+# `patches/` - our modified copies of router-image Python files
+
+> status: live · 2026-08-05 · describes the shipped overlay; the policy description and the
+> `kv_aware_threshold` note were verified against `routing_logic.py` on 2026-08-05 (issue #29)
 
 The contribution lives entirely in the **router pod**: both `vllm_router` and the LMCache
 `cache_controller` are installed there as plain Python. This directory holds our modified
@@ -91,11 +94,29 @@ route every sub-threshold prompt by QPS in *both* arms. `kvaware` keeps it.
 
 ## ⚠️ Baseline measurements must be taken with the patch reverted
 
-`kvaware` **is not behaviourally invariant** under the multi-instance lookup, even though
-`routing_logic.py` is untouched. The *instance* it picks — `list(layout_info.keys())[0]` — is
-unchanged, but that instance's `matched_tokens` can grow, since an instance is now credited on
-every chunk it holds rather than only on chunks where it happens to be `[0]`. kvaware bands
-`matched_tokens` against `kv_aware_threshold` (`routing_logic.py:354-369`) to choose the cache
-path over the QPS fallback, so a larger count can flip that branch. Run
-`deploy/dev/revert-router-patch.sh` and confirm the router is stock before measuring the
-baseline arm.
+`kvaware` is **not guaranteed** behaviourally invariant under the multi-instance lookup, even
+though `routing_logic.py` is untouched. The *instance* it picks - `list(layout_info.keys())[0]` - is unchanged, but that instance's `matched_tokens` can grow, since an instance is now credited
+on every chunk it holds rather than only on chunks where it happens to be `[0]`. kvaware bands
+`matched_tokens` against `kv_aware_threshold` to choose the cache path over the QPS fallback, so
+in principle a larger count can flip that branch. Run `deploy/dev/revert-router-patch.sh` and
+confirm the router is stock before measuring the baseline arm.
+
+**On this workload the band is vacuous, and the reasoning is worth stating precisely because it
+is easy to get backwards.** The test is
+
+```python
+matched_tokens < max(len(token_ids) - self.threshold, 0)   # routing_logic.py:396
+```
+
+With ISL **1578** and `kv_aware_threshold` defaulting to **2000**, `max(1578 - 2000, 0) == 0`, so
+it reduces to `matched_tokens < 0` and **can never fire**. kvaware takes the cache path for every
+request that has any holder at all, whatever `matched_tokens` reads.
+
+Two consequences:
+
+- The branch cannot flip on this workload, so kvaware *is* invariant here in practice. Reverting
+  for the baseline arm stays the rule anyway: it costs one script and removes the assumption.
+- **The claim that prompts must exceed 2000 tokens or kvaware never takes the cache path is
+  false, and it is not the reason the workload uses long shared prefixes.** The real reason is
+  that a long shared prefix is what creates a hot instance for the policy to route around. That
+  inverted claim appeared in three handoff docs, all removed 2026-08-05 (issue #29).

@@ -1,6 +1,8 @@
 # Project: Load-Aware Prefix Routing for vLLM Production Stack
 
-> status: live · 2026-08-01 · design source of truth; decisions made after this date live in tickets + CHANGELOG, not here
+> status: live · 2026-08-05 · design source of truth for the *shape* of the work; the policy formula,
+> model and deploy figures were corrected against shipped code on 2026-08-05 (issue #29). Decisions
+> made after 2026-08-01 live in tickets + CHANGELOG, not here.
 
 > Handoff brief for Claude Code. This document is the source of truth for the project.
 > Read it fully before writing code. Where it says "verify against current docs," do that —
@@ -70,16 +72,19 @@ The router made a locally smart, globally dumb choice.
 Modify the router's scoring so it weighs two things:
 
 ```
-score(instance) =  α * cache_hit_benefit(instance, request)
-                 -  β * load_penalty(instance)
+score(instance) =  cache_hit_benefit(instance, request)
+                 -  β * relative_load(instance)
 ```
 
-- `cache_hit_benefit` = roughly how many of this request's tokens the instance already has cached
-  (what kvaware uses today).
-- `load_penalty` = a live measure of how busy the instance is — e.g. pending/running request count,
-  queue depth, or a metric already exposed by the engine (check what the router already scrapes;
-  the stack ships Prometheus metrics like running/waiting requests, TTFT, etc.).
-- `α`, `β` = tunable weights (config/env). Sweep them in experiments.
+- `cache_hit_benefit` = the **fraction** of this request's prompt tokens the instance already has
+  cached, `matched_tokens / prompt_tokens` (kvaware uses the raw count).
+- `relative_load` = the instance's in-flight count as a signed fraction of the fleet mean,
+  `(load − mean) / max(1, mean)`, where load is `in_prefill_requests + in_decoding_requests`.
+  0.0 is "average", +1.0 is "twice the fleet average".
+- `β` = the one tunable weight (env var `LOADAWARE_BETA`). Both terms are dimensionless, so β is a
+  pure exchange rate that carries no unit from the deployment. Sweep it in experiments.
+- **There is no α.** An argmax is invariant under positive scaling, so only the benefit-to-load
+  ratio was ever a free parameter. See `patches/README.md`.
 
 Behavior we want: when an instance gets too loaded, the router becomes willing to send some requests
 to the *other* instance even at the cost of a cache miss — because avoiding a big queue beats one
@@ -116,10 +121,10 @@ Sketch of the Helm `values.yaml` (verify field names against the current chart v
 ```yaml
 servingEngineSpec:
   modelSpec:
-    - name: "llama8b"
+    - name: "qwen3b"
       repository: "lmcache/vllm-openai"
       tag: "latest"                       # pin a real version, don't ship :latest to a report
-      modelURL: "meta-llama/Llama-3.1-8B-Instruct"
+      modelURL: "Qwen/Qwen2.5-3B-Instruct"
       replicaCount: 2                     # one per GPU
       requestGPU: 1
       requestCPU: 8
@@ -130,7 +135,7 @@ servingEngineSpec:
         enablePrefixCaching: true
       lmcacheConfig:
         enabled: true
-        cpuOffloadingBufferSize: "20"     # GB
+        cpuOffloadingBufferSize: "4"      # GB (node RAM is tight on gapu-2)
       hf_token: <use a secret, not inline>
 routerSpec:
   repository: lmcache/lmstack-router
@@ -138,9 +143,9 @@ routerSpec:
   routingLogic: "kvaware"                 # baseline; ours will be "loadaware"
 ```
 
-**Model sizing:** Llama-3.1-8B needs ~16 GB in FP16. If the 2 GPUs have less headroom, drop to
-Llama-3.2-3B or 1B (both used in the official tutorials) or enable FP8 KV cache. Keep the model
-identical across all experiments so comparisons are fair.
+**Model sizing:** the shipped deployment runs `Qwen/Qwen2.5-3B-Instruct` (ungated, so no HF token)
+on 2×A10 23 GB. An 8B model in FP16 needs ~16 GB and leaves too little headroom for the KV pool the
+experiment depends on. Keep the model identical across all experiments so comparisons are fair.
 
 **OpenShift specifics to handle:**
 - SCC / non-root: the LMCache vLLM image may need a suitable SCC; prefer `oc adm policy` over making
@@ -189,8 +194,8 @@ Sweep the Zipf skew (and/or concurrency). Expect:
 - `kvaware`: best hit rate, but p99 latency blows up as skew increases (traffic jam on one GPU).
 - `loadaware`: keeps most of the hit rate, p99 stays flat/controlled. **This crossover is the result.**
 
-Also do an `α/β` sweep to show the tradeoff knob (pure-cache at one extreme = kvaware, pure-load at
-the other = roundrobin-ish).
+Also do a `β` sweep to show the tradeoff knob (β=0 at one extreme is pure-cache placement, large β
+at the other approaches least-loaded).
 
 ---
 
@@ -204,7 +209,7 @@ the other = roundrobin-ish).
 5. **Read the router source**, locate the scoring function and per-instance state.
 6. **Implement `loadaware`** scoring as a new routing logic option.
 7. **Rebuild only the router image**, push, redeploy just that pod (fast loop — model pods untouched).
-8. **Run experiments**, sweep skew + `α/β`, collect data.
+8. **Run experiments**, sweep skew + `β`, collect data.
 9. **Plot + write up** the comparison.
 
 ---
