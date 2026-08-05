@@ -55,6 +55,29 @@ with a pointer to the evidence — those matter as much as code.
   schedulable nodes with an engine on each, and worker0 at 93% CPU / 99% memory requested means
   the driver deterministically lands on worker1. The control is the engine-side cross-check, not
   a scheduling rule; the node is recorded in `run.json`.
+
+### Fixed (follow-on, same session)
+- **The Job progress tail was silently dead - twice, for two different reasons.** The throwaway
+  cell produced a fully correct result with zero pod output on the operator's terminal:
+  `oc logs -f job/<name>` ran straight after `oc apply` and lost a race, because the Job exists
+  before its pod does and kubectl's selector then matches nothing. Resolving the pod first walked
+  into the second mode - `oc logs -f pod/<name>` against a still-`ContainerCreating` pod returns
+  `BadRequest`, which is what a fresh (uncached) image tag guarantees. The first fix had passed
+  only because that run's image happened to be cached from the previous cell. `--pod-running-timeout`
+  fixes neither: it governs waiting when a **selector** resolves pods, not a pod named directly,
+  so it was dead code that looked load-bearing. Now one loop waits for the pod to exist **and** to
+  leave `Pending`. Cosmetic both times - collection is a plain `oc logs` at the end, which
+  re-reads the whole log and is idempotent, so the b0.5 pilot collected all 20 seeds correctly
+  with no tail at all.
+
+### Verified
+- **20-seed `loadaware-b0.5` pilot** closed the four gaps the 3-seed throwaway could not:
+  log volume at full size (**2.35 MiB measured against 2.34 predicted**, 4.3x under kubelet's
+  10 Mi), the dotted job name (`bench-loadaware-b0-5-<epoch>`) accepted by the API server,
+  `LOADAWARE_TAG` + `BENCH_TAG` live together, and ~12 min of Job runtime without eviction. All
+  20 seeds at 500 rows, pooled error rate 0.36%, validity gate exit 0. It also survived an
+  unplanned network blip mid-run: the `oc wait` retry loop absorbed it and collection completed.
+
 ## 2026-08-05 - Doc truth sweep: handoffs removed, alpha purged, a claim un-inverted (#29)
 
 ### Decided
