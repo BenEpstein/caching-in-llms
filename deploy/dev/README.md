@@ -77,8 +77,9 @@ oc logs -f deploy/stack-deployment-router -n cache-llm | grep -iE "kvaware|loada
 
 Multiple files at once are fine: `./apply-router-patch.sh work/routing_logic.py work/kv_controller.py`
 
-`apply-router-patch.sh` only accepts files listed in its `PATCH_TARGETS` map — the mount
-path has to be the file's real location inside the image, so add new targets there first.
+`apply-router-patch.sh` only accepts files with a branch in its `patch_target()` `case` — the
+mount path has to be the file's real location inside the image, so add new targets there first.
+(Three today: `routing_logic.py`, `parser.py`, `kv_controller.py`.)
 
 ## ⚠️ Revert before measuring
 

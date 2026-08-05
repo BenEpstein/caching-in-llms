@@ -86,7 +86,7 @@ oc logs deploy/stack-router -n cache-llm | grep -i "routing"
    on `deploy/dev/registry-probe.sh`.)*
    The controller re-registers unknown workers when it receives their heartbeat
    (`registration_controller.py:176-192`), and the worker only sends heartbeats when
-   `lmcache_worker_heartbeat_time > 0`. Our `values-baseline-kvaware.yaml:58` sets
+   `lmcache_worker_heartbeat_time > 0`. Our `values-baseline-kvaware.yaml:74` sets
    `workerHeartbeatTime: "30"`, so a router-only restart recovers in ~30 s with engines
    untouched — **verified live**. Keep that value set; if it is ever removed, the old
    failure mode returns: the registry comes back empty, every KV lookup misses, and

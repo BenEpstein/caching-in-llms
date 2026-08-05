@@ -6,6 +6,10 @@ figure can never disagree with the table it sits next to.
   fig1-ttft-p95-vs-beta.png   centerpiece: TTFT p95 vs beta, baselines as bands
   fig2-ttft-ecdf.png          client-observed TTFT distribution per arm
   fig3-hit-rate.png           LMCache lookup hit rate over the measured window
+  fig4-paired-seeds.png       the paired per-seed lines the Wilcoxon actually sees
+  fig5-percentiles.png        TTFT percentile panels per arm
+  fig6-load-balance.png       busiest vs idlest engine - what the policy changes
+  fig7-beta-tradeoff.png      hit rate against latency across the beta grid
   fig8-itl-percentiles.png    inter-token latency p50/p95/p99 - the decode side
   fig9-throughput.png         sustained tok/s and req/s per arm
   fig10-utilization.png       §3 utilization: GPU, GPU memory, CPU, host memory
@@ -558,9 +562,9 @@ def main() -> None:
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--out", default="docs/figures")
     ap.add_argument("--cand", default=None,
-                    help="headline loadaware cell (default: the single non-b0 "
-                         "loadaware cell present; beta is calibrated per-rate so "
-                         "the cell name is not a fixed literal)")
+                    help="headline loadaware cell, e.g. loadaware-b0.5. Inferred only "
+                         "when exactly one non-b0 loadaware cell is present; the standard "
+                         "4-point beta grid has three, so pass it explicitly")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
