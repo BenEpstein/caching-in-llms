@@ -52,11 +52,19 @@ with a pointer to the evidence — those matter as much as code.
   here."** True of an earlier grid, false here: hit rate falls 91.2% → 86.1% monotonically in
   β, and that decline is the mechanism behind the β=2.0 latency reversal. The caption was
   explaining away the effect the figure plots. Now computed from the data.
-- **`export_summary.py` regenerates from disk and does not append.** Rerunning it over the
-  current `results/` dropped 5 cells (10 rows) whose raw directories no longer exist and for
-  which the committed CSV was the only surviving record. `results/summary-per-seed.csv` is now
-  33 → 38 cells, 399 rows, with those orphans preserved. Anyone regenerating this file must
-  check for cells that exist only in it.
+- **`summary-per-seed.csv` carried 5 cells whose raw data is not in the repo** -
+  `20260803-235537`, `20260804-000537`, `20260804-001911`, `20260805-002149`,
+  `20260805-003128`, all 2-seed `kvaware` probes, 10 rows. Pre-existing on `main`: those
+  directories have zero tracked files there too, so `scripts/reproduce.sh` check 1 ("every run
+  referenced by the summary has committed raw data", added in #28) **fails on `main` today**.
+  They are dropped here rather than preserved: unreproducible numbers in a committed artifact
+  are precisely what that check exists to catch, and keeping them would contradict §6's
+  "no number appears that `reproduce.sh` cannot regenerate". The rows survive in git history at
+  `ffe1c77:results/summary-per-seed.csv`. File is now 33 cells / 389 rows and
+  `reproduce.sh` passes 5/5.
+- **`results/expected/stats.txt` re-baselined** for the `ALPHA` fix: the pinned output changes
+  from `≥ 0.05` to `≥ 0.025`. Same p-values, same verdicts - only the threshold the line prints
+  against. `figure-data.json` is unchanged, confirming the caption fixes touch no series data.
 
 ### Added
 - **All 10 figures regenerated** from the confirmatory sweep into `docs/figures/`.

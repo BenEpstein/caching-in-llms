@@ -198,10 +198,12 @@ The project's credibility rests on having reported a null. Protect that.
   `status: signed-off-ready-to-run` with "Blockers: None ... it is ticked" directly under a box
   stating Amendment 1 was unsigned. It was unsigned at session start; both boxes were ticked
   mid-session. Stale, and it is the first thing a resuming session reads.
-- **`export_summary.py` regenerates from disk and does not append.** Rerunning it over
-  `results/` dropped 5 cells whose raw directories no longer exist and for which
-  `results/summary-per-seed.csv` was the only surviving copy. Preserved in `5544cf2` (33 → 38
-  cells). Check for disk-less cells before regenerating.
+- **`export_summary.py` regenerates from disk and does not append**, so rerunning it drops any
+  cell whose raw directory is gone. Five such cells existed (2-seed `kvaware` probes, 10 rows).
+  They were dropped, not preserved: `scripts/reproduce.sh` check 1 (#28) requires every summary
+  row to have committed raw data, and those rows fail it - on `main` as well as here, so that
+  check fails on `main` today. Rows survive at `ffe1c77:results/summary-per-seed.csv`.
+  `reproduce.sh` now passes 5/5 on this branch.
 - **No GPU memory occupancy is collected.** DCGM has `GPU_UTIL`, `MEM_COPY_UTIL`,
   `POWER_USAGE` only - no `FB_USED`. `MEM_COPY_UTIL` is bandwidth, not occupancy.
   `vllm_kv_cache_usage_perc` is the working proxy and is what fig10's "GPU memory" panel plots.
