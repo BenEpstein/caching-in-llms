@@ -6,7 +6,9 @@ cross-check, zero/tie handling.
 """
 
 import csv
+import json
 import math
+import os
 
 import pytest
 
@@ -20,6 +22,7 @@ from analyze import (
     MAX_ERROR_RATE,
     bootstrap_ci_median_rel_reduction,
     invalid_seeds,
+    per_seed_imbalance,
     percentile,
     seed_stats,
     wilcoxon_exact_one_sided,
@@ -240,3 +243,103 @@ def test_compare_accepts_matching_seed_sets(tmp_path):
     cand = _run_dir(tmp_path, "cand", [1, 2, 3])
     base = _run_dir(tmp_path, "base", [1, 2, 3])
     assert cmd_compare(cand, base, "ttft_p95") == 0
+
+
+# ---- imbalance co-primary ---------------------------------------------------
+#
+# Added 2026-08-06. Until then `compare --metric imbalance` raised KeyError:
+# per_seed_imbalance lived in export_summary.py, so the co-primary was
+# computable and untestable at once, and run_sweep.sh printed a command for it
+# that could not work.
+
+def _prom(run_dir, engines, router=None, lo=1000.0, hi=1003.0):
+    """Write a vllm_num_requests_running dump. engines: {pod: constant value}."""
+    result = [
+        {"metric": {"job": "vllm-engines", "pod": pod},
+         "values": [[t, str(v)] for t in (lo, (lo + hi) / 2, hi)]}
+        for pod, v in engines.items()
+    ]
+    if router is not None:
+        # The trap the function documents: the router re-exports the same metric
+        # for every backend under one instance label.
+        result.append(
+            {"metric": {"job": "router", "instance": "stack-router-service:80",
+                        "server": "engine-1"},
+             "values": [[t, str(router)] for t in (lo, (lo + hi) / 2, hi)]}
+        )
+    p = os.path.join(run_dir, "prom")
+    os.makedirs(p, exist_ok=True)
+    with open(os.path.join(p, "vllm_num_requests_running.json"), "w") as f:
+        json.dump({"data": {"result": result}}, f)
+
+
+def test_per_seed_imbalance_is_busiest_over_idlest(tmp_path):
+    d = _run_dir(tmp_path, "cell", [1])
+    _prom(d, {"engine-a": 4.0, "engine-b": 1.0})
+    assert per_seed_imbalance(d) == {1: pytest.approx(4.0)}
+
+
+def test_per_seed_imbalance_windows_each_seed_separately(tmp_path):
+    """The reason the function is per-SEED at all.
+
+    Every other test here gives all seeds the same send window and a constant
+    series, so they would pass identically if the window filter were deleted.
+    Here seed 1 sends while the fleet is 4:1 and seed 2 while it is 2:1. Ignore
+    the windows and both seeds read the pooled 3:1 instead.
+    """
+    d = str(tmp_path / "cell")
+    os.makedirs(d)
+    for seed, base in ((1, 1000.0), (2, 2000.0)):
+        rows = [_row(i, 0.1, 1.0) for i in range(4)]
+        for i, r in enumerate(rows):
+            r["send_ts"] = base + i
+        _write_csv(os.path.join(d, f"driver-seed{seed}.csv"), rows)
+
+    busy = [[t, "4.0"] for t in (1000.0, 1001.5, 1003.0)] + \
+           [[t, "2.0"] for t in (2000.0, 2001.5, 2003.0)]
+    idle = [[t, "1.0"] for t in (1000.0, 1001.5, 1003.0, 2000.0, 2001.5, 2003.0)]
+    os.makedirs(os.path.join(d, "prom"))
+    with open(os.path.join(d, "prom", "vllm_num_requests_running.json"), "w") as f:
+        json.dump({"data": {"result": [
+            {"metric": {"job": "vllm-engines", "pod": "engine-a"}, "values": busy},
+            {"metric": {"job": "vllm-engines", "pod": "engine-b"}, "values": idle},
+        ]}}, f)
+
+    assert per_seed_imbalance(d) == {1: pytest.approx(4.0), 2: pytest.approx(2.0)}
+
+
+def test_per_seed_imbalance_ignores_the_router_job(tmp_path):
+    """A router series must not enter the max/min as a phantom third engine."""
+    d = _run_dir(tmp_path, "cell", [1])
+    _prom(d, {"engine-a": 4.0, "engine-b": 1.0}, router=99.0)
+    assert per_seed_imbalance(d) == {1: pytest.approx(4.0)}
+
+
+def test_per_seed_imbalance_is_empty_without_a_dump(tmp_path):
+    d = _run_dir(tmp_path, "cell", [1, 2])
+    assert per_seed_imbalance(d) == {}
+
+
+def test_per_seed_imbalance_keys_by_seed_number_not_list_position(tmp_path):
+    d = _run_dir(tmp_path, "cell", [1, 10])
+    _prom(d, {"engine-a": 3.0, "engine-b": 1.0})
+    assert sorted(per_seed_imbalance(d)) == [1, 10]
+
+
+def test_compare_runs_the_imbalance_metric(tmp_path):
+    """The regression that matters: this raised KeyError before the metric moved."""
+    cand = _run_dir(tmp_path, "cand", [1, 2, 3])
+    base = _run_dir(tmp_path, "base", [1, 2, 3])
+    _prom(cand, {"engine-a": 1.2, "engine-b": 1.0})
+    _prom(base, {"engine-a": 4.0, "engine-b": 1.0})
+    assert cmd_compare(cand, base, "imbalance") == 0
+
+
+def test_compare_imbalance_without_a_dump_says_so(tmp_path):
+    """Never a silent partial pairing: absent imbalance is a hard, named error."""
+    cand = _run_dir(tmp_path, "cand", [1, 2, 3])
+    base = _run_dir(tmp_path, "base", [1, 2, 3])
+    _prom(cand, {"engine-a": 1.2, "engine-b": 1.0})
+    with pytest.raises(SystemExit) as e:
+        cmd_compare(cand, base, "imbalance")
+    assert "no imbalance value for seeds" in str(e.value)

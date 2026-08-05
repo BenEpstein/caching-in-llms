@@ -8,6 +8,44 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 - Confirmatory sweep run; claim 1 passes, claim 2 null (#31)
+
+Full run log, diagnosis and next-experiment proposal: `docs/sweep-2026-08-06-findings.md`.
+
+### Decided
+- **Claim 1 (balance) PASSES, claim 2 (TTFT p95) is NULL**, against pre-registration rev 2
+  ([`5196484091`](https://github.com/BenEpstein/caching-in-llms/issues/31#issuecomment-5196484091))
+  as amended by Amendment 1
+  ([`5196605866`](https://github.com/BenEpstein/caching-in-llms/issues/31#issuecomment-5196605866)):
+  imbalance -48.1% CI [37.7%, 56.3%] p=0.000010 18/20; TTFT p95 -2.7% CI [-4.3%, +15.4%]
+  p=0.1153 vs alpha 0.025. Rev 2 pre-declared the null publishable; reported as one.
+- **Rule 6 was knowingly overridden, with Ben's authorisation.** Claim 1's test path did not
+  exist and was written 9 min after the last cell closed. Disclosure and mitigation in the
+  findings doc, Part 1; §6 must repeat it.
+- **The `b0` drift sentinel did not hold** (-13.2% TTFT p95, CI excluding zero, 16/20 worse).
+  Per Amendment 1: ambiguous between drift and placement, not read as placement. Claim 1
+  unaffected. A closing `kvaware` bracket (~20 min) would settle it.
+- **The operating point, not the policy, explains the p95 null**: `num_requests_waiting` was
+  nonzero in 0 of 284 baseline scrapes. Rev 2's "at or above the knee" premise is falsified.
+- **Next experiment should measure goodput at the knee, not TTFT p95** - proposal only, not
+  pre-registered. Guardrails in the findings doc, Part 4.
+
+### Added
+- Confirmatory sweep, 5 cells x 20 seeds, committed to `results/`; all pass the validity gate.
+- `analyze.py compare --metric imbalance`, the path claim 1 never had; 7 tests.
+- `fig11-inflight-vs-time.png` - per-engine in-flight vs time, the #31 DoD figure.
+- `CONTEXT.md`: **Load Imbalance**, the co-primary, distinguished from **Relative Load**.
+
+### Fixed
+- `ALPHA = 0.025` constant: the verdict line printed `< 0.05` against a pre-registered 0.025.
+- `per_seed_imbalance` now reuses `utilization.read_series` instead of a third verbatim copy
+  of the router-job filter, which also gains its `worker_id` disambiguation.
+- Three figure captions asserted conclusions this data falsifies (fig1's "6 seeds", fig7's
+  "hit rate is flat", fig3's "saturated"); all now derived on render.
+- `summary-per-seed.csv` referenced 5 cells with no committed raw data, failing
+  `reproduce.sh` check 1 on `main` too. Dropped; they survive at `ffe1c77`.
+- Units documented rather than renamed: `ttft_*`, `e2e_*` and `itl_*` are all SECONDS.
+
 ## 2026-08-05 (late) - scripts/reproduce.sh (#28)
 
 ### Added

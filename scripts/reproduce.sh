@@ -126,8 +126,9 @@ python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEA
   "$ROOT/results/20260805-015202-loadaware-b1.0" "$ROOT/results/20260805-021215-loadaware-b2.0" \
   --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
 check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
-if [ "$(ls "$WORK/figs" | wc -l)" -ge 10 ]; then ok "10 figures rendered"
-else fail "expected 10 figures, got $(ls "$WORK/figs" | wc -l)"; fi
+nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
+if [ "$nfigs" -ge 11 ]; then ok "$nfigs figures rendered"
+else fail "expected at least 11 figures, got $nfigs"; fi
 
 echo
 if [ "${#FAILURES[@]}" -eq 0 ]; then

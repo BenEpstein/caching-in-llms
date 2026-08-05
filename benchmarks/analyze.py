@@ -15,10 +15,21 @@ exists:
 
 stdlib-only, deterministic (bootstrap is seeded).
 
+UNITS: every latency field this module produces is in SECONDS - `ttft_*`, `e2e_*`
+AND `itl_*`. The driver writes inter-token gaps in milliseconds under a column
+named `itls_ms`, and seed_stats divides by 1000 on read, so the `itl_p95` that
+comes out of here is seconds despite the source column's name. The names carry no
+unit suffix and are the column headers in the committed summary CSV, so a reader
+checking a figure against that CSV has nothing but this note to go on. Not
+renamed deliberately: the names are load-bearing in export_summary.py,
+plot_results.py, load_gate.py and the already-committed
+results/summary-per-seed.csv.
+
 Usage:
   python3 analyze.py summary  results/<run>...
   python3 analyze.py validate results/<run>            # exit 1 → do not use
   python3 analyze.py compare  results/<cand> results/<base> [--metric ttft_p95]
+  python3 analyze.py compare  results/<cand> results/<base> --metric imbalance
 """
 
 from __future__ import annotations
@@ -32,6 +43,8 @@ import os
 import random
 import sys
 from typing import Dict, List, Sequence
+
+import utilization
 
 # Validity rule 1, AMENDED 2026-08-04 (pre-registered on #3 before the run).
 #
@@ -49,6 +62,13 @@ from typing import Dict, List, Sequence
 #
 # So: a flat floor is reported, not fatal. What voids a comparison is errors
 # DIFFERING between the arms, which is the thing that could actually distort it.
+# The pre-registered threshold (#31 rev 2): 0.025, Bonferroni over the two
+# co-primaries (TTFT p95 and imbalance). The verdict line used to hardcode 0.05
+# while this file's own docstring said 0.025, so a p between the two printed
+# "significant" for a result the pre-registration calls null. No result to date
+# fell in that gap; the constant exists so none ever can.
+ALPHA = 0.025
+
 MAX_ERROR_RATE = 0.01       # reporting threshold - flags a seed, does not void
 HARD_ERROR_RATE = 0.10      # catastrophic: something is broken, void regardless
 ERROR_BIAS_RATIO = 2.0      # arm error rates differing by more than this -> void
@@ -73,6 +93,9 @@ def seed_stats(csv_path: str) -> Dict:
     # Pooled over every inter-token gap in the seed, not over per-request
     # summaries: "ITL p99" means the 99th percentile of gaps. Absent on CSVs
     # written before the driver recorded it, hence the .get.
+    #
+    # /1000 converts ms -> SECONDS, so every itl_* field below is seconds while
+    # the source column is `itls_ms`. See the UNITS note in the module docstring.
     itl = [
         float(x) / 1000
         for r in ok
@@ -138,6 +161,47 @@ def read_run(run_dir: str) -> List[Dict]:
             "paired analysis needs every driver CSV to name its seed"
         )
     return [seed_stats(p) for p in sorted(paths, key=seed_id)]
+
+
+def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
+    """busiest/idlest engine mean in-flight, per seed window. {} if no dump.
+
+    Lives here, not in export_summary.py where it was written, because it is a
+    CO-PRIMARY: `compare --metric imbalance` needs it. While it sat in the
+    exporter there was no code path anywhere that ran the pre-registered test on
+    it - the metric was computable and untestable at the same time, and
+    run_sweep.sh told the operator to test it with a command that could only
+    raise KeyError.
+
+    The parse lives in utilization.read_series, which also drops the router's
+    re-export of this metric: the router publishes one series per backend under a
+    shared `instance`, which merges both engines into a synthetic third series
+    and corrupts the max/min. This function used to carry its own copy of that
+    filter, making it the third in the repo, and the copy lacked read_series's
+    worker_id disambiguation.
+    """
+    series = utilization.read_series(
+        run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
+    if not series:
+        return {}
+    out = {}
+    for p in glob.glob(os.path.join(run_dir, "driver-seed*.csv")):
+        # seed_id, not an inlined digit-scrape: this dict is one half of a PAIRED
+        # test whose other half is read_run, so both halves number seeds by one
+        # shared function. It also skips a name with no digits rather than
+        # raising on int("").
+        seed = seed_id(p)
+        if seed is None:
+            continue
+        ts = [float(r["send_ts"]) for r in csv.DictReader(open(p))]
+        if not ts:
+            continue
+        lo, hi = min(ts), max(ts)
+        windows = [[y for t, y in vals if lo <= t <= hi] for vals in series.values()]
+        means = sorted(sum(w) / len(w) for w in windows if w)
+        if len(means) >= 2 and means[0] > 0:
+            out[seed] = means[-1] / means[0]
+    return out
 
 
 def flagged_seeds(seeds: List[Dict]) -> List[str]:
@@ -316,8 +380,30 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
         return 1
     for problem in flagged_seeds(cand) + flagged_seeds(base):
         print(f"  note: {problem} (reported, not fatal - amended rule 1)")
-    c = [s[metric] for s in cand]
-    b = [s[metric] for s in base]
+    if metric == "imbalance":
+        # Overlaid here rather than merged into read_run: read_run also backs
+        # `validate`, which runs at the end of every cell inside run_cell.sh, and
+        # it has no business reading a Prometheus dump or gaining a new way to
+        # fail while the sweep is still running.
+        cand_imb, base_imb = per_seed_imbalance(cand_dir), per_seed_imbalance(base_dir)
+        # Named per side: "seeds 3, 7 missing" does not tell an operator which
+        # cell to go and look at, and the two cells fail for different reasons.
+        for label, run_dir, imb in (
+            ("candidate", cand_dir, cand_imb), ("baseline", base_dir, base_imb)
+        ):
+            absent = [s for s in cand_seeds if s not in imb]
+            if absent:
+                raise SystemExit(
+                    f"no imbalance value for seeds {absent} in the {label} cell "
+                    f"{run_dir} - the paired test needs "
+                    "prom/vllm_num_requests_running.json covering every seed's "
+                    "send-timestamp window"
+                )
+        c = [cand_imb[s] for s in cand_seeds]
+        b = [base_imb[s] for s in cand_seeds]
+    else:
+        c = [s[metric] for s in cand]
+        b = [s[metric] for s in base]
     diffs = [ci - bi for ci, bi in zip(c, b)]
     test = wilcoxon_exact_one_sided(diffs)
     effect = bootstrap_ci_median_rel_reduction(c, b)
@@ -327,7 +413,7 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
     print(
         f"Wilcoxon signed-rank (one-sided, exact): W+={test['w_plus']:.1f} "
         f"n={test['n']} p={test['p']:.4f} "
-        f"{'< 0.05  ✓ significant' if test['p'] < 0.05 else '≥ 0.05  ✗ not significant'}"
+        f"{f'< {ALPHA}  ✓ significant' if test['p'] < ALPHA else f'≥ {ALPHA}  ✗ not significant'}"
     )
     print(
         f"median relative reduction: {effect['median_rel_reduction']:.1%} "
