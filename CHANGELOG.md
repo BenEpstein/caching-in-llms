@@ -8,6 +8,52 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 - Confirmatory sweep run; imbalance co-primary had no test path (#31)
+
+### Fixed
+- **`compare --metric imbalance` raised `KeyError` - the balance co-primary was untestable.**
+  `per_seed_imbalance` lived in `export_summary.py` (a CSV exporter with no statistics) while
+  the only Wilcoxon implementation lives in `analyze.py`, and nothing joined them. Not a
+  regression from #30/#43: `git log -S imbalance - benchmarks/analyze.py` returns one commit,
+  `ab9530f`, which added the word in a docstring. The glue was never written, and
+  `run_sweep.sh`'s closing echo told the operator to test claim 1 with a command that could
+  only raise. Moved the function to `analyze.py`, added the `--metric imbalance` path, fixed
+  the echo, six new tests.
+- **The verdict line printed `< 0.05 ✓ significant` against a pre-registered α of 0.025.**
+  `analyze.py`'s own docstring said 0.025, Bonferroni over the two co-primaries; the print
+  hardcoded 0.05. No result to date fell in the gap, so no reported verdict changes. Now a
+  named `ALPHA` constant.
+
+### Added
+- **Confirmatory sweep, 5 cells × 20 seeds, committed to `results/`** - `kvaware`,
+  `loadaware-b0.5`, `b1.0`, `b2.0`, `b0`, in the Amendment 1 order. All five pass the validity
+  gate (pooled error 0.20-0.46%, no seed near the 10% ceiling, `utilization_coverage` 1.000).
+  Router `acf43d1`, bench `42e6a32`, in-cluster driver on `gapu-2-worker1`.
+
+### Decided
+- **Claim 1 (balance) PASSES; claim 2 (TTFT p95) is NULL, reported as such.** Imbalance
+  2.449 → 1.269, −48.1% median, CI [37.7%, 56.3%], p=0.000010, 18/20 seeds. TTFT p95 −2.7%
+  median, CI [−4.3%, +15.4%], p=0.1153 against α=0.025. Rev 2 declared the p95 null an
+  acceptable, publishable outcome in advance and forbade metric substitution; it is reported
+  as the null it is.
+- **The `b0` drift sentinel did NOT hold on latency.** `b0` vs `kvaware` is 13.2% *worse* on
+  TTFT p95, CI [−18.5%, −5.8%] excluding zero, on 16/20 seeds. Per Amendment 1's pre-declared
+  reading this is **ambiguous between drift and placement and is not read as a placement
+  effect**. The imbalance ablation *is* clean (CI [−54.5%, +11.4%] spans zero, 7/20), so
+  claim 1's causal attribution to the load term stands. Evidence that rev 2's reasoning for
+  dropping the closing `kvaware` bracket - that #27 removed the drift mechanism - was wrong.
+  Resolving it costs ~20 min of cluster time.
+- **β=2.0 turns the tradeoff over, with a measured mechanism.** Best balance of any cell
+  (1.127) and worst latency including baseline (p95 0.410 s vs `kvaware` 0.334 s; p99 0.686 s
+  vs 0.422 s). vLLM prefix cache hit rate declines monotonically with β - 91.2 / 90.7 / 87.9 /
+  86.1 - and `b2.0` is the only cell that ever queued. Balance bought with cache locality,
+  measured rather than inferred. β=0.5 stays the configuration of record, fixed pre-data.
+- **No KV eviction pressure anywhere.** `vllm_num_preemptions_total` is 0 in all five cells;
+  KV cache usage peaks at 0.77 and averages ~0.25. No latency result is an eviction artefact.
+  Note the instrumentation gap: DCGM collects `GPU_UTIL`, `MEM_COPY_UTIL` and `POWER_USAGE`
+  only - there is **no `FB_USED`, so GPU memory occupancy is not measured**, and
+  `MEM_COPY_UTIL` is bandwidth, not occupancy.
+
 ## 2026-08-05 (late) - scripts/reproduce.sh (#28)
 
 ### Added

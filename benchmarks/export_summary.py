@@ -6,8 +6,14 @@ cluster. This writes the derived per-seed table - a few KB - which is committed
 alongside each cell's `run.json`. Between them a reader can reproduce every
 figure, every percentile, and both co-primary tests without the raw data.
 
-Per-seed load imbalance is computed here, not in analyze.py, because it needs
-the Prometheus dump windowed by each seed's driver CSV `send_ts` range.
+Per-seed load imbalance USED to be computed here. It moved to analyze.py, which
+is where the paired test that consumes it lives: as long as it sat in the
+exporter, `compare --metric imbalance` raised KeyError and the co-primary had no
+code path at all.
+
+Latency columns (`ttft_*`, `e2e_*`, `itl_*`) are all in SECONDS - including the
+itl ones, whose source column is named `itls_ms`. See the UNITS note in
+analyze.py.
 
 Usage:
   python3 export_summary.py results/<run>... --out results/summary-per-seed.csv
@@ -17,12 +23,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import json
 import os
-from typing import Dict, List
 
-from analyze import read_run
+from analyze import per_seed_imbalance, read_run
 
 FIELDS = [
     # `run` FIRST and part of the sort key: `cell` alone is ambiguous - the same
@@ -57,45 +61,6 @@ FIELDS = [
     "e2e_mean", "e2e_p95", "e2e_p99",
     "throughput_req_s", "throughput_tok_s", "imbalance",
 ]
-
-
-def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
-    """busiest/idlest engine mean in-flight, per seed window. {} if no dump."""
-    path = os.path.join(run_dir, "prom", "vllm_num_requests_running.json")
-    if not os.path.exists(path):
-        return {}
-    # `vllm:num_requests_running` is exported TWICE: once per engine pod under
-    # job=vllm-engines, and once per backend under job=router - where every
-    # series shares instance="stack-router-service:80" and is distinguished only
-    # by the `server` label. Keying on `pod or instance` therefore collapsed all
-    # router series into a single bucket that averages both engines together,
-    # and that synthetic third "engine" then entered the max/min. With two
-    # engines it happens to land between them so the ratio survived; a third
-    # engine, or a scrape where it did not, would have corrupted a co-primary
-    # silently. Take the engine job only.
-    series: Dict[str, List] = {}
-    for s in json.load(open(path))["data"]["result"]:
-        if s["metric"].get("job") != "vllm-engines":
-            continue
-        pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
-        series.setdefault(pod, []).extend(
-            (float(t), float(v)) for t, v in s["values"]
-            if v not in ("NaN", "+Inf", "-Inf"))
-
-    out = {}
-    for p in sorted(glob.glob(os.path.join(run_dir, "driver-seed*.csv"))):
-        ts = [float(r["send_ts"]) for r in csv.DictReader(open(p))]
-        if not ts:
-            continue
-        lo, hi = min(ts), max(ts)
-        means = sorted(
-            sum(v for t, v in vals if lo <= t <= hi) / max(1, len([1 for t, _ in vals if lo <= t <= hi]))
-            for vals in series.values()
-            if any(lo <= t <= hi for t, _ in vals))
-        if len(means) >= 2 and means[0] > 0:
-            seed = int("".join(c for c in os.path.basename(p) if c.isdigit()))
-            out[seed] = means[-1] / means[0]
-    return out
 
 
 def main() -> None:
