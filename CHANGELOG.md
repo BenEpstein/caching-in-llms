@@ -8,6 +8,44 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 (late) - scripts/reproduce.sh (#28)
+
+### Added
+- **`scripts/reproduce.sh`** - regenerates every reported number from committed data and fails
+  on drift. Five checks: every run in the summary has committed raw data; both frozen workloads
+  reconstruct from their manifests; `summary-per-seed.csv` regenerates; the headline and
+  ablation statistics regenerate; the series behind every figure regenerate. Gives §6 the line
+  *"no number appears in this report that `scripts/reproduce.sh` cannot regenerate from
+  committed data"* - one command, no hardware.
+- **`plot_results.py --dump-data`** - writes the series behind each figure as JSON.
+  **Figures are deliberately not byte-compared**: matplotlib output moves with font
+  availability, version and metadata, so a PNG diff would go red on a fresh runner for reasons
+  unrelated to our data - and a check that cries wolf gets muted, which is worse than no check.
+- `results/expected/{stats.txt,figure-data.json}` - the derived baselines.
+
+### Fixed
+- **`--update` could have destroyed data.** It refreshed every comparison target, and one of
+  those targets is `results/summary-per-seed.csv` itself - committed data, not a baseline. When
+  a run directory is missing, the regenerated file is a strict *subset*, so `--update` would
+  have silently deleted real rows. Split into `verify_against` (committed data, never written)
+  and `check` (derived baselines under `results/expected/`, safe to refresh). Guarded and
+  verified: `--update` leaves the summary byte-identical.
+- `mapfile` (bash 4) replaced with a portable read loop - macOS ships bash 3.2, and this repo
+  has already been bitten once by a bash-4 builtin (`declare -A` in `apply-router-patch.sh`).
+
+### Found - needs a decision (#7 / #28)
+- **Five runs referenced by `summary-per-seed.csv` have no committed directory**, so 10 of its
+  299 rows cannot be regenerated from the repository:
+  `20260803-235537-kvaware`, `20260804-000537-kvaware`, `20260804-001911-kvaware`,
+  `20260805-002149-kvaware`, `20260805-003128-kvaware`. Git has **no history** for any of them -
+  they were never committed, not deleted. The last two are the OSL pilot cells (note the
+  `osl` column reading 128 and 256). None is a headline arm.
+  **`reproduce.sh` is therefore red on `main` today, and is deliberately NOT wired into CI
+  until this is resolved** - shipping a knowingly-red check trains people to ignore CI.
+  Fix is either committing those directories or dropping their rows; both are Ben's call
+  because it is his data.
+
+
 ## 2026-08-05 (late) - Fake vLLM server + end-to-end harness test (#28)
 
 ### Added
