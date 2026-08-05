@@ -76,13 +76,22 @@ with a pointer to the evidence — those matter as much as code.
   The two are numerically equal and semantically unrelated, and as written the passage read as
   evidence against the shipped configuration.
 
-### Known gap
-- **The workload parameters in the map's #3 entry are stale.** Issue #1's Decisions-so-far records
-  the frozen workload as "s=1.2, 20×2048 tok"; every rate-16 `run.json` says `zipf_s: 0.9`,
-  `prefix_pool_size: 128`. The quoted Zipf head shares (top-1 35%, top-3 57% "at the frozen s=1.2")
-  are stale with it. `benchmarks/README.md` and `freeze_workloads.py` already carry the measured
-  values. Flagged on #29, not corrected - map edits and a head-share recomputation were out of this
-  ticket's scope.
+### Fixed (follow-on, same session)
+- **The stale workload parameters were chased to their last two homes.** The map's #3 entry recorded
+  the frozen workload as "s=1.2, 20×2048 tok" and `WorkloadConfig` still *defaulted* to
+  `prefix_pool_size=20, zipf_s=1.2` (duplicated again in `workload_gen.py`'s argparse). The frozen
+  dataset is **128 prefixes at s=0.9, 500 requests, 20 seeds**; s=1.2 with a 20-prefix pool were
+  exploratory values that outlived the freeze. No recorded result moves - `freeze_workloads.py`
+  always passed every value explicitly, so the defaults never reached the data, and regenerating all
+  20 seeds after the change reproduces the committed manifest SHA-256s exactly ("all workloads match
+  the committed manifest - frozen dataset verified", exit 0).
+- **The real skew is much gentler than the retired figures implied.** Measured over all 20 frozen
+  seeds (10,000 requests): **top-1 prefix = 14.8% of requests, top-3 = 28.0%, top-10 = 47.9%**,
+  matching Zipf theory at s=0.9/N=128 to within 0.1 pp. The figures quoted at s=1.2 were 35% / 57%.
+  This matters for §3: the hot prefix carries about a seventh of traffic, not a third.
+- **`test_defaults_match_the_frozen_manifest`** now pins `WorkloadConfig`'s defaults to
+  `workloads/manifest.json` field by field, so the two cannot drift apart again, and the argparse
+  defaults reference the dataclass instead of re-stating literals. 121 tests pass.
 
 ## 2026-08-05 - Front door part 1: figures are reproducible, benchmarks/README stops lying (#26)
 
