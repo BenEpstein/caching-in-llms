@@ -11,7 +11,7 @@
 #   ./run_cell.sh <cell> <rate> [results-root]
 #
 #   cell ∈ kvaware | roundrobin | loadaware-b<beta>
-#          e.g. loadaware-b0 loadaware-b0.25 loadaware-b1.0 loadaware-b2.0
+#          e.g. loadaware-b0 loadaware-b0.5 loadaware-b1.0 loadaware-b2.0
 #          beta is dimensionless (load is normalized against the fleet mean
 #          inside the router), so the grid is fixed, not probe-calibrated.
 #   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, ~75% of the knee)
