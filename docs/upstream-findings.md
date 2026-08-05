@@ -1,6 +1,9 @@
 # Upstream Findings - Production-Stack / LMCache Control Plane
 
-> status: live · 2026-08-01 · input to the upstream-PRs ticket (#10); findings dated 2026-07-04, re-verify against current upstream before filing
+> status: live · 2026-08-05 · input to the upstream-PRs ticket (#10); findings dated 2026-07-04,
+> re-verify against current upstream before filing. **The "Drop-in Discussion paragraph (§6)" section
+> is frozen and must not be pasted into the report** - it is quantified at the retired 7.5/10.5 req/s
+> rates (issue #29).
 
 > Material collected during baseline deployment (2026-07-04) for two later uses:
 > 1. the **final report** (Experimental Setup / Discussion sections — these findings show
@@ -236,12 +239,36 @@ untreated rate-16 cells, that parameterization spans 1.41x where the absolute on
 This closes the *scale* gap with Dynamo but not the *signal* gap: their load term counts unique KV
 blocks, ours counts requests. Converting β to their axis still needs the blocks-per-in-flight-request
 factor, which prefix dedup makes workload-dependent (0.69 at 10.5 req/s, 0.45 at 7.5), so the two
-are **not** related by a constant. Under that approximation their default sits near β ≈ 0.5 on our
-old axis, past the optimum our sweep found (`fig7-beta-tradeoff.png`) - a measured result about
-where block-denominated load overcharges, not a defect in the policy. See the Discussion paragraph
-below, which is unaffected: it is about deduplication, which remains future work.
+are **not** related by a constant. Under that approximation their default sits near β ≈ 0.5 **on the
+retired absolute axis**, past the optimum the 7.5 req/s sweep found on that same axis
+(`fig7-beta-tradeoff.png`) - a measured result about where block-denominated load overcharges, not a
+defect in the policy.
 
-### Drop-in Discussion paragraph (§6)
+> ⚠️ **Do not read that 0.5 as the shipped operating point.** The project ships β=0.5 on the
+> *normalized* axis, where β is a fraction-to-fraction exchange rate. The two 0.5s are numerically
+> equal and semantically unrelated: one is Dynamo's default converted onto an axis this project no
+> longer uses, the other is the knee of the rate-16 sweep on the axis it does. Nothing above is
+> evidence about the shipped configuration.
+
+### Drop-in Discussion paragraph (§6) - FROZEN 2026-08-05, DO NOT PASTE
+
+> 🚫 **This paragraph is quantified entirely at 7.5 and 10.5 req/s, both retired.** The project's
+> operating point is **rate 16, β=0.5, OSL 64**. Pasting it into §6 would put numbers in the report
+> that contradict the report's own data. It is kept as the record of the argument, not as copy.
+>
+> Reviving it means recomputing four quantities on the rate-16 cells, all of which have backing on
+> disk (including a 20-seed `roundrobin` cell at `results/20260804-191644-roundrobin/`):
+>
+> 1. the dedup factor (concurrent requests vs. distinct prefixes in flight), from the rate-16
+>    `driver-seed*.csv`;
+> 2. peak KV utilization, from `prom/vllm_kv_cache_usage_perc.json`;
+> 3. whether `num_requests_waiting` stayed at 0;
+> 4. the `roundrobin` lookup hit rate, from `prom/lmcache_lookup_hit_rate.json`.
+>
+> That recomputation belongs to [issue #28](https://github.com/BenEpstein/caching-in-llms/issues/28)
+> (analysis completeness), with committed code, not to an ad-hoc in-session calculation - which is
+> the exact defect #28 exists to fix. The *argument* below is unaffected: it is about deduplication,
+> which remains future work either way.
 
 > Our load term, `in_prefill + in_decoding`, is a count of in-flight requests, and it is the
 > coarsest part of the policy. NVIDIA's Dynamo router, the closest production system to our design,

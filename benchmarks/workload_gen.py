@@ -30,9 +30,13 @@ _WORDS = (
 
 @dataclasses.dataclass(frozen=True)
 class WorkloadConfig:
-    num_requests: int = 1000
-    prefix_pool_size: int = 20          # number of distinct shared prefixes
-    zipf_s: float = 1.2                 # skew: 0 = uniform, >1 = heavy head
+    # These defaults ARE the frozen evaluation workload (see the manifest under
+    # benchmarks/workloads/). `test_defaults_match_the_frozen_manifest` pins them
+    # to it: they drifted once - 20 prefixes at s=1.2 were exploratory values that
+    # outlived the freeze and were still being quoted as the shipped skew.
+    num_requests: int = 500
+    prefix_pool_size: int = 128         # number of distinct shared prefixes
+    zipf_s: float = 0.9                 # skew: 0 = uniform, >1 = heavy head
     prefix_tokens: int = 2048           # approx tokens per shared prefix
     suffix_tokens: int = 32             # approx tokens per unique suffix
     # The pool is THE dataset (issue #3: one frozen prefix pool); `seed` only
@@ -113,9 +117,10 @@ if __name__ == "__main__":
     import argparse
 
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--num-requests", type=int, default=1000)
-    p.add_argument("--prefix-pool-size", type=int, default=20)
-    p.add_argument("--zipf-s", type=float, default=1.2)
+    # Defaults mirror WorkloadConfig's, i.e. the frozen workload.
+    p.add_argument("--num-requests", type=int, default=WorkloadConfig.num_requests)
+    p.add_argument("--prefix-pool-size", type=int, default=WorkloadConfig.prefix_pool_size)
+    p.add_argument("--zipf-s", type=float, default=WorkloadConfig.zipf_s)
     p.add_argument("--prefix-tokens", type=int, default=2048)
     p.add_argument("--suffix-tokens", type=int, default=32)
     p.add_argument("--pool-seed", type=int, default=42)

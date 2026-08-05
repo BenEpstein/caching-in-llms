@@ -2,8 +2,8 @@
 
 Change 2 of the project: the router must place a request by
 ``cache_hit_benefit - beta * relative_load`` over *every* instance, instead of
-kvaware's "first instance reported to hold the prefix". See
-docs/handoff-core-implementation.md §4 and CONTEXT.md ("Placement Policy").
+kvaware's "first instance reported to hold the prefix". See CONTEXT.md
+("Placement Policy"), patches/README.md, and issue #5.
 
 Both terms are dimensionless - a fraction of this prompt, and a fraction of
 this fleet's mean load - so ``beta`` carries no unit from the deployment. The

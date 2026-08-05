@@ -9,10 +9,13 @@
 > built; what survives of it is the α/β sensitivity sweep §5 requires anyway — exactly the
 > graceful off-ramp described under "Runner-up 2" below. **The analysis in this memo is still
 > the record of *why* adaptive β was the right second optimization, and the load-signal
-> staleness finding in §1-2 remains load-bearing for the report's motivation.** See
-> `docs/handoff-core-implementation.md` for the revised scope and schedule.
+> staleness finding in §1-2 remains load-bearing for the report's motivation.** The revised
+> scope and schedule lived in `docs/handoff-core-implementation.md`, removed 2026-08-05 with
+> the rest of the handoffs (issue #29); it is in git history, and the shipped scope is the
+> CHANGELOG plus issue #1.
 
-> Decided 2026-07-05, deep-dive session per `docs/handoff-second-optimization.md`.
+> Decided 2026-07-05, deep-dive session per `docs/handoff-second-optimization.md` (removed
+> 2026-08-01, in git history).
 > Survey basis: `vllm-project/production-stack` @ `1e973a3`, `LMCache/LMCache` @ `bf20f51`
 > (fresh clones), both projects' 2026 roadmaps/issue trackers, and one live read-only
 > check on cluster `gapu-2`.

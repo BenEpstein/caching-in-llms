@@ -587,8 +587,8 @@ class LoadAwareRouter(KvawareRouter):
         a match UP to the 256-token LMCache chunk boundary or truncates DOWN.
         1544 tokens is 6.03 chunks: truncating gives 1536 (benefit caps at
         0.973), rounding up gives 1792 (`min()` clamps it, benefit reaches
-        1.0). The evidence points to rounding up - the smoke test in
-        docs/handoff-core-implementation.md sent a ~2000-token prompt and got a
+        1.0). The evidence points to rounding up - the 2026-08-01 smoke test
+        (CHANGELOG, 2026-08-05 entry) sent a ~2000-token prompt and got a
         2048-token match, i.e. a match LONGER than the prompt, which is the
         whole reason the `min()` guard below exists. Not yet confirmed on this
         workload; measuring it needs a live probe with router debug logging.

@@ -1,5 +1,8 @@
 # Deployment (OpenShift, cluster `gapu-2`)
 
+> status: live · 2026-08-05 · the deployment procedure and values files actually in use; verify
+> against the cluster before a run
+
 Target topology: 1 CPU router pod → 2 vLLM+LMCache replicas, one per A10 GPU.
 
 ## Prereqs
