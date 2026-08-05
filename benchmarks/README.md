@@ -1,6 +1,6 @@
 # Benchmark harness
 
-> status: live · 2026-08-01 · implements the locked methodology (issue #3); the resolution
+> status: live · 2026-08-05 · implements the locked methodology (issue #3); the resolution
 > comment there is the spec - this README is the operator's manual.
 
 Measures **client-observed** latency for the routing-policy comparison on the gapu-2
@@ -26,6 +26,7 @@ workload at fixed load.
 | `run_sweep.sh` | All 6 cells, one unattended batch (~3 h) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze ~75% of it |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
+| `utilization.py` | §3 utilization readout (GPU / GPU memory / CPU / memory) + the coverage gate |
 
 ## The frozen workload
 
@@ -88,7 +89,40 @@ LOADAWARE_TAG=<sha> BENCH_TAG=<sha> benchmarks/run_sweep.sh <rate>
 # 3. headline comparison + summaries
 python3 benchmarks/analyze.py summary results/*
 python3 benchmarks/analyze.py compare results/<...loadaware-b0.1> results/<...kvaware>
+
+# 4. §3 utilization: GPU, GPU memory, CPU, host memory
+python3 benchmarks/utilization.py report results/*
 ```
+
+### Utilization (§3): where each number comes from
+
+Decided on [#35](https://github.com/BenEpstein/caching-in-llms/issues/35).
+
+| §3 requirement | Source | Scope |
+|---|---|---|
+| GPU utilization | `DCGM_FI_DEV_GPU_UTIL` / `_POWER_USAGE` / `_MEM_COPY_UTIL` (`dcgm.csv`) | per GPU |
+| GPU memory | `vllm:kv_cache_usage_perc` | per engine |
+| Memory | `lmcache:local_cache_usage` (engines) + `process_resident_memory_bytes`, `router_memory_usage_percent` (router) | per engine + router |
+| CPU | `process_cpu_seconds_total`, `router_cpu_usage_percent` | **router only** |
+
+DCGM is the GPU source of record because vLLM's `/metrics` exposes 113 metric names and
+none of them is SM% or power - there is no Prometheus substitute. Promoting DCGM into
+Prometheus would need a `RoleBinding` in `nvidia-gpu-operator`, which costs the property
+that `oc apply -f deploy/` works in any namespace without cluster-admin.
+
+**Engine host-CPU and engine RSS are not available.** vLLM registers no `process_*`
+collector at all (verified at the endpoint, not inferred from absence), so those two
+numbers are reported as missing rather than substituted. GPU SM% is the engines'
+utilization number; the router is the only component the extension changes, so the
+router's CPU is the one that answers "what does this policy cost".
+
+**Coverage gate.** `run_cell.sh` records `utilization_coverage` in each `run.json`: the
+fraction of `[CELL_START, CELL_END]` that each series actually spans. Below 0.95 it
+**warns and never fails** - the driver CSVs are the primary measurement and a cell with
+good latency data must not be discarded over utilization sampling. It exists because
+`dcgm.csv` once stopped 171 s before a 712 s window closed (24% of the cell, as a clean
+tail truncation) and nothing noticed. The DCGM port-forwards now run under supervisors
+that reconnect, which narrows the window but cannot close it - nothing laptop-side can.
 
 Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values (chart
 **pinned to 0.1.11** - the installed version; 0.1.12+ has schema drift) → dev-overlay
@@ -156,7 +190,9 @@ results/<ts>-<cell>/
                             lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution
   dcgm.csv                  GPU_UTIL / POWER_USAGE / MEM_COPY_UTIL per GPU, ~5 s samples
   run.json                  arm, β, rate, image + imageID, git commit, workload manifest, window,
-                            and `driver` - where the replay ran (node, bench image, target URL)
+                            `driver` - where the replay ran (node, bench image, target URL) - and
+                            `utilization_coverage`, the fraction of the window each utilization
+                            series actually spans (#35)
   window.env                CELL_START/CELL_END from the POD's clock, plus node + bench image;
                             sourced by run_cell.sh, written by collect_job.py
   job.log                   raw Job log (untracked): the ~2.4 MB base64 TRANSPORT for the CSVs

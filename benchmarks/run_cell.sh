@@ -105,6 +105,9 @@ mkdir -p "$OUT"
 echo "==> cell $CELL (arm=$ARM beta=${BETA:-n/a}) rate=$RATE osl=$MAX_TOKENS → $OUT"
 
 PIDS=()
+# The DCGM supervisors (step 7) each trap TERM and kill their own port-forward
+# before exiting, so a plain kill here cannot orphan an `oc port-forward` and
+# leave a local port bound for the next cell.
 cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
 trap cleanup EXIT
 
@@ -207,11 +210,28 @@ fi
 # step 9 instead, with retries. DCGM genuinely needs a live forward because it
 # polls continuously.
 # DCGM is a DaemonSet: forward each pod on its own port, or one node's GPU is lost
+#
+# Each forward runs under a supervisor that restarts it (#35). A bare
+# `oc port-forward` dies for good the moment the VPN drops, and dcgm_poll keeps
+# running against a dead local port - which is how the #27 pilot lost the last
+# 171 s of a 712 s cell as a clean tail truncation with nobody noticing. The
+# supervisor cannot make this WAN-immune (nothing laptop-side can); it only
+# recovers once the link returns, which is the whole ask. The residual risk is
+# covered by the coverage gate in step 11.
 DCGM_URLS=()
 port="$DCGM_PORT"
 for pod in $(oc get pods -n nvidia-gpu-operator -l app=nvidia-dcgm-exporter \
     -o jsonpath='{.items[*].metadata.name}'); do
-  oc port-forward -n nvidia-gpu-operator "pod/$pod" "$port:9400" >/dev/null 2>&1 &
+  ( trap 'kill "${pf:-}" 2>/dev/null; exit 0' TERM INT
+    while :; do
+      oc port-forward -n nvidia-gpu-operator "pod/$pod" "$port:9400" >/dev/null 2>&1 &
+      pf=$!
+      # `|| true` is load-bearing: this script runs under `set -e`, so a
+      # non-zero wait - which is precisely what a dropped forward produces -
+      # would kill the supervisor on the first failure it exists to survive.
+      wait "$pf" || true
+      sleep 2   # the link is down; do not spin
+    done ) &
   PIDS+=($!)
   DCGM_URLS+=(--url "http://localhost:$port/metrics")
   port=$((port + 1))
@@ -303,6 +323,15 @@ with open(os.path.join(env["OUT"], "run.json"), "w") as f:
 print(f"wrote {env['OUT']}/run.json")
 PY
 
-# ---- 11. validity gate ------------------------------------------------------
+# ---- 11. utilization coverage gate ------------------------------------------
+# Every utilization series checked against [CELL_START, CELL_END] and the covered
+# fraction recorded in run.json (#35). WARN-ONLY, and deliberately so: the driver
+# CSVs are the primary measurement and a cell with good latency data must not be
+# discarded over utilization sampling. What this prevents is the silent version -
+# dcgm.csv once stopped 171 s before a 712 s window closed and nothing noticed.
+python3 "$BENCH_DIR/utilization.py" coverage "$OUT" --update-run-json || \
+  echo "WARNING: utilization coverage step failed for $OUT (non-fatal)" >&2
+
+# ---- 12. validity gate ------------------------------------------------------
 python3 "$BENCH_DIR/analyze.py" validate "$OUT"
 echo "==> cell $CELL complete: $OUT"

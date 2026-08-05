@@ -8,6 +8,82 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - Utilization is §3's last unreported metric family, and it is a result (#35)
+
+### Added
+- **`benchmarks/utilization.py`** - the §3 utilization readout, plus its coverage gate.
+  Most of what it reads was already collected in every cell going back weeks and read by
+  **zero** committed code; the two LMCache memory gauges are new here. `report` prints
+  GPU / GPU-memory / CPU / host-memory per cell; `coverage --update-run-json` records how
+  much of the measured window each series actually observed. 22 tests, including the #27
+  pilot's tail truncation as a regression case.
+- **`fig10-utilization.png`** (`plot_results.py`) - four panels, one per §3 resource.
+  KV-cache occupancy is the load-bearing one: it separates the arms monotonically in β
+  (kvaware spreads **1.70×** across the two engines, b0.5 **1.18×**, b2.0 **1.11×**) because
+  it is the resource the policy contends for.
+- **`lmcache:local_cache_usage` + `lmcache:active_memory_objs_count`** added to `prom_dump.py`
+  and both read. The former (~3.8 GB/engine, confirmed live) is the engine-side *memory*
+  number the project believed it did not have. Deliberately only two: #35 exists because six
+  series were collected for weeks and read by nothing, so adding unread ones would have
+  reproduced the thing it fixes.
+
+### Decided
+- **DCGM stays the source of record for GPU utilization**, against the standing proposal to
+  drop it for Prometheus. vLLM's `/metrics` exposes **113 metric names and no SM% or power**
+  (checked at the endpoint), so there is no Prometheus substitute for that half of §3.
+  Evidence and full metric map: [#35](https://github.com/BenEpstein/caching-in-llms/issues/35).
+- **The `nvidia-gpu-operator` RBAC "wall" was never a permissions problem** - `oc whoami` is
+  `kube:admin` and `can-i list pods -n nvidia-gpu-operator` returns yes. What a ServiceMonitor
+  actually costs is **reproducibility**: `deploy/prometheus.yaml` is a namespaced `Role`, so a
+  grader can `oc apply -f deploy/` into their own namespace; a foreign-namespace RoleBinding
+  (or a cAdvisor `ClusterRole`) makes that need cluster-admin. Recorded because the old
+  rationale would otherwise get re-litigated on a false premise.
+- **Engine host-CPU and engine RSS are reported as unavailable, not substituted.** vLLM
+  registers no `process_*` collector, so the two "CPU (engines) / Memory (engines)" rows that
+  #35 opened with were never collected in any of the 28 cells on disk. The router's CPU is the
+  number that matters anyway - it is the only component the extension changes, and it comes
+  back **flat** across arms (0.199-0.220 core-s/s, RSS 1.013-1.028 GB, kvaware mid-pack), which
+  is the §5 claim that the policy's routing work is free.
+- **Utilization is reported from #31's cells, not the 28 on disk.** All 28 predate #27 (no
+  `driver` block in any `run.json`); quoting latency from one set and utilization from another
+  invites a provenance question in §6 for no gain. The analysis is cell-agnostic, so this costs
+  nothing, and pre-#27 cells stay a valid fallback precisely because utilization is server-side.
+- **The coverage gate warns, never fails.** The driver CSVs are the primary measurement and a
+  cell with good latency data must not be discarded over utilization sampling.
+
+### Fixed
+- **DCGM port-forwards now run under supervisors that reconnect.** A bare `oc port-forward`
+  dies for good when the VPN drops while `dcgm_poll` keeps polling a dead local port - which is
+  how the #27 pilot silently lost the last **171 s of a 712 s cell** (24%, a clean tail
+  truncation, no internal gaps > 12 s). Each supervisor traps `TERM` and kills its own forward,
+  so cleanup cannot orphan one and leave a local port bound for the next cell. `wait "$pf" || true`
+  is load-bearing: `run_cell.sh` runs under `set -e`, so a bare `wait` would kill the supervisor
+  on the first dropped forward it exists to survive. This narrows the exposure; it cannot close
+  it, which is why the coverage gate lands alongside it.
+- **The coverage gate was blind to the failure the supervisors create, and to total loss.**
+  Both found by adversarial review of this branch before merge. A *span* measure scores an
+  internal gap as perfect - and reconnecting forwards turn tail truncations into exactly that
+  shape, so on a real cell dropping 42% of samples mid-window scored **99.8%**. Coverage is now
+  gap-aware. Separately, a source that produced *nothing* got no key at all rather than 0.0, so
+  a cell with no GPU data was indistinguishable from a healthy one; total loss is now scored and
+  flagged. The gap-aware measure also credits the window edges, which fixes a false-warn ceiling
+  of `1 - step/window` that made any cell under ~100 s warn on perfect data.
+- **`counter_rate` reported a restarted router as cheaper.** It differenced the endpoints, and
+  the router is scraped through its Service so a restart does not change the series key. A
+  synthetic restart mid-window read 0.114 against a true 0.2, unflagged - on the exact metric
+  behind "router CPU is flat across arms". Now sums positive deltas.
+- **`fig10` drew missing data as a missing bar**, which matplotlib renders identically to a
+  measured zero. On the CPU panel that is the shape of the §5 no-overhead claim. Missing series
+  are now labelled "no data".
+- **Engine bars were labelled with ReplicaSet hashes** (`rrcpr`, `b2xv8`) and the GPU legend
+  named two different *nodes'* `gpu0` as "GPU 0"/"GPU 1". Engines are now numbered, GPUs named
+  from their own labels, and the GPU count derived rather than hardcoded to two.
+- Also from review: `run.json` is rewritten via write-then-rename rather than truncated in
+  place; series from one pod under different `worker_id`s no longer average together;
+  `utilization.window()` renamed `manifest_window()` (it is a *different interval* from
+  `load_gate._window()`); and `fig_imbalance` now calls `utilization.read_series` instead of
+  carrying a third verbatim copy of the same parse.
+
 ## 2026-08-05 - The measured replay moves into the cluster: no WAN in TTFT (#27)
 
 ### Added
