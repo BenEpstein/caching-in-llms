@@ -74,8 +74,15 @@ def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
     for c in la:
         ax.scatter([c["beta"]] * len(c["seeds"]), ttft_p95s(c),
                    color="tab:blue", alpha=0.35, s=22, zorder=2)
+    # Derived, never hardcoded. This read "median of 6 seeds" through the whole
+    # 20-seed confirmatory sweep, contradicting the title on the same figure -
+    # the same defect _panel_grid documents fixing for the bar panels, missed
+    # here. If the loadaware cells ever carry different n, say so rather than
+    # quietly picking one.
+    ns = {len(c["seeds"]) for c in la}
+    n_label = f"{ns.pop()} seeds" if len(ns) == 1 else "mixed n - see fig5"
     ax.plot(betas, meds, "o-", color="tab:blue", lw=2, zorder=3,
-            label="loadaware (median of 6 seeds)")
+            label=f"loadaware (median of {n_label})")
 
     for c in cells:
         style = BASELINE_STYLE.get(c["arm"])
@@ -221,8 +228,18 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     ax2.plot(betas, p95, "s--", color="tab:red", lw=2, label="TTFT p95")
     ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
     ax2.tick_params(axis="y", labelcolor="tab:red")
-    ax.set_title(r"Cache hit rate and TTFT p95 vs $\beta$"
-                 "\nhit rate is flat over this range - diverting costs no locality here")
+    # Derived, not asserted. This subtitle hardcoded "hit rate is flat over this
+    # range - diverting costs no locality here", a conclusion true of an earlier
+    # grid and false of the 2026-08-06 confirmatory sweep, where hit rate falls
+    # 91.2% -> 86.1% monotonically in beta and that decline IS the mechanism
+    # behind the beta=2.0 latency reversal. A figure must not caption away the
+    # effect it is plotting.
+    drop_pts = (hit[0] - hit[-1]) * 100
+    note = ("hit rate is flat over this range - diverting costs no locality here"
+            if abs(drop_pts) < 2.0 else
+            f"hit rate falls {drop_pts:.1f} pts across the grid"
+            " - diverting load costs cache locality")
+    ax.set_title(r"Cache hit rate and TTFT p95 vs $\beta$" "\n" + note)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(out, dpi=160)

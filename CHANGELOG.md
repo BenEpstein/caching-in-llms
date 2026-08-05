@@ -24,7 +24,22 @@ with a pointer to the evidence — those matter as much as code.
   hardcoded 0.05. No result to date fell in the gap, so no reported verdict changes. Now a
   named `ALPHA` constant.
 
+### Fixed (figures)
+- **fig1's legend read "median of 6 seeds" through a 20-seed sweep**, contradicting the title
+  on the same figure. Same defect `_panel_grid` documents fixing for the bar panels, missed on
+  the centerpiece. Now derived, and says so if the loadaware cells ever carry mixed n.
+- **fig7's subtitle asserted "hit rate is flat over this range - diverting costs no locality
+  here."** True of an earlier grid, false here: hit rate falls 91.2% → 86.1% monotonically in
+  β, and that decline is the mechanism behind the β=2.0 latency reversal. The caption was
+  explaining away the effect the figure plots. Now computed from the data.
+- **`export_summary.py` regenerates from disk and does not append.** Rerunning it over the
+  current `results/` dropped 5 cells (10 rows) whose raw directories no longer exist and for
+  which the committed CSV was the only surviving record. `results/summary-per-seed.csv` is now
+  33 → 38 cells, 399 rows, with those orphans preserved. Anyone regenerating this file must
+  check for cells that exist only in it.
+
 ### Added
+- **All 10 figures regenerated** from the confirmatory sweep into `docs/figures/`.
 - **Confirmatory sweep, 5 cells × 20 seeds, committed to `results/`** - `kvaware`,
   `loadaware-b0.5`, `b1.0`, `b2.0`, `b0`, in the Amendment 1 order. All five pass the validity
   gate (pooled error 0.20-0.46%, no seed near the 10% ceiling, `utilization_coverage` 1.000).
