@@ -44,6 +44,8 @@ import random
 import sys
 from typing import Dict, List, Sequence
 
+import utilization
+
 # Validity rule 1, AMENDED 2026-08-04 (pre-registered on #3 before the run).
 #
 # The original rule voided a whole run if any single seed exceeded 1% errors.
@@ -170,36 +172,24 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     it - the metric was computable and untestable at the same time, and
     run_sweep.sh told the operator to test it with a command that could only
     raise KeyError.
-    """
-    path = os.path.join(run_dir, "prom", "vllm_num_requests_running.json")
-    if not os.path.exists(path):
-        return {}
-    # `vllm:num_requests_running` is exported TWICE: once per engine pod under
-    # job=vllm-engines, and once per backend under job=router - where every
-    # series shares instance="stack-router-service:80" and is distinguished only
-    # by the `server` label. Keying on `pod or instance` therefore collapsed all
-    # router series into a single bucket that averages both engines together,
-    # and that synthetic third "engine" then entered the max/min. With two
-    # engines it happens to land between them so the ratio survived; a third
-    # engine, or a scrape where it did not, would have corrupted a co-primary
-    # silently. Take the engine job only.
-    series: Dict[str, List] = {}
-    for s in json.load(open(path))["data"]["result"]:
-        if s["metric"].get("job") != "vllm-engines":
-            continue
-        pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
-        series.setdefault(pod, []).extend(
-            (float(t), float(v)) for t, v in s["values"]
-            if v not in ("NaN", "+Inf", "-Inf"))
 
+    The parse lives in utilization.read_series, which also drops the router's
+    re-export of this metric: the router publishes one series per backend under a
+    shared `instance`, which merges both engines into a synthetic third series
+    and corrupts the max/min. This function used to carry its own copy of that
+    filter, making it the third in the repo, and the copy lacked read_series's
+    worker_id disambiguation.
+    """
+    series = utilization.read_series(
+        run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
+    if not series:
+        return {}
     out = {}
     for p in glob.glob(os.path.join(run_dir, "driver-seed*.csv")):
-        # seed_id rather than the inlined digit-scrape this carried in the
-        # exporter. Same rule, so no behaviour changes on real filenames - but
-        # this dict is now one half of a PAIRED test whose other half is
-        # read_run, and the two halves numbering seeds by one shared function
-        # is worth more than by two copies that agree today. It also stops
-        # int("") raising on a name with no digits; such a file is skipped.
+        # seed_id, not an inlined digit-scrape: this dict is one half of a PAIRED
+        # test whose other half is read_run, so both halves number seeds by one
+        # shared function. It also skips a name with no digits rather than
+        # raising on int("").
         seed = seed_id(p)
         if seed is None:
             continue
@@ -207,10 +197,8 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
         if not ts:
             continue
         lo, hi = min(ts), max(ts)
-        means = sorted(
-            sum(v for t, v in vals if lo <= t <= hi) / max(1, len([1 for t, _ in vals if lo <= t <= hi]))
-            for vals in series.values()
-            if any(lo <= t <= hi for t, _ in vals))
+        windows = [[y for t, y in vals if lo <= t <= hi] for vals in series.values()]
+        means = sorted(sum(w) / len(w) for w in windows if w)
         if len(means) >= 2 and means[0] > 0:
             out[seed] = means[-1] / means[0]
     return out
@@ -397,16 +385,22 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str) -> int:
         # `validate`, which runs at the end of every cell inside run_cell.sh, and
         # it has no business reading a Prometheus dump or gaining a new way to
         # fail while the sweep is still running.
-        ci, bi = per_seed_imbalance(cand_dir), per_seed_imbalance(base_dir)
-        absent = [s for s in cand_seeds if s not in ci or s not in bi]
-        if absent:
-            raise SystemExit(
-                f"no imbalance value for seeds {absent} - the paired test needs "
-                "prom/vllm_num_requests_running.json in BOTH cells, covering "
-                "every seed's send-timestamp window"
-            )
-        c = [ci[s] for s in cand_seeds]
-        b = [bi[s] for s in cand_seeds]
+        cand_imb, base_imb = per_seed_imbalance(cand_dir), per_seed_imbalance(base_dir)
+        # Named per side: "seeds 3, 7 missing" does not tell an operator which
+        # cell to go and look at, and the two cells fail for different reasons.
+        for label, run_dir, imb in (
+            ("candidate", cand_dir, cand_imb), ("baseline", base_dir, base_imb)
+        ):
+            absent = [s for s in cand_seeds if s not in imb]
+            if absent:
+                raise SystemExit(
+                    f"no imbalance value for seeds {absent} in the {label} cell "
+                    f"{run_dir} - the paired test needs "
+                    "prom/vllm_num_requests_running.json covering every seed's "
+                    "send-timestamp window"
+                )
+        c = [cand_imb[s] for s in cand_seeds]
+        b = [base_imb[s] for s in cand_seeds]
     else:
         c = [s[metric] for s in cand]
         b = [s[metric] for s in base]

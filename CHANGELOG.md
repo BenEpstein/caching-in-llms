@@ -8,94 +8,43 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
-## 2026-08-06 - Confirmatory sweep run; imbalance co-primary had no test path (#31)
+## 2026-08-06 - Confirmatory sweep run; claim 1 passes, claim 2 null (#31)
 
-### Fixed
-- **`compare --metric imbalance` raised `KeyError` - the balance co-primary was untestable.**
-  `per_seed_imbalance` lived in `export_summary.py` (a CSV exporter with no statistics) while
-  the only Wilcoxon implementation lives in `analyze.py`, and nothing joined them. Not a
-  regression from #30/#43: `git log -S imbalance - benchmarks/analyze.py` returns one commit,
-  `ab9530f`, which added the word in a docstring. The glue was never written, and
-  `run_sweep.sh`'s closing echo told the operator to test claim 1 with a command that could
-  only raise. Moved the function to `analyze.py`, added the `--metric imbalance` path, fixed
-  the echo, six new tests.
-- **The verdict line printed `< 0.05 ✓ significant` against a pre-registered α of 0.025.**
-  `analyze.py`'s own docstring said 0.025, Bonferroni over the two co-primaries; the print
-  hardcoded 0.05. No result to date fell in the gap, so no reported verdict changes. Now a
-  named `ALPHA` constant.
-
-### Added (run log)
-- **`docs/sweep-2026-08-06-findings.md`** - end-to-end run log, the measured diagnosis of why
-  balance did not convert to latency, and a proposed next experiment. Part 3 is a proposal, not
-  a decision: nothing in it is pre-registered until written up and signed on #31.
-
-### Decided (diagnosis)
-- **The operating point, not the policy, is why TTFT p95 came back null.** `vllm:num_requests_waiting`
-  on the `kvaware` arm was nonzero in **0 of 284 scrapes**; `b0.5` 0/282. KV occupancy 25% mean,
-  zero preemptions, SM util 87-91%. The workload produced real imbalance (2.45x) with no
-  contention behind it, so landing on the busier engine cost almost nothing. Rev 2's premise
-  that rate 16 "runs at or above the knee" is falsified by its own queueing data.
-- **The 14.37 req/s throughput figure is a measurement artefact, not a capacity ceiling.** The
-  driver put 15.52 req/s on the wire (32.2 s send span for 500 requests); `wall_s` includes a
-  2.58 s drain tail after the last send. Do not read that column as saturation.
-- **Next experiment should measure goodput, not TTFT p95.** Exploratory check on this sweep's
-  data: SLO attainment at TTFT<150 ms is 42.2% → 49.6%, +7.3 pts, **16/20 seeds** - more signal
-  than the p95 median-paired test's 12/20, even with no queueing. Requires a new run at a new
-  operating point with its own pre-registration; re-analysing these cells with a new metric
-  would be p-hacking. Rationale and guardrails in the findings doc, Parts 3-4.
-
-### Fixed (figures)
-- **fig1's legend read "median of 6 seeds" through a 20-seed sweep**, contradicting the title
-  on the same figure. Same defect `_panel_grid` documents fixing for the bar panels, missed on
-  the centerpiece. Now derived, and says so if the loadaware cells ever carry mixed n.
-- **fig7's subtitle asserted "hit rate is flat over this range - diverting costs no locality
-  here."** True of an earlier grid, false here: hit rate falls 91.2% → 86.1% monotonically in
-  β, and that decline is the mechanism behind the β=2.0 latency reversal. The caption was
-  explaining away the effect the figure plots. Now computed from the data.
-- **`summary-per-seed.csv` carried 5 cells whose raw data is not in the repo** -
-  `20260803-235537`, `20260804-000537`, `20260804-001911`, `20260805-002149`,
-  `20260805-003128`, all 2-seed `kvaware` probes, 10 rows. Pre-existing on `main`: those
-  directories have zero tracked files there too, so `scripts/reproduce.sh` check 1 ("every run
-  referenced by the summary has committed raw data", added in #28) **fails on `main` today**.
-  They are dropped here rather than preserved: unreproducible numbers in a committed artifact
-  are precisely what that check exists to catch, and keeping them would contradict §6's
-  "no number appears that `reproduce.sh` cannot regenerate". The rows survive in git history at
-  `ffe1c77:results/summary-per-seed.csv`. File is now 33 cells / 389 rows and
-  `reproduce.sh` passes 5/5.
-- **`results/expected/stats.txt` re-baselined** for the `ALPHA` fix: the pinned output changes
-  from `≥ 0.05` to `≥ 0.025`. Same p-values, same verdicts - only the threshold the line prints
-  against. `figure-data.json` is unchanged, confirming the caption fixes touch no series data.
-
-### Added
-- **All 10 figures regenerated** from the confirmatory sweep into `docs/figures/`.
-- **Confirmatory sweep, 5 cells × 20 seeds, committed to `results/`** - `kvaware`,
-  `loadaware-b0.5`, `b1.0`, `b2.0`, `b0`, in the Amendment 1 order. All five pass the validity
-  gate (pooled error 0.20-0.46%, no seed near the 10% ceiling, `utilization_coverage` 1.000).
-  Router `acf43d1`, bench `42e6a32`, in-cluster driver on `gapu-2-worker1`.
+Full run log, diagnosis and next-experiment proposal: `docs/sweep-2026-08-06-findings.md`.
 
 ### Decided
-- **Claim 1 (balance) PASSES; claim 2 (TTFT p95) is NULL, reported as such.** Imbalance
-  2.449 → 1.269, −48.1% median, CI [37.7%, 56.3%], p=0.000010, 18/20 seeds. TTFT p95 −2.7%
-  median, CI [−4.3%, +15.4%], p=0.1153 against α=0.025. Rev 2 declared the p95 null an
-  acceptable, publishable outcome in advance and forbade metric substitution; it is reported
-  as the null it is.
-- **The `b0` drift sentinel did NOT hold on latency.** `b0` vs `kvaware` is 13.2% *worse* on
-  TTFT p95, CI [−18.5%, −5.8%] excluding zero, on 16/20 seeds. Per Amendment 1's pre-declared
-  reading this is **ambiguous between drift and placement and is not read as a placement
-  effect**. The imbalance ablation *is* clean (CI [−54.5%, +11.4%] spans zero, 7/20), so
-  claim 1's causal attribution to the load term stands. Evidence that rev 2's reasoning for
-  dropping the closing `kvaware` bracket - that #27 removed the drift mechanism - was wrong.
-  Resolving it costs ~20 min of cluster time.
-- **β=2.0 turns the tradeoff over, with a measured mechanism.** Best balance of any cell
-  (1.127) and worst latency including baseline (p95 0.410 s vs `kvaware` 0.334 s; p99 0.686 s
-  vs 0.422 s). vLLM prefix cache hit rate declines monotonically with β - 91.2 / 90.7 / 87.9 /
-  86.1 - and `b2.0` is the only cell that ever queued. Balance bought with cache locality,
-  measured rather than inferred. β=0.5 stays the configuration of record, fixed pre-data.
-- **No KV eviction pressure anywhere.** `vllm_num_preemptions_total` is 0 in all five cells;
-  KV cache usage peaks at 0.77 and averages ~0.25. No latency result is an eviction artefact.
-  Note the instrumentation gap: DCGM collects `GPU_UTIL`, `MEM_COPY_UTIL` and `POWER_USAGE`
-  only - there is **no `FB_USED`, so GPU memory occupancy is not measured**, and
-  `MEM_COPY_UTIL` is bandwidth, not occupancy.
+- **Claim 1 (balance) PASSES, claim 2 (TTFT p95) is NULL**, against pre-registration rev 2
+  ([`5196484091`](https://github.com/BenEpstein/caching-in-llms/issues/31#issuecomment-5196484091))
+  as amended by Amendment 1
+  ([`5196605866`](https://github.com/BenEpstein/caching-in-llms/issues/31#issuecomment-5196605866)):
+  imbalance -48.1% CI [37.7%, 56.3%] p=0.000010 18/20; TTFT p95 -2.7% CI [-4.3%, +15.4%]
+  p=0.1153 vs alpha 0.025. Rev 2 pre-declared the null publishable; reported as one.
+- **Rule 6 was knowingly overridden, with Ben's authorisation.** Claim 1's test path did not
+  exist and was written 9 min after the last cell closed. Disclosure and mitigation in the
+  findings doc, Part 1; §6 must repeat it.
+- **The `b0` drift sentinel did not hold** (-13.2% TTFT p95, CI excluding zero, 16/20 worse).
+  Per Amendment 1: ambiguous between drift and placement, not read as placement. Claim 1
+  unaffected. A closing `kvaware` bracket (~20 min) would settle it.
+- **The operating point, not the policy, explains the p95 null**: `num_requests_waiting` was
+  nonzero in 0 of 284 baseline scrapes. Rev 2's "at or above the knee" premise is falsified.
+- **Next experiment should measure goodput at the knee, not TTFT p95** - proposal only, not
+  pre-registered. Guardrails in the findings doc, Part 4.
+
+### Added
+- Confirmatory sweep, 5 cells x 20 seeds, committed to `results/`; all pass the validity gate.
+- `analyze.py compare --metric imbalance`, the path claim 1 never had; 7 tests.
+- `fig11-inflight-vs-time.png` - per-engine in-flight vs time, the #31 DoD figure.
+- `CONTEXT.md`: **Load Imbalance**, the co-primary, distinguished from **Relative Load**.
+
+### Fixed
+- `ALPHA = 0.025` constant: the verdict line printed `< 0.05` against a pre-registered 0.025.
+- `per_seed_imbalance` now reuses `utilization.read_series` instead of a third verbatim copy
+  of the router-job filter, which also gains its `worker_id` disambiguation.
+- Three figure captions asserted conclusions this data falsifies (fig1's "6 seeds", fig7's
+  "hit rate is flat", fig3's "saturated"); all now derived on render.
+- `summary-per-seed.csv` referenced 5 cells with no committed raw data, failing
+  `reproduce.sh` check 1 on `main` too. Dropped; they survive at `ffe1c77`.
+- Units documented rather than renamed: `ttft_*`, `e2e_*` and `itl_*` are all SECONDS.
 
 ## 2026-08-05 (late) - scripts/reproduce.sh (#28)
 

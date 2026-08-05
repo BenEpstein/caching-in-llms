@@ -279,6 +279,35 @@ def test_per_seed_imbalance_is_busiest_over_idlest(tmp_path):
     assert per_seed_imbalance(d) == {1: pytest.approx(4.0)}
 
 
+def test_per_seed_imbalance_windows_each_seed_separately(tmp_path):
+    """The reason the function is per-SEED at all.
+
+    Every other test here gives all seeds the same send window and a constant
+    series, so they would pass identically if the window filter were deleted.
+    Here seed 1 sends while the fleet is 4:1 and seed 2 while it is 2:1. Ignore
+    the windows and both seeds read the pooled 3:1 instead.
+    """
+    d = str(tmp_path / "cell")
+    os.makedirs(d)
+    for seed, base in ((1, 1000.0), (2, 2000.0)):
+        rows = [_row(i, 0.1, 1.0) for i in range(4)]
+        for i, r in enumerate(rows):
+            r["send_ts"] = base + i
+        _write_csv(os.path.join(d, f"driver-seed{seed}.csv"), rows)
+
+    busy = [[t, "4.0"] for t in (1000.0, 1001.5, 1003.0)] + \
+           [[t, "2.0"] for t in (2000.0, 2001.5, 2003.0)]
+    idle = [[t, "1.0"] for t in (1000.0, 1001.5, 1003.0, 2000.0, 2001.5, 2003.0)]
+    os.makedirs(os.path.join(d, "prom"))
+    with open(os.path.join(d, "prom", "vllm_num_requests_running.json"), "w") as f:
+        json.dump({"data": {"result": [
+            {"metric": {"job": "vllm-engines", "pod": "engine-a"}, "values": busy},
+            {"metric": {"job": "vllm-engines", "pod": "engine-b"}, "values": idle},
+        ]}}, f)
+
+    assert per_seed_imbalance(d) == {1: pytest.approx(4.0), 2: pytest.approx(2.0)}
+
+
 def test_per_seed_imbalance_ignores_the_router_job(tmp_path):
     """A router series must not enter the max/min as a phantom third engine."""
     d = _run_dir(tmp_path, "cell", [1])

@@ -28,7 +28,13 @@ words with exactly these meanings. Implementation details live elsewhere.
   `(load − mean) / max(1, mean)`, recomputed per request. 0.0 is "average", +1.0 is "twice
   the fleet average". The denominator is clamped at 1 so a near-idle fleet reports no
   imbalance to act on. This is the term β actually weighs.
-- **Placement Policy** — the router's rule for choosing an instance. `kvaware` = baseline
+- **Load Imbalance** - the *measured outcome*, not an input to the score: the ratio of busiest
+  to idlest instance mean in-flight count over a seed's send-timestamp window
+  (`analyze.py:per_seed_imbalance`, engine job only). 1.0 is perfectly even. Distinct from
+  **Relative Load**, which is the per-request term β weighs; Load Imbalance is what that term
+  is trying to reduce, and it is one of the two pre-registered tested claims. Do not use the
+  two words interchangeably.
+- **Placement Policy** - the router's rule for choosing an instance. `kvaware` = baseline
   placement policy (pure cache-hit benefit, first-match). **`loadaware`** = our enhanced
   placement policy: `cache_hit_benefit − β·relative_load`, where relative_load is the
   engine's in-flight count as a signed fraction of the fleet mean. Framing rule: this is

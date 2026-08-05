@@ -66,8 +66,43 @@ the 1 h 44 window is not certified for latency. Closing it costs one 20-minute `
 at the end. Rev 2 dropped that bracket on the reasoning that #27 had removed the drift
 mechanism; this run is evidence that reasoning was wrong.
 
-**2. The balance co-primary had no test path.** `compare --metric imbalance` raised `KeyError`
-until `b6ba33a`. Not a #30/#43 regression - the glue was never written. Fixed, with tests.
+**2. The balance co-primary had no test path, and fixing it broke rule 6.** This needs stating
+plainly because it is the kind of thing a report must volunteer rather than have found.
+
+`compare --metric imbalance` raised `KeyError`. `per_seed_imbalance` lived in
+`export_summary.py`, a CSV exporter with no statistics, while the only Wilcoxon lives in
+`analyze.py`. Nothing joined them. Not a #30/#43 regression -
+`git log -S imbalance - benchmarks/analyze.py` returns one commit, `ab9530f`, which added the
+word in a docstring. The glue was never written, and `run_sweep.sh` told the operator to test
+claim 1 with a command that could only raise.
+
+**Rule 6 forbids the fix.** *"Analysis is the `analyze.py` / `export_summary.py` path exactly as
+committed at `42e6a32`. No analysis code is written for this run. Any analysis code written
+after data exists is exploratory and labelled as such."*
+
+The timeline is not ambiguous. The last cell's measurement window closed at **00:47:04**
+(`results/20260806-002645-loadaware-b0/run.json`). The test path was committed at **00:56:03**.
+**Claim 1's p = 0.000010 was produced by code written nine minutes after the data existed.**
+
+What happened: the gap was found at analysis time, the run was stopped, and the choice was put
+to Ben rather than taken unilaterally. He authorised writing it - *"forget about the
+pre-registration rule ... write the code if needed"*. That is the principal's call to make and
+he made it knowingly. It is recorded here because a decision like that is worth nothing
+undocumented.
+
+**What mitigates it, and what does not.** Everything about the test was fixed pre-data in
+rev 2: the metric definition (`export_summary.py:per_seed_imbalance`), the statistic (one-sided
+exact Wilcoxon on 20 paired per-seed differences), α = 0.025, the direction, and the bootstrap
+CI. The new code exercises no researcher degree of freedom - it imports the same committed
+`wilcoxon_exact_one_sided` and `bootstrap_ci_median_rel_reduction` that produced claim 2's
+null, and the effect (−48.1%, 18/20 seeds) is far too large for the choice of test to be doing
+any work. What is *not* mitigated: rule 6 called for labelling it exploratory, and it is not
+being labelled exploratory. That is a deliberate, authorised departure from the
+pre-registration, and §6 must say so in those words.
+
+The same applies, more mildly, to the `ALPHA` 0.05 → 0.025 fix: also analysis code, also
+changed after data existed. It moves the printed threshold onto the pre-registered one and
+changes no verdict in this run, but it is the same category.
 
 ## Part 2 - Why balance did not convert to latency
 

@@ -13,6 +13,7 @@ figure can never disagree with the table it sits next to.
   fig8-itl-percentiles.png    inter-token latency p50/p95/p99 - the decode side
   fig9-throughput.png         sustained tok/s and req/s per arm
   fig10-utilization.png       §3 utilization: GPU, GPU memory, CPU, host memory
+  fig11-inflight-vs-time.png  per-engine in-flight vs time, baseline vs headline (#31 DoD)
 
 Usage:
   python3 plot_results.py results/<...>-loadaware-b0 results/<...>-kvaware ... \
@@ -58,11 +59,22 @@ def median(xs: List[float]) -> float:
     return percentile(xs, 50)
 
 
+def seed_range(cells: List[Dict]) -> str:
+    """"20" or "3-20": the seed counts behind a set of cells. Never hardcoded.
+
+    One helper because this figure derived it twice, 18 lines apart, in two
+    incompatible formats - and before that carried a literal "6" that survived
+    into a 20-seed sweep and contradicted the title on the same image.
+    """
+    ns = sorted({len(c["seeds"]) for c in cells})
+    return f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
+
+
 def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
     """The centerpiece: does beta buy anything, and where is the minimum?
 
-    Per-seed points are drawn behind the median line - with n=6 the spread is
-    the honest part of the story, so it does not get hidden.
+    Per-seed points are drawn behind the median line - the spread is the honest
+    part of the story, so it does not get hidden.
     """
     la = sorted([c for c in cells if c["arm"] == "loadaware"], key=lambda c: c["beta"])
     if not la:
@@ -74,15 +86,8 @@ def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
     for c in la:
         ax.scatter([c["beta"]] * len(c["seeds"]), ttft_p95s(c),
                    color="tab:blue", alpha=0.35, s=22, zorder=2)
-    # Derived, never hardcoded. This read "median of 6 seeds" through the whole
-    # 20-seed confirmatory sweep, contradicting the title on the same figure -
-    # the same defect _panel_grid documents fixing for the bar panels, missed
-    # here. If the loadaware cells ever carry different n, say so rather than
-    # quietly picking one.
-    ns = {len(c["seeds"]) for c in la}
-    n_label = f"{ns.pop()} seeds" if len(ns) == 1 else "mixed n - see fig5"
     ax.plot(betas, meds, "o-", color="tab:blue", lw=2, zorder=3,
-            label=f"loadaware (median of {n_label})")
+            label=f"loadaware (median of {seed_range(la)} seeds)")
 
     for c in cells:
         style = BASELINE_STYLE.get(c["arm"])
@@ -96,12 +101,11 @@ def fig_p95_vs_beta(cells: List[Dict], out: str) -> None:
 
     ax.set_xlabel(r"$\beta$  (load weight; full cache hits per 100% above fleet-mean load)")
     ax.set_ylabel("TTFT p95 (s)")
-    # seed counts differ by cell (headline pair 10, sweep cells 3) - state the
-    # range rather than a number that is wrong for half the points
-    ns = sorted({len(c["seeds"]) for c in cells})
-    nlab = f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
-    ax.set_title(f"TTFT p95 vs load weight - {cells[0]['rate']} req/s, "
-                 f"{nlab} seeds x 500 requests per cell")
+    # "Client-observed" is load-bearing: the harness also records an engine-side
+    # TTFT, and the pre-registered claim is on the client-side one.
+    ax.set_title(f"Client-observed TTFT p95 vs load weight - "
+                 f"{cells[0]['rate']} req/s, "
+                 f"{seed_range(cells)} seeds x 500 requests per cell")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -169,8 +173,15 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.bar(labels, values, color="tab:blue", alpha=0.8)
     ax.set_ylabel("engine-local LMCache lookup hit rate (window mean)")
-    ax.set_title("Engine-local cache hit rate by arm - saturated, does not\n"
-                 "discriminate routing policy (see docstring)")
+    # Third caption in this file to be derived rather than asserted, for the same
+    # reason as fig1's seed count and fig7's subtitle: "saturated, does not
+    # discriminate" was measured on a 20-prefix pool and is a claim about the
+    # data, so it has to be recomputed from the data it is printed beside.
+    spread = (max(values) - min(values)) * 100
+    verdict = (f"saturated ({spread:.1f} pt spread), does not\ndiscriminate routing policy"
+               if spread < 5.0 else
+               f"spreads {spread:.1f} pts across arms - read fig7 before\ntreating this as flat")
+    ax.set_title(f"Engine-local cache hit rate by arm - {verdict}")
     ax.set_ylim(0, 1.05)
     ax.tick_params(axis="x", rotation=20)
     ax.grid(alpha=0.3, axis="y")
@@ -192,20 +203,60 @@ def counter_delta(run_dir: str, metric: str) -> float:
     return total
 
 
+def fig_inflight_vs_time(cells: List[Dict], out: str, cand: str) -> None:
+    """Per-engine in-flight requests over the measured window, baseline vs headline.
+
+    #31's Definition of Done asks for this specifically, and it is the only figure
+    that shows the mechanism rather than a summary of it: fig6 reduces each cell to
+    one busiest/idlest ratio, which cannot distinguish "one engine is permanently
+    hotter" from "they alternate and average out". The gap between the two traces
+    IS the imbalance the co-primary measures.
+
+    Read alongside the run log's queueing finding: the kvaware traces separate
+    widely here while num_requests_waiting stayed at zero throughout, which is
+    what "imbalance with no contention behind it" looks like.
+    """
+    want = [c for c in cells if c["arm"] == "kvaware" or c["cell"].endswith(cand)]
+    want = sorted(want, key=lambda c: c["arm"] != "kvaware")
+    if len(want) < 2:
+        return
+    fig, axes = plt.subplots(1, len(want), figsize=(6 * len(want), 4), sharey=True)
+    axes = axes if len(want) > 1 else [axes]
+    for ax, c in zip(axes, want):
+        per_pod = utilization.read_series(
+            c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
+        if not per_pod:
+            continue
+        t0 = min(t for v in per_pod.values() for t, _ in v)
+        for pod, vals in sorted(per_pod.items()):
+            ax.plot([t - t0 for t, _ in vals], [y for _, y in vals], lw=1.2, label=pod)
+        ax.set_xlabel("seconds into the measured window")
+        ax.set_title(c["cell"])
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=7)
+    axes[0].set_ylabel("in-flight requests per engine")
+    fig.suptitle("Per-engine in-flight requests over the window - "
+                 "the gap between traces is the imbalance")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     """What beta costs in cache locality, and whether latency follows.
 
     Left axis = vLLM prefix-cache hit rate (the thing diverting is supposed to
     destroy), right axis = TTFT p95 (the putative consequence).
 
-    The title used to assert "hit rate falls, latency follows". That was read off
-    the 10.5 req/s sweep, where beta ran to 1.0 and hit rate genuinely collapsed
-    0.918 -> 0.787 -> 0.735. It is FALSE on the rate-16 grid: across beta 0 ->
-    0.034 -> 0.068 hit rate is flat (0.911, 0.895, 0.916), and fig3 agrees -
-    every cache-aware arm sits at ~0.96 engine-local lookup hit rate. So any TTFT
-    movement in this beta range is NOT bought with cache misses, and the figure
-    must not claim a mechanism its own data refutes. Title now states what is
-    plotted and leaves the reading to the caption.
+    The subtitle is DERIVED from the data on every render, because it has twice
+    been a hardcoded conclusion that a later grid falsified. It first asserted
+    "hit rate falls, latency follows" (true of the 10.5 req/s sweep, 0.918 ->
+    0.787 -> 0.735); that was replaced by "hit rate is flat over this range"
+    (true of the narrow beta 0 -> 0.068 grid); and that in turn is false on the
+    2026-08-06 confirmatory sweep, where hit rate falls 91.2% -> 86.1%
+    monotonically in beta and the decline is precisely the mechanism behind the
+    beta=2.0 latency reversal. Two wrong captions in a row is the argument for
+    computing it rather than writing it down.
     """
     la = sorted([c for c in cells if c["arm"] == "loadaware"], key=lambda c: c["beta"])
     la = [c for c in la
@@ -228,17 +279,19 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     ax2.plot(betas, p95, "s--", color="tab:red", lw=2, label="TTFT p95")
     ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
     ax2.tick_params(axis="y", labelcolor="tab:red")
-    # Derived, not asserted. This subtitle hardcoded "hit rate is flat over this
-    # range - diverting costs no locality here", a conclusion true of an earlier
-    # grid and false of the 2026-08-06 confirmatory sweep, where hit rate falls
-    # 91.2% -> 86.1% monotonically in beta and that decline IS the mechanism
-    # behind the beta=2.0 latency reversal. A figure must not caption away the
-    # effect it is plotting.
+    # Derived, not asserted - see the docstring for the two captions this
+    # replaces. The sign picks the verb: gating on abs() but always saying
+    # "falls" would print "hit rate falls -3.1 pts" on a rising grid, which is
+    # the same defect one branch further down.
     drop_pts = (hit[0] - hit[-1]) * 100
-    note = ("hit rate is flat over this range - diverting costs no locality here"
-            if abs(drop_pts) < 2.0 else
-            f"hit rate falls {drop_pts:.1f} pts across the grid"
-            " - diverting load costs cache locality")
+    if abs(drop_pts) < 2.0:
+        note = "hit rate is flat over this range - diverting costs no locality here"
+    elif drop_pts > 0:
+        note = (f"hit rate falls {drop_pts:.1f} pts across the grid"
+                " - diverting load costs cache locality")
+    else:
+        note = (f"hit rate RISES {-drop_pts:.1f} pts across the grid"
+                " - diverting load is not costing locality here")
     ax.set_title(r"Cache hit rate and TTFT p95 vs $\beta$" "\n" + note)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -626,6 +679,8 @@ def main() -> None:
     fig_itl(cells, os.path.join(args.out, "fig8-itl-percentiles.png"))
     fig_throughput(cells, os.path.join(args.out, "fig9-throughput.png"))
     fig_utilization(cells, os.path.join(args.out, "fig10-utilization.png"))
+    fig_inflight_vs_time(cells, os.path.join(args.out, "fig11-inflight-vs-time.png"),
+                         cand=args.cand)
     if args.dump_data:
         dump_data(cells, args.dump_data)
     print(f"wrote figures to {args.out}")
