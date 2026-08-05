@@ -1,9 +1,14 @@
-# Confirmatory sweep 2026-08-06: run log, diagnosis, and the next experiment
+# Confirmatory sweep 2026-08-06: run log, diagnosis, and the open question
 
 > status: live · 2026-08-06 · run log and measured diagnosis for the #31 confirmatory sweep.
 > Decisions and their rationale live in `CHANGELOG.md` (2026-08-06) and issue #31; this doc is
-> the artifact those point at. Part 3 is a **proposal**, not a decision - nothing in it is
-> pre-registered until it is written up and signed on #31.
+> the artifact those point at.
+>
+> **Parts 1 and 2 are settled fact - what ran and what it measured. Part 3 is deliberately
+> unresolved.** It lays out the option space with the argument on both sides of each branch and
+> ends in a list of decisions nobody has made yet. It is not a plan to execute. Whoever picks
+> this up should expect to argue it, and should treat any ranking they find here as one input,
+> not an answer.
 
 ## Part 1 - What ran
 
@@ -19,9 +24,11 @@ both signed off before the first cell. Cell order is Amendment 1's, not β-ascen
 | Rate | 16 req/s offered, open-loop Poisson |
 | Driver | in-cluster, `gapu-2-worker1`, all five cells |
 | Duration | 1 h 44, 23:05 → 00:47 |
-| Branch | `worktree-confirmatory-sweep-31` off `main` @ `ffe1c77` |
+| Branch | `feat/confirmatory-sweep-31`, [PR #46](https://github.com/BenEpstein/caching-in-llms/pull/46) |
 
-Commits: `b6ba33a` harness fix · `578941a` data (230 files) · `5544cf2` figures + CSV.
+Rebased onto `main` after PR #45 (`scripts/reproduce.sh`) landed mid-run; SHAs below are
+post-rebase. `3659f26` harness fix · `ac6d232` data (230 files) · `a37cae5` figures ·
+`4f57ffd` this doc · `bcc6cd3` reproduce.sh green · `e3794a0` review fixes.
 
 ### Validity
 
@@ -135,58 +142,105 @@ per-seed improvement correlates −0.929 with how bad `kvaware` was on that seed
 bad tail rather than shifting the distribution. Exploratory, found after the null, labelled as
 such - but it is the seed of the next experiment.
 
-## Part 3 - How to show we are better (proposal, not pre-registered)
+## Part 3 - How do we show we are better? (open, for the next session to argue)
 
-"We reduced imbalance 48%" is a **mechanism** claim. It is not a performance claim and should
-not be sold as one. To make a performance claim, two things have to change.
+This part is deliberately NOT a plan. It is the option space plus the evidence for and against
+each branch, because the decision is a judgement about what this project is trying to prove and
+that is not settled. Nothing here is pre-registered. Anyone picking this up should expect to
+argue the options, not execute them.
 
-### 3a. Move to an operating point where imbalance costs something
+### The question under all of it
 
-Load-aware routing can only pay when being on the busy engine hurts. Three levers, roughly in
-order of expected payoff:
+**What counts as "better" for this project?** Four defensible answers, and they lead to
+different experiments:
 
-**1. Raise the offered rate to the knee.** SM utilization is already 87–91%, so the knee is
-close - probably 18–24 req/s. Ramp `kvaware` alone (cheap, one arm) and find the first rate
-where `num_requests_waiting` is *consistently* nonzero and p95 starts climbing superlinearly.
-`benchmarks/rate_pilot.sh` exists for this.
+| answer | the claim it produces | do we already have it? |
+|---|---|---|
+| Balance | "48% less load imbalance, p=1e-5" | **Yes, banked.** |
+| Latency | "X% lower TTFT p95" | No - null at n=20, and the operating point could not test it |
+| Goodput | "X% more requests meet the SLO" | Not measured. Exploratory signal looks better than p95's |
+| Capacity | "N% more traffic on the same 2 GPUs at fixed SLO" | Not measured. Strongest claim, most cluster time |
+| Predictability | "63% less variance in p95" | Measured, but exploratory and post-hoc |
 
-> **Do not overshoot.** Past the knee both engines pin at capacity and imbalance *collapses* -
-> already measured: 2.99× at OSL 64, 3.98× at 128, 1.89× at 256. The window where the policy
-> can help closes at both ends. Sit at the knee, not past it.
+Ben's stated position (2026-08-06): balance alone *"doesn't mean anything to me, we need to
+show that we are better."* That argues against stopping at the banked claim. It does not by
+itself pick between goodput, capacity and latency.
 
-**2. Sharpen the workload so imbalance is larger at the same load.** Both of these raise
-contention without raising total work, which is exactly what is wanted:
-- **Shrink the prefix pool** (128 → 32 or 16). Fewer distinct prefixes means hotter prefixes,
-  which means `kvaware` concentrates harder onto one Instance.
-- **Raise the Zipf skew** (s = 0.9 → 1.2). Same effect by a different route.
+### Option 0 - run nothing else, write up what exists
 
-**3. Lengthen decode (OSL).** Longer decode means longer in-flight residency per request, and
-in-flight residency is the thing that converts placement into queueing. Probably the strongest
-single lever for making imbalance *matter*. Caveat: OSL 128 at rate 16 already saturates (65%
-of offered achieved), so pair a longer OSL with a *lower* rate rather than stacking both.
+The case FOR, which deserves a hearing before any cluster time is spent: the rubric is
+Correctness 40 + Reproducibility 30 + Performance Gain 15 + Clarity 15. Correctness and
+reproducibility are 70% and are in good shape - `reproduce.sh` is green, the harness caught its
+own broken co-primary and its own lying captions. Performance Gain is 15% and a significant
+48% balance improvement with a clean ablation already earns a share of it. A null on latency,
+honestly reported, costs less than most people assume and demonstrates exactly the discipline
+§6 is graded on.
+
+The case AGAINST: "we balanced the fleet" is a mechanism claim. A reader who wants to know
+whether the system got *better* is not answered, and §5 asks for relative improvement on a
+metric. Also the `b0` sentinel failure is a live loose end regardless of what else is decided.
+
+**Cheapest thing that closes a real gap either way:** the ~20 min closing `kvaware` bracket. It
+resolves drift-vs-placement on `b0` and is worth doing under every option including this one.
+
+### Option A - move the operating point, keep TTFT p95
+
+Rerun the same design at the knee. Keeps the metric the project originally pre-registered, so
+there is no metric-substitution question to answer at all.
+
+- **For:** cleanest possible story - same metric, same test, one variable changed, and the
+  change is justified by measured evidence (zero queueing) rather than by the null.
+- **Against:** p95 median-paired was a poor instrument for what the policy does even where it
+  worked. It clips the tail on bad seeds and costs slightly on good ones, which is a *shape*
+  change; a paired test on the median is nearly blind to it (12/20 signs). Moving the operating
+  point may not fix that.
+
+### Option B - move the operating point AND switch to goodput
+
+Measure the fraction of requests meeting a fixed TTFT SLO.
+
+- **For:** directly monetises the tail-clipping the policy actually does. Per-seed goodput is a
+  proportion, so the same paired exact Wilcoxon applies with no new statistics. Exploratory
+  check below suggests more signal than p95 even at the un-queued operating point.
+- **Against:** it is a metric change following a null, and no amount of good reasoning makes
+  that look innocent to a hostile reader. It requires choosing an SLO threshold, which is a new
+  researcher degree of freedom that has to be nailed down in advance and justified on service
+  grounds, not on the data.
+
+### Option C - capacity at fixed SLO
+
+Ramp each arm until p95 breaches an SLO; report the sustainable rate.
+
+- **For:** the strongest claim available - "serves N% more traffic on the same two A10s" is
+  what a systems audience actually accepts, and it is unambiguously a performance result.
+- **Against:** roughly 2x the cluster time (a ramp per arm), and the ramp itself needs a
+  stopping rule pre-registered or it becomes optional-stopping by another name.
+
+### Which levers move the operating point (needed by A, B and C)
+
+Load-aware routing can only pay when being on the busy engine hurts. Open question which of
+these to use, and in what combination:
+
+1. **Raise offered rate.** SM utilisation is already 87-91%, so the knee is probably 18-24
+   req/s. `benchmarks/rate_pilot.sh` exists. Cheapest to try.
+2. **Shrink the prefix pool** (128 -> 32 or 16) **or raise Zipf skew** (s = 0.9 -> 1.2). Both
+   raise contention without raising total work, which is the interesting direction.
+3. **Lengthen decode (OSL).** Longer residency per request is what converts placement into
+   queueing, so this is arguably the most direct lever - but OSL 128 at rate 16 already
+   saturates (65% of offered achieved), so it has to be paired with a lower rate.
+
+> **The trap on all three: the window closes at both ends.** Past the knee both engines pin at
+> capacity and imbalance *collapses* - measured, 2.99x at OSL 64, 3.98x at 128, 1.89x at 256.
+> Overshooting produces a null that looks like the policy failing when it is the workload
+> saturating. Any ramp needs to find the knee, not clear it.
 
 Any change to `workload_gen.py` or `freeze_workloads.py` **requires a rebuilt bench image** -
-both ship inside it. Do not reuse `42e6a32` across such a change.
+both ship inside it, so `42e6a32` cannot be reused across such a change.
 
-### 3b. Measure something that is a performance claim
+### Feasibility check on existing data (EXPLORATORY - not a claim)
 
-| candidate | what it says | cost |
-|---|---|---|
-| **Goodput / SLO attainment** | "X% more requests meet the latency SLO at the same offered rate" | one 2-arm sweep |
-| **Capacity at fixed SLO** | "serves N% more traffic on the same two GPUs" | a ramp per arm, ~2× cluster time |
-| TTFT p95 (current) | already null at this operating point | - |
-
-**Recommendation: goodput at the knee rate.** It directly monetizes the variance reduction
-already measured (tail-clipping *is* SLO attainment), reuses the existing harness shape, and
-costs one sweep. Per-seed goodput is a proportion, so the same paired exact Wilcoxon on 20
-paired per-seed values applies unchanged - no new statistics.
-
-**Capacity at fixed SLO** is the stronger story for §5 and for a systems audience ("N% more
-traffic on the same hardware"), but needs a ramp on both arms. Worth it if cluster time allows.
-
-#### Feasibility check on existing data (EXPLORATORY - not a claim)
-
-Computed post-hoc on this sweep's cells purely to answer "does this metric have signal at all":
+Computed post-hoc purely to answer "does a goodput metric have signal at all", and relevant to
+weighing Option B against Option A:
 
 | SLO | `kvaware` | `b0.5` | delta | seeds better |
 |---|---|---|---|---|
@@ -195,15 +249,24 @@ Computed post-hoc on this sweep's cells purely to answer "does this metric have 
 | TTFT < 250 ms | 82.0% | 89.2% | +7.2 pts | 12/20 |
 | TTFT < 300 ms | 89.8% | 95.4% | +5.7 pts | 10/20 |
 
-16/20 at the tight SLO against 12/20 for the p95 median-paired test. The metric has more signal
-than the one that returned null, **even at an operating point with no queueing**. That is
-encouraging for 3b and is the main reason to prefer goodput.
+16/20 at the tight SLO against 12/20 for the p95 median-paired test, at an operating point with
+no queueing at all.
 
-> **This table is exactly the trap the next pre-registration must close.** Four thresholds were
-> computed and the best-looking one is quoted first. Choosing 150 ms *because* it looks best is
-> multiple testing with the correction omitted. The next pre-registration must fix **one** SLO
-> threshold in advance, justified by a service requirement rather than by this table, and must
-> disclose that this exploratory scan happened.
+> **This table is also the argument against Option B, not just for it.** Four thresholds were
+> computed and the best-looking one is quoted first. If the next pre-registration picks 150 ms
+> because of this table, that is multiple testing with the correction omitted. Whoever chooses
+> B must fix one threshold in advance on service grounds and disclose that this scan happened.
+
+### The decisions someone has to actually make
+
+1. Is Option 0 acceptable - do we spend more cluster time at all?
+2. If not: A, B, or C? (Equivalently: is the metric-substitution cost of B/C worth the better
+   instrument?)
+3. Which lever moves the operating point, and does the workload profile change (which forces an
+   image rebuild) or only the rate (which does not)?
+4. If B: what SLO, justified how?
+5. If C: what is the ramp's stopping rule?
+6. Does the closing `kvaware` bracket go in? (Recommended under all options; ~20 min.)
 
 ## Part 4 - Integrity guardrails for whoever picks this up
 
