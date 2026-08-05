@@ -1,6 +1,8 @@
 research/
 .hyperresearch/
 benchmarks/workloads/*.jsonl
+# The novel-profile replays live one level down and regenerate the same way.
+benchmarks/workloads/novel/*.jsonl
 # results/ is tracked (raw CSVs + prom JSON) so runs are reviewable without rerunning.
 # Frozen workload jsonl stays out - reproduce it from benchmarks/workloads/manifest.json.
 results/**/*.jsonl

@@ -1,0 +1,62 @@
+name: Report
+
+# Builds the §6 deliverable PDF from docs/report/report.md and uploads it as a workflow
+# artifact. Same reasoning as the router image (issue #16): the graded artifact rebuilds
+# from the repository on every push, so it can never drift from the figures and numbers
+# it cites, and no reviewer needs a LaTeX toolchain to read it.
+
+on:
+  push:
+    paths:
+      - "docs/report/**"
+      - "docs/figures/**"
+      - ".github/workflows/report.yml"
+  pull_request:
+    paths:
+      - "docs/report/**"
+      - "docs/figures/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pandoc + LaTeX
+        run: |
+          sudo apt-get update -qq
+          # lmodern is a separate Debian package and is NOT pulled in by
+          # texlive-fonts-recommended, but pandoc's default template requires it.
+          # texlive-latex-extra carries booktabs + float, used by header-includes.
+          sudo apt-get install -y --no-install-recommends \
+            pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended lmodern poppler-utils
+
+      - name: Build the PDF
+        run: |
+          set -o pipefail
+          bash docs/report/build.sh report.pdf 2>&1 | tee build.log
+
+      # A glyph the font cannot render is dropped SILENTLY - pandoc only warns, and the PDF
+      # ships with blank gaps where the symbol should be. Every alpha and beta in this report
+      # went missing exactly that way. Fail the build instead of shipping holes.
+      - name: Fail on missing glyphs
+        run: |
+          if grep -q "Missing character" build.log; then
+            echo "::error title=Missing glyphs::Characters the font cannot render - BLANK in the PDF"
+            grep -o "There is no . (U+[0-9A-F]*)" build.log | sort -u
+            exit 1
+          fi
+          echo "no missing glyphs"
+
+      - name: Report page count
+        run: |
+          pages=$(pdfinfo report.pdf | awk '/^Pages/{print $2}')
+          echo "::notice title=Report length::${pages} pages (spec asks for 8-12 + appendices)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-pdf
+          path: report.pdf
+          if-no-files-found: error

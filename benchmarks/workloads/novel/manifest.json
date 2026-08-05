@@ -1,0 +1,64 @@
+{
+  "seeds": {
+    "1": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 1,
+        "suffix_tokens": 32
+      },
+      "file": "seed-1.jsonl",
+      "sha256": "c81e66269ca3f120c7e389dee792eb0fa3a584bb190c40576892e285cf0c72e0"
+    },
+    "2": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 2,
+        "suffix_tokens": 32
+      },
+      "file": "seed-2.jsonl",
+      "sha256": "147a7d2c42c335addb48d040f3d8e9f7012c32ac83fd1058f086a4ef4feec9f4"
+    },
+    "3": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 3,
+        "suffix_tokens": 32
+      },
+      "file": "seed-3.jsonl",
+      "sha256": "69c25333e2acc9e04a8f23ad70f51a3d7c5fb777093fff9e7fb799c66625d61f"
+    },
+    "4": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 4,
+        "suffix_tokens": 32
+      },
+      "file": "seed-4.jsonl",
+      "sha256": "fea37068e236e4e1a89d53656181aef375eb1218d8fc675697f9f6027609e5a2"
+    },
+    "5": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 5,
+        "suffix_tokens": 32
+      },
+      "file": "seed-5.jsonl",
+      "sha256": "c89903584b0e5c97b11758cf899622af63dcdd6e36b6d498ebaee1cad110bfc1"
+    },
+    "6": {
+      "config": {
+        "num_requests": 500,
+        "prompt_tokens": 2048,
+        "seed": 6,
+        "suffix_tokens": 32
+      },
+      "file": "seed-6.jsonl",
+      "sha256": "6b8a566f79d54e51496af9d4e8511c20e8746d6452de5b8a855727d3e5ca453b"
+    }
+  }
+}

@@ -75,6 +75,7 @@ spec:
             - {name: RATE, value: "$RATE"}
             - {name: MAX_TOKENS, value: "$MAX_TOKENS"}
             - {name: SEEDS, value: "$SEEDS"}
+            - {name: WORKLOAD_PROFILE, value: "${WORKLOAD_PROFILE:-zipfian}"}
             - {name: PYTHONUNBUFFERED, value: "1"}
             - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
             # HOME defaults to / under the restricted SCC's arbitrary uid, which is not

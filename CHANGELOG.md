@@ -8,6 +8,52 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - PR #23 re-landed on the integration branch (#36)
+
+### Changed
+- **PR #23 was rebuilt, not replayed.** Its base moved three times underneath it (#26, #27, #29,
+  #35), so the 19-commit rebase was abandoned in favour of re-applying the surviving work onto
+  `feat/relative-load-normalization`. Two of its commits are **deliberately dropped**:
+  `fig10-utilization` and its tests (#35 does this properly, with a shared `utilization.py`, a
+  coverage gate, and KV-cache memory per engine), and the old `run_cell.sh` edits (#27 turned the
+  replay into an in-cluster Job).
+- **README rewritten for the post-α policy** (#32): one knob, `LOADAWARE_BETA`, the
+  `1/(2β)` cancellation rule, in-cluster measurement, 168 tests, current provenance paths. The
+  latency row states plainly that it is pending #31 rather than quoting WAN-polluted numbers.
+- **Report rewritten** for the same: relative-load formula and the reason α was removed;
+  Results carry the settled imbalance co-primary (**−43.7%, 20/20 seeds, p<0.0001** at β=0.5)
+  and hold the latency row open; resource cost re-derived from `utilization.py`.
+
+### Added
+- **The novel-prompt profile re-landed** (#25) and re-verified against the new harness: both
+  manifests still reproduce bit-identically after `9d14c95` changed `WorkloadConfig`'s defaults.
+  `WORKLOAD_PROFILE` now threads run_cell.sh → bench_job.sh → pod env → verify_dataset.sh, and
+  is recorded in `run.json`.
+- **Micro-benchmarks rewritten for the post-α API** (#24): `score_endpoint` lost its α argument
+  and `relative_loads` is new - it recomputes the fleet mean per request, so it is the piece
+  whose cost grows with fleet size and it gets its own benchmark. Measured: the router's CPU is
+  0.212 / 0.213 / 0.214 core-s/s across kvaware / β=0 / β=0.5, i.e. the policy is free at this
+  scale.
+
+### Fixed
+- **A regression caught while porting: the `--profile` refactor resolved the manifest from the
+  repo tree instead of from `--out-dir`.** That silently breaks `verify_dataset.sh`, which copies
+  the committed manifest into a writable directory because `/app` is read-only under the
+  restricted SCC - i.e. it would have broken the in-cluster Job. Each profile is now a directory
+  **containing** its manifest, so `--out-dir` keeps its contract. All three paths verified.
+
+### Decided
+- **The report's latency co-primary stays empty until #31 runs.** Engine-side TTFT shows β=0.5
+  improving ~9% at p=0.0053, but it was chosen after seeing the client-side null, so it is
+  exploratory by construction and is reported as a named secondary only. Substituting it would be
+  the same error as adding seeds until a p-value cooperates.
+- **The relative-load normalization is recorded in §6 as a design change made in response to a
+  measured weakness, not to a result** - β was previously tied to absolute concurrency and two
+  probes at the same rate disagreed (0.034 vs 0.013). Future-work item 1 changed accordingly:
+  the open question is now fleets larger than two engines, where the argmax can chase a single
+  idle instance.
+
+
 ## 2026-08-05 - Utilization is §3's last unreported metric family, and it is a result (#35)
 
 ### Added

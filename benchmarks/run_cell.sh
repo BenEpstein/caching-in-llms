@@ -112,7 +112,17 @@ cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done;
 trap cleanup EXIT
 
 # ---- 0. frozen workloads verified ------------------------------------------
-python3 "$BENCH_DIR/freeze_workloads.py"
+# WORKLOAD_PROFILE picks the dataset this cell replays. Default is the Zipfian shared-prefix
+# dataset - the placement experiment. `novel` is the no-reuse profile that measures what the
+# cache COSTS when it can never hit (guidelines §3, ticket #25). Two profiles, two manifests:
+# adding the second cannot perturb the first's checksums.
+WORKLOAD_PROFILE="${WORKLOAD_PROFILE:-zipfian}"
+case "$WORKLOAD_PROFILE" in
+  zipfian|novel) ;;
+  *) echo "unknown WORKLOAD_PROFILE=$WORKLOAD_PROFILE (want: zipfian|novel)" >&2; exit 2 ;;
+esac
+export WORKLOAD_PROFILE
+python3 "$BENCH_DIR/freeze_workloads.py" --profile "$WORKLOAD_PROFILE"
 
 # ---- 1. deploy the arm ------------------------------------------------------
 helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" "${HELM_ARGS[@]}"
@@ -297,7 +307,9 @@ export DRIVER_NODE BENCH_IMAGE TARGET_URL
 python3 - <<'PY'
 import json, os
 env = os.environ
-manifest = json.load(open(os.path.join(env["BENCH_DIR"], "workloads", "manifest.json")))
+profile = env.get("WORKLOAD_PROFILE", "zipfian")
+sub = "workloads" if profile == "zipfian" else os.path.join("workloads", profile)
+manifest = json.load(open(os.path.join(env["BENCH_DIR"], sub, "manifest.json")))
 run = {
     "cell": env["CELL"],
     "arm": env["ARM"],
@@ -316,6 +328,7 @@ run = {
         "target": env["TARGET_URL"],
     },
     "git_commit": env["GIT_COMMIT"],
+    "workload_profile": env.get("WORKLOAD_PROFILE", "zipfian"),
     "workload_manifest": manifest,
 }
 with open(os.path.join(env["OUT"], "run.json"), "w") as f:
