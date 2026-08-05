@@ -8,6 +8,28 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 (late) - Fake vLLM server + end-to-end harness test (#28)
+
+### Added
+- **`benchmarks/fake_vllm.py`** - an OpenAI-compatible streaming stub, stdlib only (a test
+  fixture should not add a runtime dependency). Token chunks carry **`"usage": null`**, which is
+  the entire point: that is what `stream_options={"include_usage": true}` makes vLLM emit, and a
+  stub omitting the key could not catch the bug this exists for. Injected first-token and
+  inter-token delays make TTFT and ITL *known values* rather than merely non-zero - "non-zero"
+  would also pass for a driver timestamping the wrong chunk.
+- **`benchmarks/test_harness_e2e.py`** - 9 tests running `load_driver.py` **as a subprocess**
+  (the actual CLI a cell invokes) against the stub, then through `analyze.read_run`. Asserts
+  TTFT equals the injected delay, gap count is exactly `max_tokens - 1`, the usage-only chunk
+  contributes neither TTFT nor a gap, the CSV schema matches `Result`'s fields, and errored
+  requests are counted but carry no latency. **2.1 s**, no GPU.
+
+### Verified
+- **The regression demo #28's DoD requires.** Reintroducing the 2026-08-04 classification bug
+  (`'"usage"' in data`) turns **5 of 9 red**; reverting restores green. Instructive detail: the
+  token-count and CSV-schema tests **still passed** with the bug in place - which is exactly how
+  it shipped. Every column looked plausible except the primary metric.
+
+
 ## 2026-08-05 (late) - Confirmatory sweep pre-registered and signed off (#31)
 
 ### Decided
