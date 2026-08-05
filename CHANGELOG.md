@@ -30,6 +30,13 @@ with a pointer to the evidence — those matter as much as code.
   optimum rather than an arbitrary small number.
 - **No closing `kvaware` bracket** (Ben, 2026-08-05). Arm is therefore confounded with position
   in the window; the residual is declared, with `loadaware-b0` as drift sentinel.
+- **Amendment 1: cell order is `kvaware, b0.5, b1.0, b2.0, b0`**, not β ascending - #31
+  amendment comment, posted pre-data with zero cells run. Two reasons: the only pair carrying a
+  p-value (`kvaware`, `b0.5`) becomes adjacent and so spans the least wall-clock, and `b0` at
+  maximum separation becomes a real drift sentinel, recovering most of the dropped closing
+  bracket at zero cluster time. Accepted cost, declared in advance: a `b0` that moves cannot
+  separate drift from a placement effect, and is reported as ambiguous rather than read as
+  either.
 
 ### Fixed
 - **`BENCH_TAG` in #31 was stale at `90dd30a`.** `workload_gen.py` and `freeze_workloads.py` ship

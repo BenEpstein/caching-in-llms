@@ -79,7 +79,7 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # A decade-wide grid would put one point in that region and spend the rest of
 # the cluster time confirming the collapse we already saw at 10.5 req/s. This
 # also answers the "beta grid too coarse" gap on PR #22.
-BETA_GRID="${BETA_GRID:-0 0.5 1.0 2.0}"
+BETA_GRID="${BETA_GRID:-0.5 1.0 2.0 0}"
 SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 
 # n=20 on EVERY cell, including the curve arms. The exact one-sided Wilcoxon's
@@ -92,12 +92,26 @@ SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 # setup per cell - so trimming them saves little and spends the whole reversal
 # budget to do it.
 #
-# ORDER: kvaware first, then beta ascending. Ascending order means beta is
-# confounded with wall-clock time if the cluster drifts, and 2026-08-04 showed
-# it can (client TTFT rose ~55% over an evening on identical config). The
-# mitigation is the MANUAL kvaware re-run after this sweep: it brackets the
-# whole run, so a drift shows up as kvaware-vs-kvaware rather than masquerading
-# as a beta effect. Do not skip it.
+# ORDER: kvaware first, then BETA_GRID in the order given. Position in the
+# window is confounded with cell either way - 2026-08-04 showed the cluster can
+# drift (client TTFT rose ~55% over an evening on identical config) - so the
+# grid order is where that confound gets managed.
+#
+# The default above IS the pre-registered order (#31 amendment 1) - it is set as
+# the default rather than passed by hand so the documented command cannot run
+# the wrong sequence. It is deliberate on two counts:
+#   - b0.5 runs second, adjacent to kvaware. Those two are the only cells
+#     carrying a p-value, so the pair that matters spans the least wall-clock.
+#   - b0 runs LAST. It is the cell expected to behave like kvaware, so placing
+#     it at maximum separation makes it the drift sentinel: a b0 null across the
+#     whole window is evidence the window held. In slot 2 it said nothing.
+# A b0 that moves cannot separate drift from a real placement effect, which is
+# the accepted cost, declared in the pre-registration rather than discovered.
+#
+# There is NO closing kvaware bracket. It was dropped (Ben, 2026-08-05): the
+# bracket was written when drift meant client TTFT drifting over the WAN, and
+# #27 removed that cause by moving the driver in-cluster. b0-last is what
+# replaces it, at zero extra cluster time.
 CELL_SEEDS=("kvaware:${SEEDS_FULL}")
 for b in $BETA_GRID; do
   CELL_SEEDS+=("loadaware-b${b}:${SEEDS_FULL}")
@@ -107,10 +121,11 @@ for entry in "${CELL_SEEDS[@]}"; do
   SEEDS="${entry#*:}" "$BENCH_DIR/run_cell.sh" "${entry%%:*}" "$RATE" "$RESULTS_ROOT"
 done
 echo "==> sweep complete under $RESULTS_ROOT"
-echo "    NEXT, do not skip: re-run kvaware as the closing drift control -"
-echo "      SEEDS=\"$SEEDS_FULL\" ./benchmarks/run_cell.sh kvaware $RATE $RESULTS_ROOT"
-echo "    then, with beta* = the pre-registered grid pick:"
-echo "      headline:  python3 benchmarks/analyze.py compare <loadaware-b<beta*>-dir> <kvaware-dir>"
-echo "      ablation:  python3 benchmarks/analyze.py compare <loadaware-b<beta*>-dir> <loadaware-b0-dir>"
-echo "      placement: python3 benchmarks/analyze.py compare <loadaware-b0-dir> <kvaware-dir>"
-echo "      drift:     python3 benchmarks/analyze.py compare <kvaware-closing-dir> <kvaware-opening-dir>"
+echo "    No closing kvaware cell - b0 ran last and is the drift sentinel (#31)."
+echo "    beta* = 0.5, fixed in advance as the configuration of record:"
+echo "      tested claim 1 (balance):  python3 benchmarks/analyze.py compare <loadaware-b0.5-dir> <kvaware-dir>"
+echo "      tested claim 2 (TTFT p95): same pair, same command - both at alpha 0.025"
+echo "      ablation:                  python3 benchmarks/analyze.py compare <loadaware-b0.5-dir> <loadaware-b0-dir>"
+echo "      placement + drift:         python3 benchmarks/analyze.py compare <loadaware-b0-dir> <kvaware-dir>"
+echo "    The last one does double duty: b0 vs kvaware is the ablation contrast AND,"
+echo "    because b0 ran at maximum separation from kvaware, the drift check."
