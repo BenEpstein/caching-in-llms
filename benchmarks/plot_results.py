@@ -382,20 +382,14 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     labels, lows, highs = [], [], []
     for c in ordered:
-        path = os.path.join(c["dir"], "prom", "vllm_num_requests_running.json")
-        if not os.path.exists(path):
-            continue
         # job=vllm-engines only. The router exports the same metric per backend
         # under a single shared `instance`, so including it merges both engines
         # into one synthetic series - see export_summary.per_seed_imbalance.
-        per_pod: Dict[str, List[float]] = {}
-        for s in json.load(open(path))["data"]["result"]:
-            if s["metric"].get("job") != "vllm-engines":
-                continue
-            pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
-            per_pod.setdefault(pod, []).extend(
-                float(v[1]) for v in s["values"] if v[1] not in ("NaN", "+Inf", "-Inf"))
-        means = sorted(sum(v) / len(v) for v in per_pod.values() if v)
+        # The parse lives in utilization.read_series; this was the third verbatim
+        # copy of it in the repo.
+        per_pod = utilization.read_series(
+            c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
+        means = sorted(sum(y for _, y in v) / len(v) for v in per_pod.values() if v)
         if len(means) < 2:
             continue
         labels.append(c["cell"])
@@ -469,21 +463,29 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     ax.set_title("GPU memory - the resource the policy contends for")
     # Headroom for the spread annotations, which sit past the longest bar and
     # otherwise collide with the legend.
-    ax.set_xlim(0, max((h for h in highs if h == h), default=1) * 1.25)
+    ax.set_xlim(0, max((h for h in highs if h == h), default=1) * 1.55)
     ax.legend(fontsize=8, loc="lower right")
 
-    # (b) GPU SM% and power from DCGM, per GPU
+    # (b) GPU SM% from DCGM, one bar per GPU. Power and MEM_COPY_UTIL are in
+    # `utilization.py report`, not here - four resources already fill the grid.
     ax = axes[0][1]
-    sm = [[v["mean"] for _, v in sorted(u["gpu"].get("DCGM_FI_DEV_GPU_UTIL", {}).items())]
-          for _, u in stats]
-    width = 0.38
-    for j, colour in enumerate(("tab:green", "tab:olive")):
-        vals = [row[j] if len(row) > j else float("nan") for row in sm]
-        ax.barh([i + (j - 0.5) * width for i in y], vals, height=width, color=colour,
-                alpha=0.8, label=f"GPU {j}")
+    per_cell = [dict(u["gpu"].get("DCGM_FI_DEV_GPU_UTIL", {})) for _, u in stats]
+    # GPUs are named from their own labels, never by bar position. The keys are
+    # host/index and this cluster is two NODES with one GPU each, so a
+    # positional "GPU 0"/"GPU 1" legend names two different nodes' gpu0 - and
+    # silently re-binds if a cell's host set differs. Also derived from the data
+    # rather than hardcoded to two, so a third GPU cannot be dropped in silence.
+    gpu_keys = sorted({k for d in per_cell for k in d})
+    sm_cols = [[d.get(k, {}).get("mean", float("nan")) for d in per_cell] for k in gpu_keys]
+    width = 0.76 / max(1, len(gpu_keys))
+    for j, (key, vals) in enumerate(zip(gpu_keys, sm_cols)):
+        offset = (j - (len(gpu_keys) - 1) / 2) * width
+        ax.barh([i + offset for i in y], vals, height=width, alpha=0.8,
+                label=utilization.short_gpu(key))
     ax.set_xlabel("mean SM utilization (%)")
     ax.set_title("GPU SM utilization (DCGM)")
-    ax.legend(fontsize=8, loc="lower right")
+    if gpu_keys:
+        ax.legend(fontsize=8, loc="lower right")
 
     # (c) router CPU - the extension's cost, if it has one
     ax = axes[1][0]
@@ -512,6 +514,17 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     ax.set_xlabel("memory (GB)")
     ax.set_title("Host memory")
     ax.legend(fontsize=8)
+
+    # Missing data must not read as a measured zero. matplotlib draws NaN as
+    # nothing at all, so a cell whose collector died renders as a blank row -
+    # visually identical to a real zero, and on the CPU panel that is the exact
+    # shape of the §5 claim that the extension costs nothing. Label them.
+    for ax, rows in ((axes[0][0], [highs]), (axes[0][1], sm_cols),
+                     (axes[1][0], [cpu]), (axes[1][1], [rss])):
+        for i in y:
+            if all(i >= len(r) or r[i] != r[i] for r in rows):
+                ax.annotate("no data", (0, i), textcoords="offset points", xytext=(4, 0),
+                            fontsize=7, va="center", style="italic", color="tab:red")
 
     for ax in axes.flat:
         ax.set_yticks(y)

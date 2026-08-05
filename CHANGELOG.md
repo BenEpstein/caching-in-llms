@@ -12,17 +12,20 @@ with a pointer to the evidence — those matter as much as code.
 
 ### Added
 - **`benchmarks/utilization.py`** - the §3 utilization readout, plus its coverage gate.
-  Every series it reads was already collected in every cell going back weeks and read by
-  **zero** committed code. `report` prints GPU / GPU-memory / CPU / host-memory per cell;
-  `coverage --update-run-json` records how much of the measured window each series actually
-  spans. 16 tests, including the #27 pilot's tail truncation as a regression case.
+  Most of what it reads was already collected in every cell going back weeks and read by
+  **zero** committed code; the two LMCache memory gauges are new here. `report` prints
+  GPU / GPU-memory / CPU / host-memory per cell; `coverage --update-run-json` records how
+  much of the measured window each series actually observed. 22 tests, including the #27
+  pilot's tail truncation as a regression case.
 - **`fig10-utilization.png`** (`plot_results.py`) - four panels, one per §3 resource.
   KV-cache occupancy is the load-bearing one: it separates the arms monotonically in β
   (kvaware spreads **1.70×** across the two engines, b0.5 **1.18×**, b2.0 **1.11×**) because
   it is the resource the policy contends for.
-- **Five LMCache memory gauges + `vllm:cache_config_info`** added to `prom_dump.py`.
-  `lmcache:local_cache_usage` (~3.8 GB/engine) is the engine-side *memory* number the project
-  believed it did not have.
+- **`lmcache:local_cache_usage` + `lmcache:active_memory_objs_count`** added to `prom_dump.py`
+  and both read. The former (~3.8 GB/engine, confirmed live) is the engine-side *memory*
+  number the project believed it did not have. Deliberately only two: #35 exists because six
+  series were collected for weeks and read by nothing, so adding unread ones would have
+  reproduced the thing it fixes.
 
 ### Decided
 - **DCGM stays the source of record for GPU utilization**, against the standing proposal to
@@ -57,6 +60,29 @@ with a pointer to the evidence — those matter as much as code.
   is load-bearing: `run_cell.sh` runs under `set -e`, so a bare `wait` would kill the supervisor
   on the first dropped forward it exists to survive. This narrows the exposure; it cannot close
   it, which is why the coverage gate lands alongside it.
+- **The coverage gate was blind to the failure the supervisors create, and to total loss.**
+  Both found by adversarial review of this branch before merge. A *span* measure scores an
+  internal gap as perfect - and reconnecting forwards turn tail truncations into exactly that
+  shape, so on a real cell dropping 42% of samples mid-window scored **99.8%**. Coverage is now
+  gap-aware. Separately, a source that produced *nothing* got no key at all rather than 0.0, so
+  a cell with no GPU data was indistinguishable from a healthy one; total loss is now scored and
+  flagged. The gap-aware measure also credits the window edges, which fixes a false-warn ceiling
+  of `1 - step/window` that made any cell under ~100 s warn on perfect data.
+- **`counter_rate` reported a restarted router as cheaper.** It differenced the endpoints, and
+  the router is scraped through its Service so a restart does not change the series key. A
+  synthetic restart mid-window read 0.114 against a true 0.2, unflagged - on the exact metric
+  behind "router CPU is flat across arms". Now sums positive deltas.
+- **`fig10` drew missing data as a missing bar**, which matplotlib renders identically to a
+  measured zero. On the CPU panel that is the shape of the §5 no-overhead claim. Missing series
+  are now labelled "no data".
+- **Engine bars were labelled with ReplicaSet hashes** (`rrcpr`, `b2xv8`) and the GPU legend
+  named two different *nodes'* `gpu0` as "GPU 0"/"GPU 1". Engines are now numbered, GPUs named
+  from their own labels, and the GPU count derived rather than hardcoded to two.
+- Also from review: `run.json` is rewritten via write-then-rename rather than truncated in
+  place; series from one pod under different `worker_id`s no longer average together;
+  `utilization.window()` renamed `manifest_window()` (it is a *different interval* from
+  `load_gate._window()`); and `fig_imbalance` now calls `utilization.read_series` instead of
+  carrying a third verbatim copy of the same parse.
 
 ## 2026-08-05 - The measured replay moves into the cluster: no WAN in TTFT (#27)
 

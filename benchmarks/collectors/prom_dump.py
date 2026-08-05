@@ -75,14 +75,15 @@ METRICS = [
     # is simply not obtainable from this deployment. What the engines DO export
     # is their memory footprint, which is the number that was actually wanted:
     # lmcache:local_cache_usage is the host RAM the LMCache CPU backend holds
-    # (~3.8 GB/engine), and cache_config_info carries the block geometry that
-    # turns kv_cache_usage_perc into absolute GB.
+    # (~3.8 GB/engine).
+    # Both are READ by utilization.py. Deliberately not a wider net: #35 exists
+    # because six series were collected for weeks and read by nothing, and
+    # adding four more unread ones would have reproduced the thing it fixed.
+    # (Dropped from an earlier draft: local_storage_usage and remote_cache_usage
+    # are flat zero in this config, and cache_config_info cannot be turned into
+    # absolute GB without a bytes-per-block figure it does not carry.)
     "lmcache:local_cache_usage",
-    "lmcache:local_storage_usage",
-    "lmcache:remote_cache_usage",
     "lmcache:active_memory_objs_count",
-    "lmcache:pinned_memory_objs_count",
-    "vllm:cache_config_info",
     "process_cpu_seconds_total",
     "process_resident_memory_bytes",
     "router_cpu_usage_percent",

@@ -1,8 +1,9 @@
 """Utilization metrics (§3): GPU, memory, CPU - read from the per-cell collectors.
 
 §3 requires memory and CPU/GPU utilization alongside latency, hit rate and
-throughput. Everything below was already being collected per cell and read by
-nothing; this module is what reads it.
+throughput. Most of what this module reads was already being collected per cell
+and read by nothing; the LMCache memory gauges were added alongside it (#35),
+so they exist only on cells run from that commit onward.
 
 Where each number comes from, and why (decided on #35, 2026-08-05):
 
@@ -41,6 +42,19 @@ window closed (24% of the cell, as a clean tail truncation) and nothing noticed.
 The gate WARNS and never fails: the driver CSVs are the primary measurement and
 a cell with good latency data must not be discarded over utilization sampling.
 
+Three ways a source can come back short, and all three are counted:
+
+  tail truncation   the collector dies partway and never returns
+  internal gap      the collector drops and RECONNECTS, leaving a hole in the
+                    middle. This is the case the DCGM port-forward supervisors
+                    created: they turned truncations into gaps, so a span-only
+                    measure would have scored a cell missing 42% of its samples
+                    at 99.8%. Coverage is therefore gap-aware, not a span.
+  total loss        the collector produced a file with nothing in it. Scored 0.0
+                    rather than omitted, because a missing KEY is indistinguishable
+                    from a healthy cell once it reaches run.json - and total loss
+                    is worse than the truncation this gate was built for.
+
 Usage:
   python3 utilization.py report   results/<run>...
   python3 utilization.py coverage results/<run> [--update-run-json]
@@ -57,22 +71,27 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 # Warn below this fraction of the measured window. Never fatal - see module docstring.
 MIN_COVERAGE = 0.95
+# A stretch with no samples is tolerated up to this many sampling intervals
+# before it counts against coverage. Two intervals absorbs a single missed
+# scrape (routine) while charging a genuine dropout (many intervals) in full.
+GAP_TOLERANCE_STEPS = 2.0
+# Fallback cadence when a series has too few samples to infer one: both
+# collectors sample at 5 s (prom_dump --step, dcgm_poll --interval).
+DEFAULT_STEP_S = 5.0
 
 # Prometheus series this module reads, and the job whose samples count.
 # The job filter is not cosmetic: the router re-exports vllm:* per backend under
 # one shared `instance`, so dropping it merges both engines into one synthetic
 # series (the same trap export_summary.per_seed_imbalance documents).
-ENGINE_GAUGES = {
-    "vllm_kv_cache_usage_perc": ("vllm-engines", "GPU memory (KV cache) in use, fraction"),
-    "lmcache_local_cache_usage": ("vllm-engines", "LMCache host RAM held, bytes"),
-}
-ROUTER_GAUGES = {
-    "router_cpu_usage_percent": ("router", "router CPU, percent"),
-    "router_memory_usage_percent": ("router", "router memory, percent"),
-    "process_resident_memory_bytes": ("router", "router RSS, bytes"),
-}
-ROUTER_COUNTERS = {
-    "process_cpu_seconds_total": ("router", "router CPU, core-seconds per second"),
+ENGINE_JOB, ROUTER_JOB = "vllm-engines", "router"
+ENGINE_GAUGES = ["vllm_kv_cache_usage_perc", "lmcache_local_cache_usage",
+                 "lmcache_active_memory_objs_count"]
+ROUTER_GAUGES = ["router_cpu_usage_percent", "router_memory_usage_percent",
+                 "process_resident_memory_bytes"]
+ROUTER_COUNTERS = ["process_cpu_seconds_total"]
+ALL_SERIES = {
+    **{m: ENGINE_JOB for m in ENGINE_GAUGES},
+    **{m: ROUTER_JOB for m in ROUTER_GAUGES + ROUTER_COUNTERS},
 }
 
 DCGM_FIELDS = {
@@ -101,6 +120,12 @@ def read_series(run_dir: str, metric: str, job: str) -> Dict[str, Samples]:
         if s["metric"].get("job") != job:
             continue
         key = s["metric"].get("pod") or s["metric"].get("instance") or "?"
+        # One pod can export the same metric under several label sets - the
+        # lmcache gauges carry worker_id. Without it those series concatenate
+        # under one key and average into a number that is neither: a pod holding
+        # 4 GB on worker 0 and 0 GB on worker 1 reads as a flat 2 GB.
+        if "worker_id" in s["metric"]:
+            key = f"{key}/w{s['metric']['worker_id']}"
         pts = [
             (float(ts), float(v))
             for ts, v in s.get("values", [])
@@ -139,21 +164,36 @@ def gauge_stats(pts: Samples) -> Dict[str, float]:
 
 
 def counter_rate(pts: Samples) -> float:
-    """Per-second rate of a monotonic counter across the dumped window.
+    """Per-second rate of a counter across the dumped window, reset-safe.
 
-    First-to-last, not an average of instantaneous rates: the series is a
-    counter sampled every 5 s, so the endpoints ARE the total and this is exact
-    rather than an approximation. Resets would break it, but a router process
-    that restarts mid-cell invalidates the cell for other reasons first.
+    Sums the POSITIVE deltas rather than differencing the endpoints. The
+    difference matters: the router is scraped through its Service
+    (deploy/prometheus.yaml), so there is no `pod` label and a restart does not
+    change the series key - endpoint differencing would silently report a router
+    that restarted mid-cell as cheaper. On a synthetic restart at t=300 in a
+    700 s window it reported 0.114 against a true 0.2, and nothing flagged it.
+    That number is the evidence behind "router CPU is flat across arms", so it
+    has to survive a restart rather than assume one cannot happen.
+
+    A reset still loses the counts accumulated between the last sample before it
+    and the reset itself - at most one sampling interval's worth.
     """
     if len(pts) < 2:
         return float("nan")
     dt = pts[-1][0] - pts[0][0]
-    return (pts[-1][1] - pts[0][1]) / dt if dt > 0 else float("nan")
+    if dt <= 0:
+        return float("nan")
+    return sum(max(0.0, b - a) for (_, a), (_, b) in zip(pts, pts[1:])) / dt
 
 
-def window(run_dir: str) -> Optional[Tuple[float, float]]:
-    """The cell's measured window from run.json, or None when unrecorded."""
+def manifest_window(run_dir: str) -> Optional[Tuple[float, float]]:
+    """The cell's measured window from run.json, or None when unrecorded.
+
+    NOT the same interval as load_gate._window(), which runs first-send to
+    last-send and so excludes warm-up by construction. This one is
+    CELL_START..CELL_END off the pod clock. Named apart on purpose - the two
+    were one rename away from being used interchangeably.
+    """
     path = os.path.join(run_dir, "run.json")
     if not os.path.exists(path):
         return None
@@ -164,18 +204,44 @@ def window(run_dir: str) -> Optional[Tuple[float, float]]:
     return None
 
 
-def _span_coverage(pts: Samples, start: float, end: float) -> float:
-    """Fraction of [start, end] spanned by the samples, clipped to the window.
+def _median(xs: Sequence[float]) -> float:
+    s = sorted(xs)
+    mid = len(s) // 2
+    return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
 
-    Deliberately measures the SPAN, not sample density. The failure this exists
-    to catch is a tail truncation - a collector that dies partway and leaves the
-    end of the cell unmeasured - and a span catches that in one number. Internal
-    gaps are a different failure and would need a different check.
+
+def _covered_fraction(pts: Samples, start: float, end: float,
+                      default_step: float = DEFAULT_STEP_S) -> float:
+    """Fraction of [start, end] a series actually observed.
+
+    Every stretch of wall-clock is credited up to GAP_TOLERANCE_STEPS sampling
+    intervals; anything longer counts only that much, so a hole is charged
+    against coverage whether it sits in the middle of the window or at either
+    end. That is the whole point: a span measure (max - min) scores an internal
+    gap as perfect, and the DCGM supervisors added in this same change turn
+    dropped forwards into exactly that shape. Measured on a real cell, dropping
+    42% of the samples as one mid-window hole scored 99.8% under a span.
+
+    The sampling interval is inferred from the data (median inter-sample gap)
+    rather than assumed, so a collector on a different cadence is judged against
+    its own. The tolerance also gives the first and last sample a step of credit
+    each, which is what keeps a healthy short cell off the warning list: samples
+    land up to one interval inside the window at each end, so on a 150 s window
+    at a 5 s step a perfect series would otherwise cap at 96.7%.
     """
-    inside = [t for t, _ in pts if start <= t <= end]
-    if len(inside) < 2:
+    inside = sorted(t for t, _ in pts if start <= t <= end)
+    window_s = end - start
+    if not inside or window_s <= 0:
         return 0.0
-    return (max(inside) - min(inside)) / (end - start)
+    gaps = [b - a for a, b in zip(inside, inside[1:])]
+    step = _median(gaps) if gaps else default_step
+    if step <= 0:
+        step = default_step
+    tol = GAP_TOLERANCE_STEPS * step
+    covered = sum(min(g, tol) for g in gaps)
+    covered += min(inside[0] - start, tol)   # leading edge
+    covered += min(end - inside[-1], tol)    # trailing edge
+    return min(1.0, covered / window_s)
 
 
 def coverage(run_dir: str) -> Dict[str, float]:
@@ -184,21 +250,31 @@ def coverage(run_dir: str) -> Dict[str, float]:
     Empty when the cell records no window - there is nothing to compare against,
     and inventing one from file mtimes would report a number that means nothing.
     """
-    win = window(run_dir)
+    win = manifest_window(run_dir)
     if not win:
         return {}
     start, end = win
     out: Dict[str, float] = {}
-    for metric, (job, _) in {**ENGINE_GAUGES, **ROUTER_GAUGES, **ROUTER_COUNTERS}.items():
+    for metric, job in ALL_SERIES.items():
+        # An ABSENT dump file means the metric was not in that run's scrape list
+        # (the lmcache gauges post-date most cells on disk), which is not this
+        # cell failing. A file that EXISTS but yields nothing is a collector that
+        # ran and came back empty - scored 0.0, never omitted, because a missing
+        # key in run.json is indistinguishable from a healthy cell.
+        if not os.path.exists(os.path.join(run_dir, "prom", f"{metric}.json")):
+            continue
         series = read_series(run_dir, metric, job)
-        if series:
-            # worst series, not the mean: one engine going dark is the failure,
-            # and averaging it against a healthy one hides exactly that.
-            out[metric] = min(_span_coverage(p, start, end) for p in series.values())
+        # worst series, not the mean: one engine going dark is the failure, and
+        # averaging it against a healthy one hides exactly that.
+        out[metric] = (min(_covered_fraction(p, start, end) for p in series.values())
+                       if series else 0.0)
     dcgm = read_dcgm(run_dir)
-    for field, per_gpu in dcgm.items():
-        if per_gpu:
-            out[field] = min(_span_coverage(p, start, end) for p in per_gpu.values())
+    for field in DCGM_FIELDS:
+        per_gpu = dcgm.get(field) or {}
+        # dcgm.csv missing or empty is scored, not skipped: DCGM is the source of
+        # record for GPU utilization, so its absence IS the failure to report.
+        out[field] = (min(_covered_fraction(p, start, end) for p in per_gpu.values())
+                      if per_gpu else 0.0)
     return out
 
 
@@ -209,22 +285,25 @@ def cell_utilization(run_dir: str) -> Dict:
         "engines": {},
         "router": {},
         "gpu": {},
-        "coverage": coverage(run_dir),
         # Stated, not silently omitted: vLLM registers no process collector, so
         # engine host-CPU and engine RSS cannot be reported from this deployment.
+        # cmd_report prints this - an unreported limitation is not a stated one.
         "unavailable": ["engine process_cpu_seconds_total", "engine process_resident_memory_bytes"],
     }
-    for metric, (job, _) in ENGINE_GAUGES.items():
-        per_pod = read_series(run_dir, metric, job)
+    # Coverage is deliberately NOT computed here. It re-reads every file this
+    # function already read, and the figure - the only other caller - throws it
+    # away. cmd_coverage and cmd_report call coverage() directly instead.
+    for metric in ENGINE_GAUGES:
+        per_pod = read_series(run_dir, metric, ENGINE_JOB)
         if per_pod:
             out["engines"][metric] = {pod: gauge_stats(p) for pod, p in per_pod.items()}
-    for metric, (job, _) in ROUTER_GAUGES.items():
-        per_pod = read_series(run_dir, metric, job)
-        for p in per_pod.values():
+    for metric in ROUTER_GAUGES:
+        # Last series wins, and with one router replica there is only ever one.
+        # A second replica would need this keyed by instance like the engines.
+        for p in read_series(run_dir, metric, ROUTER_JOB).values():
             out["router"][metric] = gauge_stats(p)
-    for metric, (job, _) in ROUTER_COUNTERS.items():
-        per_pod = read_series(run_dir, metric, job)
-        for p in per_pod.values():
+    for metric in ROUTER_COUNTERS:
+        for p in read_series(run_dir, metric, ROUTER_JOB).values():
             out["router"][metric] = {"rate": counter_rate(p), "n": len(p)}
     for field, per_gpu in read_dcgm(run_dir).items():
         out["gpu"][field] = {gpu: gauge_stats(p) for gpu, p in per_gpu.items()}
@@ -239,6 +318,18 @@ def spread(per_pod: Dict[str, Dict[str, float]]) -> Optional[Tuple[float, float]
     """
     means = sorted(v["mean"] for v in per_pod.values() if v["n"])
     return (means[0], means[-1]) if len(means) >= 2 else None
+
+
+def engine_labels(per_pod: Dict[str, Dict[str, float]]):
+    """[(label, stats)] with engines numbered rather than named by pod hash.
+
+    Engine pods are recreated every cell (#13 restarts them for identical
+    initial state), so the pod suffix is a ReplicaSet hash - it renders as
+    "rrcpr" or "b2xv8", changes between cells, and means nothing in a §6 table.
+    Ordering is by pod name: arbitrary but stable within a cell, which is all a
+    two-engine comparison needs.
+    """
+    return [(f"engine{i}", v) for i, (_, v) in enumerate(sorted(per_pod.items()), 1)]
 
 
 def short_gpu(key: str) -> str:
@@ -259,16 +350,18 @@ def cmd_report(run_dirs: Sequence[str]) -> int:
         if kv:
             sp = spread(kv)
             line = "  GPU memory (KV cache):  " + "  ".join(
-                f"{pod.split('-')[-1]}={v['mean']:.3f} (max {v['max']:.3f})"
-                for pod, v in sorted(kv.items())
-            )
+                f"{lbl}={v['mean']:.3f} (max {v['max']:.3f})" for lbl, v in engine_labels(kv))
             if sp and sp[0] > 0:
                 line += f"   spread {sp[1] / sp[0]:.2f}x"
             print(line)
         ram = u["engines"].get("lmcache_local_cache_usage")
         if ram:
             print("  LMCache host RAM:       " + "  ".join(
-                f"{pod.split('-')[-1]}={v['mean'] / 1e9:.2f} GB" for pod, v in sorted(ram.items())))
+                f"{lbl}={v['mean'] / 1e9:.2f} GB" for lbl, v in engine_labels(ram)))
+        objs = u["engines"].get("lmcache_active_memory_objs_count")
+        if objs:
+            print("  LMCache objects:        " + "  ".join(
+                f"{lbl}={v['mean']:.0f}" for lbl, v in engine_labels(objs)))
         r = u["router"]
         if "process_cpu_seconds_total" in r:
             print(f"  Router CPU:             {_fmt(r['process_cpu_seconds_total']['rate'])} core-s/s"
@@ -281,12 +374,17 @@ def cmd_report(run_dirs: Sequence[str]) -> int:
             # dropping the host silently prints two columns with the same name.
             print(f"  {DCGM_FIELDS[field]:<38}" + "  ".join(
                 f"{short_gpu(gpu)}={v['mean']:.1f}" for gpu, v in sorted(per_gpu.items())))
-        low = {k: v for k, v in u["coverage"].items() if v < MIN_COVERAGE}
+        low = {k: v for k, v in coverage(d).items() if v < MIN_COVERAGE}
         if low:
             print("  ⚠ coverage below "
                   f"{MIN_COVERAGE:.0%}: " + ", ".join(f"{k} {v:.0%}" for k, v in sorted(low.items())))
         if not u["gpu"]:
             print("  note: no dcgm.csv - GPU utilization (SM%, power) unavailable for this cell")
+        # The limitation is printed, not merely held in the dict: §3 asks for
+        # CPU utilization and a reader running this needs to see which part of
+        # it this deployment cannot supply.
+        print("  not available:          " + ", ".join(u["unavailable"])
+              + " (vLLM registers no process collector)")
     return 0
 
 
@@ -311,9 +409,15 @@ def cmd_coverage(run_dir: str, update_run_json: bool) -> int:
         with open(path) as f:
             run = json.load(f)
         run["utilization_coverage"] = {k: round(v, 4) for k, v in sorted(cov.items())}
-        with open(path, "w") as f:
+        # Write-then-rename: run.json is the cell's canonical provenance record
+        # and this is the one place that rewrites it in place. Truncating it and
+        # dying mid-write (disk full is the realistic trigger) would destroy the
+        # manifest of a cell whose measurements are already complete.
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(run, f, indent=2)
             f.write("\n")
+        os.replace(tmp, path)
     return 0
 
 

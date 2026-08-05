@@ -1,6 +1,6 @@
 # Benchmark harness
 
-> status: live · 2026-08-01 · implements the locked methodology (issue #3); the resolution
+> status: live · 2026-08-05 · implements the locked methodology (issue #3); the resolution
 > comment there is the spec - this README is the operator's manual.
 
 Measures **client-observed** latency for the routing-policy comparison on the gapu-2
