@@ -14,4 +14,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: pytest benchmarks/ tests/ -q
+      # --benchmark-disable still EXECUTES the benchmark bodies (so they remain real tests),
+      # it just skips the timing loop - the suite stays fast.
+      - run: pytest benchmarks/ tests/ -q --benchmark-disable
+
+      # §3 Automation: the timed run. No pass/fail threshold on purpose - thresholds on shared
+      # CI runners are flaky, get muted, and a muted check is worse than a number in the log
+      # that a human can compare across commits.
+      - name: Micro-benchmarks (router hot path)
+        run: pytest tests/test_bench_routing.py --benchmark-only -q
+          --benchmark-columns=min,mean,stddev,ops

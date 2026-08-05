@@ -30,7 +30,8 @@ import json
 import os
 import sys
 
-from workload_gen import WorkloadConfig, dump_jsonl
+from workload_gen import (NovelWorkloadConfig, WorkloadConfig, dump_jsonl,
+                          dump_novel_jsonl, generate_novel, reuse_factor)
 
 # Amended methodology (#3, 2026-08-03, revised after the scarcity gate).
 #
@@ -61,6 +62,23 @@ PREFIX_POOL_SIZE = 128
 ZIPF_S = 0.9
 
 
+# Second profile (guidelines §3: "novel long prompts, unlikely to be cached - to measure
+# cache overhead"). Fewer seeds than the Zipfian profile on purpose: this arm answers a
+# cost question with a large expected effect (cache-on vs cache-off on a workload that
+# never hits), not a placement question with a small one, so it does not need n=20.
+NOVEL_SEEDS = list(range(1, 7))
+NOVEL_NUM_REQUESTS = 500
+
+
+def novel_frozen_config(seed: int) -> NovelWorkloadConfig:
+    return NovelWorkloadConfig(
+        num_requests=NOVEL_NUM_REQUESTS,
+        prompt_tokens=2048,
+        suffix_tokens=32,
+        seed=seed,
+    )
+
+
 def frozen_config(seed: int) -> WorkloadConfig:
     return WorkloadConfig(
         num_requests=NUM_REQUESTS,
@@ -85,20 +103,11 @@ def workload_path(out_dir: str, seed: int) -> str:
     return os.path.join(out_dir, f"seed-{seed}.jsonl")
 
 
-def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workloads")
-    p.add_argument("--out-dir", default=default_dir)
-    p.add_argument("--update-manifest", action="store_true")
-    a = p.parse_args()
-
-    os.makedirs(a.out_dir, exist_ok=True)
-    manifest_path = os.path.join(a.out_dir, "manifest.json")
-
+def build_zipfian(out_dir: str) -> dict:
     entries = {}
     for seed in SEEDS:
         cfg = frozen_config(seed)
-        path = workload_path(a.out_dir, seed)
+        path = workload_path(out_dir, seed)
         dump_jsonl(cfg, path)
         entries[str(seed)] = {
             "file": os.path.basename(path),
@@ -106,6 +115,64 @@ def main() -> int:
             "config": dataclasses.asdict(cfg),
         }
         print(f"seed {seed}: {entries[str(seed)]['sha256'][:16]}…  {path}")
+    return entries
+
+
+def build_novel(out_dir: str) -> dict:
+    """Materialize the novel-prompt profile and ASSERT it has no reuse.
+
+    A silent regression here would be invisible in the results: a workload that quietly
+    started sharing prefixes would measure cache benefit while claiming to measure cache
+    cost, and the arm would look like a small overhead instead of a broken experiment.
+    """
+    entries = {}
+    for seed in NOVEL_SEEDS:
+        cfg = novel_frozen_config(seed)
+        path = workload_path(out_dir, seed)
+        dump_novel_jsonl(cfg, path)
+
+        rf = reuse_factor([r.prefix_id for r in generate_novel(cfg)])
+        if rf != 1.0:
+            raise SystemExit(
+                f"novel seed {seed}: reuse factor {rf} != 1.0 - this profile MUST have "
+                "no shared prefixes or it is not measuring cache overhead"
+            )
+        entries[str(seed)] = {
+            "file": os.path.basename(path),
+            "sha256": sha256_file(path),
+            "config": dataclasses.asdict(cfg),
+        }
+        print(f"novel seed {seed}: {entries[str(seed)]['sha256'][:16]}…  {path}  (reuse 1.0)")
+    return entries
+
+
+# Each profile is a directory that CONTAINS its own manifest.json. That shape is load
+# bearing: `verify_dataset.sh` copies the committed manifest into a writable directory and
+# runs this with `--out-dir` pointed at it, because /app is read-only under the restricted
+# SCC's arbitrary uid. A manifest resolved anywhere other than inside --out-dir breaks the
+# in-cluster Job (#27).
+PROFILES = {
+    "zipfian": ("workloads", build_zipfian),
+    "novel": (os.path.join("workloads", "novel"), build_novel),
+}
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    bench_dir = os.path.dirname(os.path.abspath(__file__))
+    p.add_argument("--profile", choices=sorted(PROFILES), default="zipfian",
+                   help="zipfian = the frozen shared-prefix dataset (default); "
+                        "novel = the no-reuse cache-overhead profile")
+    p.add_argument("--out-dir", default=None)
+    p.add_argument("--update-manifest", action="store_true")
+    a = p.parse_args()
+
+    sub_dir, build = PROFILES[a.profile]
+    out_dir = a.out_dir or os.path.join(bench_dir, sub_dir)
+    manifest_path = os.path.join(out_dir, "manifest.json")
+
+    os.makedirs(out_dir, exist_ok=True)
+    entries = build(out_dir)
 
     if a.update_manifest:
         with open(manifest_path, "w") as f:

@@ -276,12 +276,28 @@ def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
         ax.plot([0, 1], [bv, cv], "o-",
                 color="tab:blue" if improved else "tab:red",
                 alpha=0.85, lw=1.6, zorder=2)
-        ax.annotate(f"seed {sid}", (1, cv), textcoords="offset points",
-                    xytext=(6, 0), fontsize=7, va="center",
-                    color="tab:blue" if improved else "tab:red")
+
+    # De-collide the seed labels. At n=20 the candidate values bunch tightly and a fixed
+    # offset stacks several labels on one another - legible only if you already know what it
+    # says, which is not a figure. Walk them in value order, push each to a minimum gap, and
+    # draw a leader back to its point so a displaced label still names its seed.
+    span = max(max(cs), max(bs)) - min(min(cs), min(bs))
+    gap = span * 0.038
+    placed, prev = [], None
+    for sid, bv, cv in sorted(zip(seeds, bs, cs), key=lambda t: t[2]):
+        y = cv if prev is None else max(cv, prev + gap)
+        placed.append((sid, cv, y, cv < bv))
+        prev = y
+    for sid, cv, y, improved in placed:
+        color = "tab:blue" if improved else "tab:red"
+        if abs(y - cv) > gap * 0.25:
+            ax.plot([1.0, 1.06], [cv, y], color=color, lw=0.6, alpha=0.55, zorder=1)
+        ax.annotate(f"seed {sid}", (1.07, y), fontsize=7, va="center", ha="left",
+                    color=color, annotation_clip=False)
+
     ax.set_xticks([0, 1])
     ax.set_xticklabels([base, cand])
-    ax.set_xlim(-0.15, 1.35)
+    ax.set_xlim(-0.15, 1.45)
     ax.set_ylabel("TTFT p95 (s)")
     ax.set_title(f"Paired per-seed TTFT p95\n{sum(c < b for c, b in zip(cs, bs))}/{len(cs)} "
                  "seeds improve (red = reversal)")

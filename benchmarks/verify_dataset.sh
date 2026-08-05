@@ -16,7 +16,16 @@
 set -euo pipefail
 
 OUT="${1:?usage: verify_dataset.sh <out-dir>}"
-MANIFEST_SRC="${MANIFEST_SRC:-/app/workloads/manifest.json}"
+# WORKLOAD_PROFILE selects which frozen dataset to reconstruct. Default `zipfian` keeps the
+# existing callers byte-identical; `novel` is the no-reuse cache-overhead profile (§3), whose
+# manifest lives one directory down.
+WORKLOAD_PROFILE="${WORKLOAD_PROFILE:-zipfian}"
+case "$WORKLOAD_PROFILE" in
+  zipfian) DEFAULT_MANIFEST=/app/workloads/manifest.json ;;
+  novel)   DEFAULT_MANIFEST=/app/workloads/novel/manifest.json ;;
+  *) echo "unknown WORKLOAD_PROFILE=$WORKLOAD_PROFILE (want: zipfian|novel)" >&2; exit 2 ;;
+esac
+MANIFEST_SRC="${MANIFEST_SRC:-$DEFAULT_MANIFEST}"
 FREEZE="${FREEZE:-/app/freeze_workloads.py}"
 
 mkdir -p "$OUT"
@@ -26,4 +35,4 @@ mkdir -p "$OUT"
 # the writable directory instead of the 126 MB of JSONL being written next to it.
 cp "$MANIFEST_SRC" "$OUT/manifest.json"
 
-python3 "$FREEZE" --out-dir "$OUT"
+python3 "$FREEZE" --profile "$WORKLOAD_PROFILE" --out-dir "$OUT"
