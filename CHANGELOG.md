@@ -8,6 +8,34 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 (late) - #30 deletions executed
+
+### Removed
+- **`load_driver.py`'s closed-loop mode** - `run_closed_loop()`, `--concurrency`, the dispatch
+  branch and the docstring advertising it. No caller ever passed `--concurrency`; `--rate` is now
+  a plain required argument instead of half of a mutually-exclusive group. An untested second
+  path through the driver that measured nothing is worse than no second path.
+- `rate_pilot.sh`'s no-op `sys.path.insert` (under `python3 - <<PY`, `__file__` is `<stdin>`, so
+  it inserted `"./."`). The real insert on the line above is untouched.
+- `apply-router-patch.sh`'s `registration_controller.py` target - `patches/` holds exactly three
+  files and the Dockerfile knows only those three.
+- `dcgm_poll.py --duration` and its `t_end` branches - the sole caller passes only `--url`/`--out`
+  and the process is killed by the cleanup trap.
+- `load_gate.py`'s beta echo, which printed a grid including `0.25` that `run_sweep.sh` does not
+  use and never reads.
+
+### Changed
+- **`plot_results.py --cand` is now REQUIRED.** It first defaulted to the literal
+  `loadaware-b0.1`, then to an inference accepting exactly one non-b0 loadaware cell - which the
+  standard `BETA_GRID="0 0.5 1.0 2.0"` never satisfies, since it always yields three. **The
+  default path could not fire at all**, which is how it was found: regenerating figures on
+  2026-08-05 raised every time. Both versions were the same shape of defect - an interface that
+  looks like it has a working default. Which arm is the headline is a pre-registration decision,
+  not something a plotting script should guess from whichever directories it was handed.
+- `benchmarks/README.md` now documents the figure-generation step at all; the ticket noted the
+  file never mentioned `plot_results.py`, which produces every committed figure.
+
+
 ## 2026-08-05 (late) - Stale-comment sweep (#30, non-destructive half)
 
 ### Fixed

@@ -134,6 +134,12 @@ LOADAWARE_TAG=<sha> BENCH_TAG=<sha> benchmarks/run_sweep.sh <rate>
 python3 benchmarks/analyze.py summary results/*
 python3 benchmarks/analyze.py compare results/<...loadaware-b0.5> results/<...kvaware>
 
+# 4. figures. --cand names the headline arm and is REQUIRED: the 4-point beta grid
+#    always yields three non-b0 cells, so nothing can infer it (#30).
+python3 benchmarks/export_summary.py results/<...> --out results/summary-per-seed.csv
+python3 benchmarks/plot_results.py results/<...> --cand loadaware-b0.5 --out docs/figures
+python3 benchmarks/utilization.py report results/<...>
+
 # 4. §3 utilization: GPU, GPU memory, CPU, host memory
 python3 benchmarks/utilization.py report results/*
 ```

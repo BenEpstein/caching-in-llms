@@ -7,8 +7,8 @@ pins to ONE pod, silently dropping the other node's GPU - so pass one --url
 per exporter POD (run_cell.sh forwards each pod on its own local port).
 
 Runs until SIGINT/SIGTERM (run_cell.sh starts it in the background and kills it
-when the cell ends) or for --duration seconds. Appends one row per GPU per
-metric per sample: ts,metric,gpu,hostname,value.
+when the cell ends). Appends one row per GPU per metric per sample:
+ts,metric,gpu,hostname,value.
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ def main() -> int:
         help="exporter /metrics URL; repeat once per exporter pod",
     )
     p.add_argument("--interval", type=float, default=5.0)
-    p.add_argument("--duration", type=float, help="stop after N seconds (default: run until signal)")
     p.add_argument("--out", required=True, help="CSV path (appended)")
     a = p.parse_args()
 
@@ -64,12 +63,11 @@ def main() -> int:
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
 
-    t_end = time.time() + a.duration if a.duration else None
     with open(a.out, "a", newline="") as f:
         w = csv.writer(f)
         if f.tell() == 0:
             w.writerow(["ts", "metric", "gpu", "hostname", "value"])
-        while not stop and (t_end is None or time.time() < t_end):
+        while not stop:
             round_start = time.time()
             for url in a.url:
                 try:
