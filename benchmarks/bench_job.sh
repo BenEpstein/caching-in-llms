@@ -104,27 +104,40 @@ spec:
 YAML
 
 # ---- progress ---------------------------------------------------------------
-# Resolve the pod BEFORE following it. `oc logs -f job/<name>` immediately after `oc apply`
-# loses a race: the Job exists but its pod does not yet, so kubectl's selector finds nothing
-# and exits non-zero. With stderr silenced and `|| true` that failure is invisible - the
-# 2026-08-05 throwaway cell ran to a correct result with ZERO pod output on the operator's
-# terminal. --pod-running-timeout does not help; it covers "pod exists but is not Running",
-# not "no pod yet".
-for _ in $(seq 60); do
+# Wait for the pod to EXIST and to have left Pending before following it. Two failure modes
+# were hit on 2026-08-05, both silent because this tail is deliberately non-fatal:
+#
+#   1. `oc logs -f job/<name>` straight after `oc apply` - the Job exists but its pod does
+#      not yet, so kubectl's selector matches nothing and it exits non-zero.
+#   2. `oc logs -f pod/<name>` while that pod is still ContainerCreating, which happens
+#      whenever the node has not cached the tag - "BadRequest: container is waiting to
+#      start". Fixing (1) walked straight into (2): the disconnect test only passed because
+#      the image happened to be cached from the previous cell.
+#
+# `--pod-running-timeout` fixes neither - it governs waiting when a SELECTOR resolves pods,
+# not a pod named directly, so it was doing nothing here. Poll the phase instead.
+# Succeeded/Failed are fine to follow: `oc logs -f` on a finished pod prints its whole log
+# and exits, which is what a short cell should show anyway.
+POD="" PHASE=""
+for _ in $(seq 300); do   # up to 10 min - covers a cold image pull on a busy node
   POD=$(oc get pods -n "$NS" -l "job-name=$JOB" \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-  [ -n "${POD:-}" ] && break
+  if [ -n "$POD" ]; then
+    PHASE=$(oc get pod "$POD" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    [ -n "$PHASE" ] && [ "$PHASE" != "Pending" ] && break
+  fi
   sleep 2
 done
 
-# Progress ONLY, and non-fatal by design. `oc logs -f` dies with the VPN; the data is
-# collected below by a plain `oc logs`, which re-reads the whole log from the start and is
+# Progress ONLY, and non-fatal by design: `oc logs -f` dies with the VPN, and the data is
+# collected below by a plain `oc logs` that re-reads the whole log from the start and is
 # therefore idempotent. Reconnecting is "run the command again", not "resume a stream".
-# --pod-running-timeout covers the image pull, which happens before the pod is Running.
-if [ -n "${POD:-}" ]; then
-  oc logs -f "pod/$POD" -n "$NS" --pod-running-timeout=10m || true
+if [ -n "$POD" ] && [ -n "$PHASE" ] && [ "$PHASE" != "Pending" ]; then
+  echo "==> following pod/$POD (phase $PHASE)"
+  oc logs -f "pod/$POD" -n "$NS" || true
 else
-  echo "==> no pod for $JOB after 120s; skipping the progress tail (collection is unaffected)" >&2
+  echo "==> no running pod for $JOB after 10m; skipping the progress tail" >&2
+  echo "    (collection is unaffected - it re-reads the whole log at the end)" >&2
 fi
 
 # ---- wait -------------------------------------------------------------------
