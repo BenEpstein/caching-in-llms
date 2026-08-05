@@ -8,6 +8,7 @@ figure can never disagree with the table it sits next to.
   fig3-hit-rate.png           LMCache lookup hit rate over the measured window
   fig8-itl-percentiles.png    inter-token latency p50/p95/p99 - the decode side
   fig9-throughput.png         sustained tok/s and req/s per arm
+  fig10-utilization.png       §3 utilization: GPU, GPU memory, CPU, host memory
 
 Usage:
   python3 plot_results.py results/<...>-loadaware-b0 results/<...>-kvaware ... \
@@ -26,6 +27,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+import utilization  # noqa: E402
 from analyze import percentile, read_run  # noqa: E402
 
 BASELINE_STYLE = {"kvaware": ("tab:red", "-"), "roundrobin": ("tab:gray", "--")}
@@ -422,6 +424,106 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+def fig_utilization(cells: List[Dict], out: str) -> None:
+    """§3 utilization in one figure: GPU, GPU memory, CPU, host memory.
+
+    Four panels because §3 asks for four different resources and they live on
+    different scales; forcing them onto shared axes would make three of them
+    unreadable to flatter the fourth.
+
+    The GPU-memory panel is the load-bearing one. KV cache occupancy is the
+    resource the policy contends for, and it separates the arms monotonically in
+    beta: kvaware spreads 1.70x across the two engines, b0.5 1.18x, b2.0 1.11x.
+
+    SM% is the weaker read and is here because §3 asks for GPU utilization.
+    Both arms serve the identical model at the identical offered rate, so the
+    GPUs are near-saturated in every cell and SM% mostly cannot discriminate -
+    though it is not perfectly flat either (b2.0 came back 72% vs 93%), so the
+    panel is drawn without a claim attached to it.
+
+    Router CPU and memory are the extension's overhead, measured: the router is
+    the only component the policy changes.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
+    stats = [(c, utilization.cell_utilization(c["dir"])) for c in ordered]
+    labels = [c["cell"].split("-", 2)[-1] for c, _ in stats]
+    y = list(range(len(stats)))
+
+    # (a) GPU memory: idlest vs busiest engine, the imbalance in KV occupancy
+    ax = axes[0][0]
+    lows, highs = [], []
+    for _, u in stats:
+        sp = utilization.spread(u["engines"].get("vllm_kv_cache_usage_perc", {}))
+        lows.append(sp[0] if sp else float("nan"))
+        highs.append(sp[1] if sp else float("nan"))
+    ax.barh([i - 0.2 for i in y], highs, height=0.38, color="tab:red", alpha=0.8,
+            label="busiest engine")
+    ax.barh([i + 0.2 for i in y], lows, height=0.38, color="tab:blue", alpha=0.8,
+            label="idlest engine")
+    for i, (lo, hi) in enumerate(zip(lows, highs)):
+        if lo and lo == lo:
+            ax.annotate(f"{hi / lo:.2f}x", (max(hi, lo), i), textcoords="offset points",
+                        xytext=(6, 0), fontsize=8, va="center")
+    ax.set_xlabel("mean KV cache occupancy (fraction)")
+    ax.set_title("GPU memory - the resource the policy contends for")
+    # Headroom for the spread annotations, which sit past the longest bar and
+    # otherwise collide with the legend.
+    ax.set_xlim(0, max((h for h in highs if h == h), default=1) * 1.25)
+    ax.legend(fontsize=8, loc="lower right")
+
+    # (b) GPU SM% and power from DCGM, per GPU
+    ax = axes[0][1]
+    sm = [[v["mean"] for _, v in sorted(u["gpu"].get("DCGM_FI_DEV_GPU_UTIL", {}).items())]
+          for _, u in stats]
+    width = 0.38
+    for j, colour in enumerate(("tab:green", "tab:olive")):
+        vals = [row[j] if len(row) > j else float("nan") for row in sm]
+        ax.barh([i + (j - 0.5) * width for i in y], vals, height=width, color=colour,
+                alpha=0.8, label=f"GPU {j}")
+    ax.set_xlabel("mean SM utilization (%)")
+    ax.set_title("GPU SM utilization (DCGM)")
+    ax.legend(fontsize=8, loc="lower right")
+
+    # (c) router CPU - the extension's cost, if it has one
+    ax = axes[1][0]
+    cpu = [u["router"].get("process_cpu_seconds_total", {}).get("rate", float("nan"))
+           for _, u in stats]
+    ax.barh(y, cpu, height=0.6, color="tab:purple", alpha=0.8)
+    ax.set_xlabel("router CPU (core-seconds per second)")
+    ax.set_title("CPU - routing overhead")
+
+    # (d) host memory: router RSS, plus the cache's own footprint where recorded
+    ax = axes[1][1]
+    rss = [u["router"].get("process_resident_memory_bytes", {}).get("mean", float("nan")) / 1e9
+           for _, u in stats]
+    ax.barh([i - 0.2 for i in y], rss, height=0.38, color="tab:brown", alpha=0.8,
+            label="router RSS")
+    # lmcache:local_cache_usage is scraped only from #35 onward, so cells
+    # predating it draw the router bar alone rather than a misleading zero.
+    cache = []
+    for _, u in stats:
+        per_pod = u["engines"].get("lmcache_local_cache_usage", {})
+        means = [v["mean"] for v in per_pod.values() if v["n"]]
+        cache.append(sum(means) / len(means) / 1e9 if means else float("nan"))
+    if any(x == x for x in cache):
+        ax.barh([i + 0.2 for i in y], cache, height=0.38, color="tab:cyan", alpha=0.8,
+                label="LMCache host RAM (mean per engine)")
+    ax.set_xlabel("memory (GB)")
+    ax.set_title("Host memory")
+    ax.legend(fontsize=8)
+
+    for ax in axes.flat:
+        ax.set_yticks(y)
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.invert_yaxis()
+        ax.grid(alpha=0.3, axis="x")
+    fig.suptitle("Resource utilization per arm (§3)")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
@@ -448,6 +550,7 @@ def main() -> None:
     fig_beta_tradeoff(cells, os.path.join(args.out, "fig7-beta-tradeoff.png"))
     fig_itl(cells, os.path.join(args.out, "fig8-itl-percentiles.png"))
     fig_throughput(cells, os.path.join(args.out, "fig9-throughput.png"))
+    fig_utilization(cells, os.path.join(args.out, "fig10-utilization.png"))
     print(f"wrote figures to {args.out}")
 
 

@@ -8,9 +8,11 @@ Metric roles (methodology):
   vllm:num_requests_running/waiting   per-engine load → load-balance CV
   vllm:request_queue_time_seconds_*   queueing (mechanism metric)
   lmcache:*hit*                       hit-rate deltas over the window
-  vllm:kv_cache_usage_perc            KV memory pressure
+  vllm:kv_cache_usage_perc            KV memory pressure = GPU memory (§3)
+  lmcache:local_cache_usage           engine host RAM held by the cache (§3)
   process_cpu_seconds_total,
-  process_resident_memory_bytes       rubric CPU/mem utilization
+  process_resident_memory_bytes       router CPU/mem utilization (§3; router
+                                      ONLY - the engines export no process_*)
 
 Usage (run_cell.sh port-forwards Prometheus to localhost:9090):
   python3 prom_dump.py --start 1722500000 --end 1722503600 --out results/run/prom
@@ -67,6 +69,20 @@ METRICS = [
     # gapu-2 2026-08-01) - there is no plain gauge under the bare name
     "lmcache:request_cache_hit_rate_sum",
     "lmcache:request_cache_hit_rate_count",
+    # §3 utilization, engine side (#35). The engines export NO process_* metrics
+    # - verified at the endpoint, 113 metric names and not one of them - so the
+    # two process_* lines below only ever return the router, and engine host-CPU
+    # is simply not obtainable from this deployment. What the engines DO export
+    # is their memory footprint, which is the number that was actually wanted:
+    # lmcache:local_cache_usage is the host RAM the LMCache CPU backend holds
+    # (~3.8 GB/engine), and cache_config_info carries the block geometry that
+    # turns kv_cache_usage_perc into absolute GB.
+    "lmcache:local_cache_usage",
+    "lmcache:local_storage_usage",
+    "lmcache:remote_cache_usage",
+    "lmcache:active_memory_objs_count",
+    "lmcache:pinned_memory_objs_count",
+    "vllm:cache_config_info",
     "process_cpu_seconds_total",
     "process_resident_memory_bytes",
     "router_cpu_usage_percent",
