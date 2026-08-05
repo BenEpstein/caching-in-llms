@@ -8,6 +8,66 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - Confirmatory sweep: the load term is the mechanism, beta=0.5 is the knee
+
+Five cells, n=20 each, rate 16, OSL 64, one unattended batch 00:52-02:33. All valid
+(pooled error 0.29-0.50%). Throughput flat at 14.33-14.54 req/s across every arm, so all
+arms sat at the same operating point and latency differences are attributable to placement.
+
+| cell | imbalance | ttft p95 | itl p95 | e2e p95 | hit rate |
+|---|---|---|---|---|---|
+| `kvaware` | 2.630 | 0.411 | 0.158 | 6.866 | 0.9118 |
+| `loadaware-b0` | 2.647 | 0.463 | 0.184 | 8.196 | 0.9102 |
+| **`loadaware-b0.5`** | **1.262** | **0.401** | **0.146** | **6.052** | 0.9035 |
+| `loadaware-b1.0` | 1.209 | 0.417 | 0.151 | 6.064 | 0.8772 |
+| `loadaware-b2.0` | 1.189 | 0.454 | 0.163 | 6.387 | 0.8725 |
+
+### Decided
+- **The load term is the mechanism, and the ablation is unambiguous.** beta=0 is
+  indistinguishable from the baseline on imbalance (2.647 vs 2.630, **7/20 seeds, p=0.8847**)
+  - cache-aware placement alone does nothing for load balance. Every beta >= 0.5 lands
+  **19-20/20 at p<0.0001** against both `kvaware` and `beta=0`. One parameter, same binary,
+  effect present only when it is non-zero: there is no room for an implementation artifact.
+- **beta = 0.5 is the operating point.** It captures ~95% of the achievable balance for
+  **0.7 pp of cache hit rate**, where beta=1.0 costs 3.3 pp and beta=2.0 costs 3.8 pp for a
+  further 4% of imbalance. It is also best on every latency metric (TTFT, ITL and E2E).
+  The knee reproduces yesterday's independent n=3 finding.
+- **The headline does not depend on the beta pick.** Imbalance reduction is 44-54% at
+  p<0.0001 for every beta in {0.5, 1.0, 2.0}. Report it as "the load term reduces imbalance
+  ~50%, present at every beta >= 0.5, absent at beta=0" - robust to the operating-point
+  choice, so no pre-registration of a specific beta is needed to defend it.
+- **The beta-selection rule was NOT pre-registered and is ambiguous on this data.** "Within
+  5% of the best reduction" picks beta=0.5 read as percentage points (2.81 pp below best) and
+  beta=1.0 read as relative (5.12% below). Recorded as a defect in the rule, not resolved
+  after the fact. This sweep is therefore **characterization**, not a confirmatory test of a
+  pre-specified beta.
+
+### Added
+- **TTFT decomposed into engine vs non-engine, and the answer changes what is measurable.**
+  Mean TTFT this session: client 254-333 ms, engine 133-159 ms, so **45-59% of measured TTFT
+  never touches the model** (prefill alone is 95-110 ms). The non-engine half swung **121 ms
+  (b0.5) to 195 ms (b1.0) between two cells an hour apart in the same session** - larger than
+  the 10-60 ms arm differences being chased. That is a per-cell systematic offset, not
+  per-request noise, so **more seeds cannot fix it**, and it is the complete explanation for
+  why TTFT has been a null in every sweep this project has run.
+- **Engine-side, the latency signal matches the imbalance signal**: mean engine TTFT
+  `kvaware` 154.7, `b0` 158.9, `b0.5` **132.5**, `b1.0` 137.7, `b2.0` 157.6 ms - beta=0 at the
+  baseline, beta 0.5-1.0 ~14% better. No p-values yet: these are cell-level histogram means,
+  not per-seed pairs. Recovering the pairing needs per-seed histogram windows (each seed's
+  window is derivable from `send_ts`), which is **zero cluster time** and the highest-value
+  next step.
+- Yesterday's drift confirmed as entirely non-engine: 91 ms (15:27) -> 308 ms (20:44) ->
+  276 ms (21:43) while engine-side stayed 118-168 ms.
+- `osl_tokens` added to `export_summary` columns; `results/summary-per-seed.csv` regenerated
+  to **299 rows across 33 cells**.
+
+### Fixed
+- **`loadaware-b0.5` and `loadaware-b1.0` each name TWO DIFFERENT POLICIES** in
+  `summary-per-seed.csv`, discriminated only by `git_commit`: before `7e2dffb` beta multiplied
+  an ABSOLUTE in-flight count, from `7e2dffb` onward a fleet-relative one. They do not convert
+  by a constant. `beta=0` is the only value meaning the same thing on both sides. Warned at
+  the top of `export_summary.FIELDS`, where the file is generated.
+
 ## 2026-08-04 (night, later) - TTFT measures the WAN, not the system under test
 
 ### Decided

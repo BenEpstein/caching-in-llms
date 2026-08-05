@@ -31,7 +31,26 @@ FIELDS = [
     # "alpha" is retained for the runs recorded before it was removed from the
     # policy (it was 1.0 in every one of them, and only the ratio to beta was
     # ever a free parameter). Cells run since write it empty.
-    "run", "cell", "arm", "alpha", "beta", "rate_req_s", "git_commit", "router_image",
+    #
+    # *** BETA MEANS TWO DIFFERENT THINGS IN THIS FILE - CHECK git_commit ***
+    #
+    # `loadaware-b0.5` and `loadaware-b1.0` each appear under BOTH policies:
+    #
+    #   git_commit BEFORE 7e2dffb : beta * ABSOLUTE in-flight count
+    #   git_commit 7e2dffb ONWARD : beta * (load - fleet_mean) / max(1, mean)
+    #
+    # These are not comparable. The same label is a different policy, and the
+    # numeric values do not convert by a constant - the relative form
+    # self-adjusts per request while the absolute one does not (the conversion
+    # beta_rel = beta_abs * mean_load holds only at the mean, and empirically
+    # mispredicted by ~2x, see CHANGELOG 2026-08-05). Never pool or compare
+    # across that boundary without saying which side each cell is on.
+    #
+    # Absolute-era beta values seen: 0.034, 0.068, 0.1, 0.5, 1.0
+    # Relative-era beta values seen: 0, 0.5, 1.0, 2.0
+    # beta=0 is the ONE value that means the same thing in both (the load term
+    # vanishes), which is why the ablation cells are poolable and the rest are not.
+    "run", "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
     "itl_p50", "itl_p95", "itl_p99",
@@ -99,6 +118,7 @@ def main() -> None:
                 "run": os.path.basename(run_dir.rstrip("/")),
                 "cell": run["cell"], "arm": run["arm"],
                 "alpha": run.get("alpha"), "beta": run.get("beta"),
+                "osl_tokens": run.get("osl_tokens"),
                 "rate_req_s": run["rate_req_s"],
                 "git_commit": run["git_commit"][:12],
                 "router_image": run["router_image"],
