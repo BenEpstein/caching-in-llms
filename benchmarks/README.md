@@ -117,17 +117,20 @@ differ - the methodology's "identical workload across arms" is enforced, not ass
 
 ### What is committed vs. what stays local
 
-`results/` is gitignored - driver CSVs and Prometheus dumps run to megabytes. But every number
-in the report has to be checkable by a reader who cannot rerun the cluster, so two derived
-artifacts are **force-added** to git (`git add -f`, rather than punching holes in `.gitignore`):
+**`results/` is tracked in git** (changed 2026-08-03) - 1069 files, ~67 MB. Every number in the
+report has to be checkable by a reader who cannot rerun the cluster, and a derived table alone
+asks that reader to take the derivation on trust, so the raw artifacts are committed too:
 
 | Committed | Why |
 |---|---|
+| `results/<run>/driver-seed*.csv` | client-observed per-request TTFT / E2E / ITL / tokens |
+| `results/<run>/prom/*.json`, `results/<run>/dcgm.csv` | engine + router Prometheus series and GPU utilization over the run window |
 | `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
 | `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
 
-Between them a reader can reproduce every figure, every percentile, and both co-primary
-statistical tests without the raw per-request data. Regenerate with:
+The sole exclusion is `results/**/*.jsonl` - the frozen workload replay files, which are
+regenerable bit-identically from `benchmarks/workloads/manifest.json` and would otherwise add
+megabytes per run for no reviewability. Regenerate the derived table with:
 
 ```bash
 python3 benchmarks/export_summary.py results/<run>... --out results/summary-per-seed.csv
@@ -137,9 +140,31 @@ The `run` column is the sort key and comes first on purpose: `cell` alone is amb
 the same cell name appears in the 7.5 req/s pilot and the 10.5 req/s amended sweep, and
 grouping by it silently merges two different experiments.
 
-Driver CSVs are the only percentile-capable latency source (the router exposes only
-average-latency gauges; engine TTFT histograms start their clock at the engine and miss
-router overhead). Router `gpu_prefix_cache_*` gauges are dead (0.0) in this build - ignored.
+### Which latency source is trustworthy
+
+Driver CSVs are the only **per-request** latency source: the router exposes average-latency
+gauges only, and its `gpu_prefix_cache_*` gauges are dead (0.0) in this build - both ignored.
+Per-request is not the same as trustworthy, though. The driver has so far run on a laptop
+against the cluster's public route, and **45-59% of every recorded `ttft_s` is that network**.
+Measured RTT to the route host: avg 44.4 ms (min 18.7, max 132, sd 39.7). Over one evening the
+non-engine component of client TTFT moved **258 -> 478 ms while engine-side TTFT stayed flat at
+0.168 -> 0.180 s** - a per-cell systematic offset larger than the effect under study, so more
+seeds cannot average it away. The signature is a floor shift (p10 rose 2.0x), which is what a
+constant network offset looks like and not what a routing policy does.
+
+Two consequences for reading anything under `results/`:
+
+- **Load imbalance is server-side**, derived from Prometheus over the run window, and therefore
+  immune to all of this.
+- Engine-side `vllm:time_to_first_token_seconds_bucket` is the clean latency cross-check. It is
+  windowable per seed - seeds replay sequentially and each seed's window derives from `send_ts`
+  in its `driver-seed<N>.csv` - so the paired design survives on it. It is also coarse: fixed
+  histogram buckets against a small effect, with p99 sitting where little of the mass lives.
+  A cross-check, not a substitute for per-request p95/p99.
+
+The fix is the instrument, not the metric: the driver moves in-cluster (#27) so that
+client-observed per-request TTFT is measured with no WAN in it. Subtracting a measured RTT
+baseline was considered and rejected - a per-request correction that cannot be verified.
 
 ## Statistics (pre-registered)
 

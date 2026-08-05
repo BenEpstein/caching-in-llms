@@ -8,6 +8,33 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-05 - Front door part 1: figures are reproducible, benchmarks/README stops lying (#26)
+
+### Fixed
+- **`matplotlib` was missing from `requirements.txt`**, and `plot_results.py` is the sole
+  generator of all 9 figures in `docs/figures/` - so on a clean clone every §5 figure died on
+  `ModuleNotFoundError` while working on the author's machine. Verified in a fresh venv:
+  install → `pytest benchmarks/ tests/ -q` 120 passed → all 9 figures regenerate, exit 0.
+  Audited the rest: `httpx`, `pytest`, `matplotlib` are the only third-party imports across
+  `benchmarks/` + `tests/`; `analyze.py` and `export_summary.py` are stdlib-only, confirmed.
+- **`benchmarks/README.md` had the TTFT source inverted.** It argued engine-side histograms
+  "miss router overhead" and that driver CSVs are the trustworthy source - the opposite of what
+  was measured (45-59% of client `ttft_s` is laptop-to-cluster network; per-cell offset larger
+  than the effect). Now states the WAN finding, keeps engine-side as the per-seed-windowable
+  cross-check with its coarseness named, and points at #27 as the fix to the instrument.
+- **`benchmarks/README.md` contradicted `.gitignore`** about where the data is: it claimed
+  `results/` was gitignored with two artifacts force-added. `results/` is tracked in full -
+  1069 files, ~67 MB, sole exclusion `results/**/*.jsonl`. A grader reading the old text would
+  not have gone looking for raw data that is sitting in the repo.
+
+### Decided
+- **The `README.md` half of #26 is deferred, not dropped.** PR #23 already rewrote it (plus
+  `requirements.txt`), so writing a second front door here would guarantee a conflict. #23's
+  version is itself stale on this branch - it documents `LOADAWARE_ALPHA` and β=0.034, and α no
+  longer exists - and with benchmarking and the final architecture still open, a README that
+  declares the project complete would be wrong today. Tracked as its own ticket; evidence in
+  [#26](https://github.com/BenEpstein/caching-in-llms/issues/26).
+
 ## 2026-08-05 - Confirmatory sweep: the load term is the mechanism, beta=0.5 is the knee
 
 Five cells, n=20 each, rate 16, OSL 64, one unattended batch 00:52-02:33. All valid
