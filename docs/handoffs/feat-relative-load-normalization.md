@@ -1,7 +1,7 @@
 ---
 branch: feat/relative-load-normalization
-date: 2026-08-04 22:05
-status: blocked
+date: 2026-08-05 03:10
+status: ready-for-review
 ---
 
 # Handoff: feat/relative-load-normalization
@@ -11,15 +11,32 @@ status: blocked
 
 ## Current State
 
-Two things happened this session. The **policy change is done and green**: `loadaware` now
-normalizes load against the live fleet mean, `alpha` is deleted, 120 tests pass. The
-**measurement finding is the reason this is blocked**: the driver's `ttft_s` is measured
-client-side over a WAN link, so TTFT is not comparable across cells run at different times,
-and the pre-registered TTFT co-primary is contaminated for every run in the project.
+Policy change **done and green** (relative-load normalization, alpha removed, 120 tests).
+Confirmatory sweep **done and clean** (5 cells x n=20, rate 16, OSL 64). Both co-primaries
+now favour beta=0.5, and the ablation is unambiguous.
 
-The open question, and the reason for this handoff: **what becomes the TTFT metric of record,
-such that it is valid across benchmarks run hours or days apart, with no network in it.**
-Ben is bringing a proposed solution; do not pick one unilaterally.
+The one thing left is a **decision, not work**: the pre-registered TTFT co-primary was
+client-side, and client-side TTFT is 45-59% network. Engine-side is collected, backfilled,
+and per-seed windowable - it turns the TTFT null into p=0.0053 - but switching to it was
+decided after seeing the null, so it is exploratory until pre-registered and re-run.
+
+Full account: issue #7 comments 5190679007 (session) and 5191369931 (WAN-removed results
+plus the open decisions). Read those first; this file is the working-state companion.
+
+## Results
+
+| cell | imbalance | engine TTFT | client TTFT | hit rate |
+|---|---|---|---|---|
+| `kvaware` | 2.630 | 130.8 ms | 258.5 ms | 0.9118 |
+| `b0` (ablation) | 2.647 | 140.0 | 278.4 | 0.9102 |
+| **`b0.5`** | **1.262** | **121.7** | 249.4 | 0.9035 |
+| `b1.0` | 1.209 | 126.7 | 257.4 | 0.8772 |
+| `b2.0` | 1.189 | 149.0 | 281.0 | 0.8725 |
+
+Paired vs `kvaware`, n=20: imbalance **20/20 p<0.0001 +44.4%**; engine TTFT **15/20
+p=0.0053 +9.0%** CI [+0.8%, +24.5%]. Ablation `b0` is null on BOTH (p=0.88, p=0.38).
+Client-side TTFT for the same arm is p=0.0448 - fails the 0.025 threshold. Removing the
+network is the difference between a null and a result.
 
 ## Modified Files
 
@@ -62,19 +79,30 @@ rate-16 cells.
 
 ## What's Left
 
-1. **Decide the TTFT metric of record.** Blocking. See Key Context for the three options and
-   the per-seed windowing unlock. Ben is bringing a proposal.
-2. **Re-derive the §5 numbers** on whichever metric wins. The b1.0-vs-kvaware TTFT comparison
-   currently in this session's notes is void.
-3. **Confirmatory n=20 at the chosen beta.** Pre-register the beta on #3 *before* running -
-   choosing beta by looking at TTFT and then reporting a p-value from that run is the same
-   optional-stopping error the project already refused on seeds.
-4. **Decide the headline beta.** On imbalance, 0.5 and 1.0 are both ~40-46% better than a
-   same-hour kvaware; 0.25 has no effect at all (2.257 vs control 2.113). Useful range starts
-   at 0.5. Cannot rank 0.5 vs 1.0 on TTFT until item 1 is settled.
-5. **CHANGELOG** has the policy entry but not the WAN finding - the detail is in `2d76f01`'s
-   commit message and needs folding in.
-6. Nothing pushed since `f21d18f`; `2d76f01` is local only.
+**Decide first (issue #7 comment 5191369931 has the options table):**
+
+1. **What to do about the WAN.** Recommended: engine-side as metric of record (zero cost,
+   already collected + backfilled, per-seed pairing demonstrated) PLUS client-side reported
+   as clearly-labelled "user-observed, valid within a session only". Driver-in-cluster is
+   the better fix if the schedule allows; subtracting an RTT baseline is a trap.
+2. **Pre-register engine-side per-seed TTFT** as the co-primary on #3, BEFORE the run below.
+
+**Then run (~40 min, two cells back-to-back):**
+
+    SEEDS="1 2 3 ... 20" ./benchmarks/run_cell.sh kvaware 16 results
+    LOADAWARE_TAG=<sha> SEEDS="1 2 3 ... 20" ./benchmarks/run_cell.sh loadaware-b0.5 16 results
+
+Does three jobs at once: promotes TTFT from exploratory to confirmed, re-validates
+imbalance, and doubles as the drift control (back-to-back cells bracket each other).
+Highest grade-impact per minute of anything remaining.
+
+**Figures owed:** per-engine in-flight vs time (`kvaware` alongside `b0.5`) - makes the
+mechanism visible, data already in `vllm_num_requests_running.json`, no new runs. And
+retitle `fig1` to say which TTFT it plots.
+
+**Do NOT change:** the policy (beta=0.5 settled by two independent sweeps), the workload
+(frozen + SHA-256 pinned), or the operating point (rate 16 / OSL 64 sits inside the narrow
+window where imbalance exists but the fleet is not saturated).
 
 ## Blockers
 
