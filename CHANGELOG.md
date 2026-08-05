@@ -24,6 +24,26 @@ with a pointer to the evidence — those matter as much as code.
   hardcoded 0.05. No result to date fell in the gap, so no reported verdict changes. Now a
   named `ALPHA` constant.
 
+### Added (run log)
+- **`docs/sweep-2026-08-06-findings.md`** - end-to-end run log, the measured diagnosis of why
+  balance did not convert to latency, and a proposed next experiment. Part 3 is a proposal, not
+  a decision: nothing in it is pre-registered until written up and signed on #31.
+
+### Decided (diagnosis)
+- **The operating point, not the policy, is why TTFT p95 came back null.** `vllm:num_requests_waiting`
+  on the `kvaware` arm was nonzero in **0 of 284 scrapes**; `b0.5` 0/282. KV occupancy 25% mean,
+  zero preemptions, SM util 87-91%. The workload produced real imbalance (2.45x) with no
+  contention behind it, so landing on the busier engine cost almost nothing. Rev 2's premise
+  that rate 16 "runs at or above the knee" is falsified by its own queueing data.
+- **The 14.37 req/s throughput figure is a measurement artefact, not a capacity ceiling.** The
+  driver put 15.52 req/s on the wire (32.2 s send span for 500 requests); `wall_s` includes a
+  2.58 s drain tail after the last send. Do not read that column as saturation.
+- **Next experiment should measure goodput, not TTFT p95.** Exploratory check on this sweep's
+  data: SLO attainment at TTFT<150 ms is 42.2% → 49.6%, +7.3 pts, **16/20 seeds** - more signal
+  than the p95 median-paired test's 12/20, even with no queueing. Requires a new run at a new
+  operating point with its own pre-registration; re-analysing these cells with a new metric
+  would be p-hacking. Rationale and guardrails in the findings doc, Parts 3-4.
+
 ### Fixed (figures)
 - **fig1's legend read "median of 6 seeds" through a 20-seed sweep**, contradicting the title
   on the same figure. Same defect `_panel_grid` documents fixing for the bar panels, missed on
