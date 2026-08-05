@@ -21,7 +21,7 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # replay runs in-cluster from the bench image (#27), so BENCH_TAG is required on
 # BOTH arms - the baseline needs it exactly as much as loadaware does.
 : "${BENCH_TAG:?the sweep needs BENCH_TAG=<git short SHA of the CI-built bench image> - every cell replays from it, both arms}"
-: "${LOADAWARE_TAG:?the sweep needs LOADAWARE_TAG=<git short SHA of the CI-built router image> - ${BETA_GRID:-0 0.5 1.0 2.0} are loadaware cells}"
+: "${LOADAWARE_TAG:?the sweep needs LOADAWARE_TAG=<git short SHA of the CI-built router image> - ${BETA_GRID:-0.5 1.0 2.0 0} are loadaware cells}"
 
 # ---- why this shape ---------------------------------------------------------
 #
