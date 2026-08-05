@@ -78,7 +78,6 @@ echo
 echo "==> saturation curve (offered vs achieved - the knee is where they diverge)"
 python3 - "$PILOT_DIR" <<'PY'
 import csv, glob, re, sys
-sys.path.insert(0, __import__("os").path.join(__import__("os").path.dirname(__file__) or ".", "."))
 def pct(xs, p):
     xs = sorted(xs)
     return xs[min(len(xs) - 1, max(0, round(p / 100 * (len(xs) - 1))))] if xs else float("nan")

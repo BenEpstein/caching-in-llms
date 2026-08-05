@@ -1,10 +1,11 @@
 """Async load driver: replays a workload against an OpenAI-compatible endpoint.
 
 Measures per request: TTFT (streaming), end-to-end latency, token counts.
-Two arrival modes:
-  --rate R        open loop, Poisson arrivals at R req/s (tail-latency honest:
-                  queueing delay shows up in latency instead of throttling send)
-  --concurrency N closed loop, N workers back-to-back
+Arrival model: open loop, Poisson at --rate req/s. Open loop is tail-latency honest -
+queueing delay shows up in the latency it causes instead of throttling the send rate,
+which is the whole point when the metric under test is TTFT p95. A closed-loop mode
+existed and was never used by any caller; it was removed in #30 rather than left as
+an untested second path through the driver.
 
 Output: one CSV row per request. Analysis/plots live elsewhere; this only records.
 
@@ -199,27 +200,6 @@ async def run_open_loop(args, workload) -> List[Result]:
     return results
 
 
-async def run_closed_loop(args, workload) -> List[Result]:
-    queue: asyncio.Queue = asyncio.Queue()
-    for req in workload:
-        queue.put_nowait(req)
-    results: List[Result] = []
-
-    async def worker(client):
-        while True:
-            try:
-                req = queue.get_nowait()
-            except asyncio.QueueEmpty:
-                return
-            results.append(
-                await one_request(client, args.base_url, args.model, req, args.max_tokens)
-            )
-
-    async with httpx.AsyncClient(verify=not args.insecure, limits=_LIMITS) as client:
-        await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
-    return results
-
-
 def summarize(results: List[Result], wall_s: float) -> str:
     ok = [r for r in results if r.status == "ok"]
     e2e = [r.e2e_s for r in ok if r.e2e_s is not None]
@@ -246,9 +226,8 @@ def main():
     p.add_argument("--base-url", required=True)
     p.add_argument("--model", required=True)
     p.add_argument("--workload", required=True, help="JSONL from workload_gen.py")
-    mode = p.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--rate", type=float, help="open-loop Poisson arrivals (req/s)")
-    mode.add_argument("--concurrency", type=int, help="closed-loop worker count")
+    p.add_argument("--rate", type=float, required=True,
+                   help="open-loop Poisson arrivals (req/s)")
     p.add_argument("--max-tokens", type=int, default=64)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
@@ -261,10 +240,7 @@ def main():
 
     workload = load_workload(args.workload)
     t0 = time.perf_counter()
-    if args.rate:
-        results = asyncio.run(run_open_loop(args, workload))
-    else:
-        results = asyncio.run(run_closed_loop(args, workload))
+    results = asyncio.run(run_open_loop(args, workload))
     wall = time.perf_counter() - t0
 
     with open(args.out, "w", newline="") as f:

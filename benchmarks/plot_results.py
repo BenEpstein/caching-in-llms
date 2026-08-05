@@ -229,31 +229,23 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
-def fig_paired(cells: List[Dict], out: str, cand=None, base="kvaware") -> None:
+def fig_paired(cells: List[Dict], out: str, cand: str, base: str = "kvaware") -> None:
     """The headline test, drawn: one line per seed, candidate vs baseline.
 
     This is the figure the statistics actually operate on - the Wilcoxon sees
     exactly these lines and nothing else. A reversing seed is a line with the
     opposite slope, which is why it is worth a figure of its own.
 
-    `cand` MUST be passed or inferred; it used to default to the literal
-    "loadaware-b0.1" and return silently when that cell was absent. A hard-coded
-    beta cell had already gone stale once (the pre-2026-08-04 per-rate
-    calibration produced "loadaware-b0.034"), and the failure mode was silent:
-    no headline figure at all, no error, a figure set quietly missing its
-    centerpiece. beta is a fixed grid again now that it is dimensionless, but
-    the inference stays - a default that can silently match nothing is the
-    defect, not the particular value. Absent a match, raise.
+    `cand` is REQUIRED. It first defaulted to the literal "loadaware-b0.1" and returned
+    silently when that cell was absent; that was replaced by an inference accepting exactly
+    one non-b0 loadaware cell, which the standard grid (BETA_GRID="0 0.5 1.0 2.0") never
+    satisfies - it always yields three, so the default path could not fire at all (#30).
+
+    Both failures were the same shape: an interface that looks like it has a working default.
+    Naming the headline cell is also the honest contract - which arm is the headline is a
+    pre-registration decision, not something a plotting script should guess from whichever
+    directories it happened to be handed.
     """
-    if cand is None:
-        loadaware = [x["cell"] for x in cells
-                     if x["cell"].startswith("loadaware-b") and x["cell"] != "loadaware-b0"]
-        if len(loadaware) != 1:
-            raise SystemExit(
-                f"fig_paired: cannot infer the headline cell from {loadaware or 'none'} - "
-                "pass --cand explicitly"
-            )
-        cand = loadaware[0]
     c = next((x for x in cells if x["cell"] == cand), None)
     b = next((x for x in cells if x["cell"] == base), None)
     if not c or not b:
@@ -561,10 +553,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
     ap.add_argument("--out", default="docs/figures")
-    ap.add_argument("--cand", default=None,
-                    help="headline loadaware cell, e.g. loadaware-b0.5. Inferred only "
-                         "when exactly one non-b0 loadaware cell is present; the standard "
-                         "4-point beta grid has three, so pass it explicitly")
+    ap.add_argument("--cand", required=True,
+                    help="headline loadaware cell, e.g. loadaware-b0.5 - the arm the "
+                         "pre-registration names as the comparison of record")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)

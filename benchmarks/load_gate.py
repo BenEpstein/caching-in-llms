@@ -294,7 +294,6 @@ def main() -> int:
     print("==> beta is NOT read off this probe. It is dimensionless since the "
           "router normalizes load against the fleet mean, so the sweep runs a "
           "fixed grid around the documented default:")
-    print("==>   BETA_HEADLINE=1.0   BETA_HIGH=2.0   (grid: 0, 0.25, 0.5, 1.0, 2.0)")
     return 0
 
 
