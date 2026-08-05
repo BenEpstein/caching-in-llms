@@ -1,0 +1,79 @@
+name: Bench driver image
+
+# Builds the in-cluster benchmark driver image (#27) and pushes it to Quay. Mirror of
+# router-image.yml, and for the same reason: the measurement instrument has to be
+# reproducible from the repo, not built by hand on someone's laptop.
+#
+# Requires, set once by a repo admin:
+#   secret   QUAY_USERNAME - the Quay ROBOT account (shared with router-image.yml)
+#   secret   QUAY_TOKEN - that robot's token
+#   variable QUAY_BENCH_IMAGE - e.g. quay.io/<namespace>/bench-driver
+#
+# The repo must be PUBLIC on Quay: the Job has no imagePullSecret, so a private repo means
+# ImagePullBackOff. Without the credentials the build still runs and is verified on every
+# push; only the push is skipped.
+#
+# No "free disk space" step, unlike router-image.yml: this image is python:3.12-slim plus
+# httpx and five files, not a 10 GB torch stack.
+
+on:
+  push:
+    paths:
+      - "benchmarks/**"
+      - "Dockerfile.bench"
+      - ".github/workflows/bench-image.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -f Dockerfile.bench -t bench-image:ci .
+
+      - name: Verify the image can reconstruct the frozen dataset
+        # This is the reproducibility claim under test, not a smoke test: the image carries
+        # only manifest.json, so a pass means all 20 seeds regenerated bit-identically to the
+        # committed SHA-256s from source alone. It is also exactly what every measured cell
+        # does before it sends a request, so a drift is caught here rather than on the
+        # cluster. Measured at 0.84 s for all 20 seeds.
+        run: |
+          docker run --rm bench-image:ci /app/verify_dataset.sh /tmp/workloads
+
+      - name: Verify the driver path imports
+        # load_driver.py imports `percentile` from analyze.py; a missing COPY would only show
+        # up as a crashed cell 8 minutes into a cluster run.
+        run: |
+          docker run --rm --workdir /app bench-image:ci \
+            python3 -c "import httpx, load_driver, freeze_workloads; print('driver path ok')"
+
+      - name: Check push credentials
+        id: creds
+        run: |
+          if [ -n "${{ secrets.QUAY_TOKEN }}" ] && [ -n "${{ vars.QUAY_BENCH_IMAGE }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::QUAY_TOKEN / QUAY_BENCH_IMAGE not configured - built and verified, not pushed."
+          fi
+
+      - name: Log in to Quay
+        if: steps.creds.outputs.ready == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Push
+        if: steps.creds.outputs.ready == 'true'
+        # Tagged by commit SHA, never `latest` - same convention as the router image, so a
+        # run.json's driver.image tag and its git_commit line up by inspection.
+        run: |
+          TAG="${{ vars.QUAY_BENCH_IMAGE }}:$(git rev-parse --short HEAD)"
+          docker tag bench-image:ci "$TAG"
+          docker push "$TAG"
+          echo "::notice::pushed $TAG"
+          echo "Run a cell with: BENCH_TAG=$(git rev-parse --short HEAD) ./benchmarks/run_cell.sh <cell> <rate>"

@@ -31,6 +31,11 @@ CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RATE="${2:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RESULTS_ROOT="${3:-results}"
 
+# Both arms need it now: the measured replay runs in-cluster from the bench image (#27).
+# Checked here rather than in bench_job.sh so the cell fails in the first second instead of
+# after ~8 minutes of helm upgrade, cold start and warm-up.
+: "${BENCH_TAG:?every cell needs BENCH_TAG=<git short SHA of the CI-built bench image>}"
+
 # Which frozen seeds this cell replays. The inferential cells run 20 (n=6 cannot
 # survive a single reversal - the pilot proved it - and n=10 then returned
 # p=0.0527); the beta-sweep cells run a 3-seed subset of the SAME frozen files,
@@ -46,7 +51,11 @@ CHART="${CHART:-vllm/vllm-stack}"
 # Pin the chart: the cluster runs 0.1.11 and 0.1.12+ has schema drift - an
 # unpinned upgrade would silently migrate the stack mid-experiment.
 CHART_VERSION="${CHART_VERSION:-0.1.11}"
+# BASE_URL is the edge route, still used by the laptop-side warm-up (which is not measured).
 BASE_URL="${BASE_URL:-https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il}"
+# TARGET_URL is what the MEASURED replay hits, from inside the cluster (#27). Same target
+# Prometheus scrapes; `oc get svc stack-router-service` shows router-sport 80 -> 8000.
+TARGET_URL="${TARGET_URL:-http://stack-router-service.$NS.svc.cluster.local:80}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 ROUTER_DEPLOY="${ROUTER_DEPLOY:-stack-deployment-router}"
 ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
@@ -213,17 +222,26 @@ python3 "$BENCH_DIR/collectors/dcgm_poll.py" \
 PIDS+=($!)
 
 # ---- 8. measured replay: the cell's frozen seeds back-to-back ---------------
-CELL_START=$(date +%s)
-SEED_COUNT=$(echo "$SEEDS" | wc -w | tr -d ' ')
-for seed in $SEEDS; do
-  echo "==> seed $seed / $SEED_COUNT"
-  python3 "$BENCH_DIR/load_driver.py" \
-    --base-url "$BASE_URL" --model "$MODEL" --insecure \
-    --workload "$BENCH_DIR/workloads/seed-$seed.jsonl" \
-    --rate "$RATE" --seed "$seed" --max-tokens "$MAX_TOKENS" \
-    --out "$OUT/driver-seed$seed.csv"
-done
-CELL_END=$(date +%s)
+# The replay runs INSIDE the cluster (#27). It used to run here, on a laptop reaching gapu-2
+# over a WAN: RTT avg 44.4 ms, 45-59% of every recorded TTFT never touched the model, and the
+# non-engine component swung 121 -> 195 ms between two cells an hour apart - a per-cell
+# systematic offset larger than the 10-60 ms effect under study, so more seeds could not fix
+# it. That is the complete explanation for TTFT being a null in every sweep while load
+# imbalance (server-side, from Prometheus, and therefore immune) reached p<0.0001.
+#
+# The metric is unchanged. Only the instrument moved: a Job runs the SAME load_driver.py
+# against the router's ClusterIP - no route, no TLS, no WAN. Everything else in this script
+# still runs on the laptop and is untouched. Secondary benefit: a Job keeps running when the
+# laptop disconnects, which has already destroyed two sweeps.
+NS="$NS" MODEL="$MODEL" RATE="$RATE" MAX_TOKENS="$MAX_TOKENS" SEEDS="$SEEDS" \
+  CELL="$CELL" OUT="$OUT" TARGET_URL="$TARGET_URL" "$BENCH_DIR/bench_job.sh"
+
+# The window comes from the POD's clock, written by collect_job.py. It cannot come from
+# `date +%s` here: image pull plus dataset verification sit between the warm-up above and
+# the first request, and a laptop-clock window would drag warm-up traffic into the
+# Prometheus dump and contaminate the imbalance co-primary.
+# shellcheck source=/dev/null
+source "$OUT/window.env"   # CELL_START, CELL_END, DRIVER_NODE, BENCH_IMAGE
 
 # ---- 9. Prometheus dump over the measurement window -------------------------
 # Forward now, not at cell start: a short-lived forward is a reliable one. Retry
@@ -255,6 +273,7 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
 export CELL ARM BETA RATE MAX_TOKENS CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
+export DRIVER_NODE BENCH_IMAGE TARGET_URL
 python3 - <<'PY'
 import json, os
 env = os.environ
@@ -268,6 +287,14 @@ run = {
     "window": {"start_ts": int(env["CELL_START"]), "end_ts": int(env["CELL_END"])},
     "router_image": env["ROUTER_IMAGE"],
     "router_image_id": env["ROUTER_IMAGE_ID"],
+    # Where the measurement was taken from (#27). "in-cluster" is what makes the recorded
+    # TTFT comparable to the pre-registered metric rather than to the WAN-contaminated runs.
+    "driver": {
+        "location": "in-cluster",
+        "node": env["DRIVER_NODE"],
+        "image": env["BENCH_IMAGE"],
+        "target": env["TARGET_URL"],
+    },
     "git_commit": env["GIT_COMMIT"],
     "workload_manifest": manifest,
 }

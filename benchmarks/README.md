@@ -15,6 +15,10 @@ workload at fixed load.
 | `workload_gen.py` | Zipfian prefix workload generator (pure, seeded, unit-tested) |
 | `freeze_workloads.py` | Materialize + verify the 6 frozen seed files against `workloads/manifest.json` |
 | `load_driver.py` | Async open-loop (Poisson) / closed-loop driver; per-request CSV; streaming TTFT |
+| `in_pod.sh` | The measured replay, run **inside the cluster** by the bench image (#27) |
+| `verify_dataset.sh` | Regenerate + verify the frozen workload; called by `in_pod.sh` and by CI |
+| `bench_job.sh` | Laptop side: emit/apply the driver Job, wait it out, pull the log back |
+| `collect_job.py` | Parse that log into per-seed CSVs + the measurement window; all-or-nothing |
 | `warmup.py` | Unmeasured passes over the prefix pool before each cell |
 | `collectors/prom_dump.py` | Prometheus `query_range` dump for the run window |
 | `collectors/dcgm_poll.py` | GPU util/power/mem-copy CSV via the DCGM exporter |
@@ -76,8 +80,10 @@ python3 benchmarks/freeze_workloads.py
 # 1. step 0 - rate pilot on a warmed kvaware deployment (~30-60 min, human picks the knee)
 benchmarks/rate_pilot.sh
 
-# 2. the sweep (LOADAWARE_TAG = git short SHA of the CI-built router image on Quay)
-LOADAWARE_TAG=<sha> benchmarks/run_sweep.sh <rate>
+# 2. the sweep. Two SHA-tagged CI-built images, both required:
+#    LOADAWARE_TAG - the router image under test (loadaware cells only)
+#    BENCH_TAG     - the in-cluster driver image (EVERY cell, both arms)
+LOADAWARE_TAG=<sha> BENCH_TAG=<sha> benchmarks/run_sweep.sh <rate>
 
 # 3. headline comparison + summaries
 python3 benchmarks/analyze.py summary results/*
@@ -96,9 +102,49 @@ build exposes no registered-workers gauge) → `registry-probe.sh` with a fresh 
 gate) → warm-up passes gated on non-empty `layout_info` (router log must show
 `found by … router` cache-path routings); both lookup gates are skipped on roundrobin
 (`USES_LOOKUP=0`), whose routing ignores the registry and never emits either signal →
-6 seeds replayed back-to-back, no reset between seeds
-(steady-state) → Prometheus dump + DCGM CSV (one port-forward **per exporter pod** - the
-DaemonSet Service would pin to one node's GPU) + `run.json` manifest → validity check.
+**the measured replay, as a Job inside the cluster** (see below), seeds back-to-back with
+no reset between them (steady-state) → Prometheus dump + DCGM CSV (one port-forward **per
+exporter pod** - the DaemonSet Service would pin to one node's GPU) + `run.json` manifest →
+validity check.
+
+### The measured replay runs in-cluster (#27)
+
+Everything above and below this step is still laptop-side. Only the replay moved, and
+`load_driver.py` itself is unchanged - the metric is the same, the instrument is not:
+
+```
+laptop:  helm → cold start → warm-up gate → [apply Job] → prom dump → run.json
+cluster:                                     Job pod: verify dataset
+                                                   → seeds → svc ClusterIP
+                                                   → CSVs out through the pod log
+```
+
+- **Target** is `http://stack-router-service.<ns>.svc.cluster.local:80`, the same endpoint
+  Prometheus scrapes. No route, no TLS, no `--insecure`, no WAN.
+- **The dataset is regenerated in the pod, never copied.** The image carries only
+  `manifest.json`; `verify_dataset.sh` rebuilds all 20 seeds (0.84 s) and fails hard on any
+  SHA-256 drift. No PVC, no ConfigMap, no 126 MB transfer - and every cell re-proves the
+  frozen dataset is reconstructible from source.
+- **Results come back through the pod log**, one gzip+base64 frame per seed carrying the
+  plaintext CSV's SHA-256. `collect_job.py` writes nothing unless every frame decodes and
+  checksums: a partially-recovered cell would enter the paired stats as a real observation.
+  ~2.4 MB per 20-seed cell, against kubelet's 10 Mi rotation size.
+- **The measurement window comes from the pod's clock** (`CELL_START`/`CELL_END`), not the
+  laptop's. Image pull plus dataset verification sit between warm-up and the first request,
+  so a laptop-clock window would pull warm-up traffic into the Prometheus dump and
+  contaminate the imbalance co-primary.
+- **`backoffLimit: 0`, no `ttlSecondsAfterFinished`.** A crashed cell must fail loudly
+  rather than silently replaying seeds into the same window; the pod must outlive the run
+  because its log *is* the results channel.
+- **Disconnects are survivable.** `oc logs -f` is progress only; collection is a plain
+  `oc logs` at the end, which re-reads the whole log and is idempotent. Reconnecting is
+  "run the command again", not "resume a stream" - and the Job keeps running regardless,
+  which two VPN-destroyed sweeps are the reason for.
+- **The driver pod shares a node with an engine, unavoidably**: gapu-2 has two schedulable
+  nodes and an engine on each, and worker0 is at 93% CPU / 99% memory requested, so the
+  driver lands on worker1. There is no CPU limit, on purpose - CFS throttling would inflate
+  client TTFT exactly the way the WAN did. The control is the engine-side TTFT cross-check,
+  not a scheduling rule; `run.json` records the node.
 
 ## What a run directory contains
 
@@ -109,7 +155,12 @@ results/<ts>-<cell>/
   prom/*.json               vllm:num_requests_running/waiting, request_queue_time, kv_cache_usage,
                             lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution
   dcgm.csv                  GPU_UTIL / POWER_USAGE / MEM_COPY_UTIL per GPU, ~5 s samples
-  run.json                  arm, β, rate, image + imageID, git commit, workload manifest, window
+  run.json                  arm, β, rate, image + imageID, git commit, workload manifest, window,
+                            and `driver` - where the replay ran (node, bench image, target URL)
+  window.env                CELL_START/CELL_END from the POD's clock, plus node + bench image;
+                            sourced by run_cell.sh, written by collect_job.py
+  job.log                   raw Job log (untracked): the ~2.4 MB base64 TRANSPORT for the CSVs
+                            above, kept on disk for debugging only
 ```
 
 `analyze.py compare` refuses to pair two runs whose `run.json` rate or workload manifest
@@ -128,9 +179,11 @@ asks that reader to take the derivation on trust, so the raw artifacts are commi
 | `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
 | `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
 
-The sole exclusion is `results/**/*.jsonl` - the frozen workload replay files, which are
-regenerable bit-identically from `benchmarks/workloads/manifest.json` and would otherwise add
-megabytes per run for no reviewability. Regenerate the derived table with:
+Two exclusions. `results/**/*.jsonl` - the frozen workload replay files, regenerable
+bit-identically from `benchmarks/workloads/manifest.json`, megabytes per run for no
+reviewability. And `results/**/job.log` (#27) - the base64 transport that the tracked
+`driver-seed*.csv` beside it decodes to, so committing it would double the repo to store the
+same bytes twice. Regenerate the derived table with:
 
 ```bash
 python3 benchmarks/export_summary.py results/<run>... --out results/summary-per-seed.csv
@@ -162,9 +215,17 @@ Two consequences for reading anything under `results/`:
   histogram buckets against a small effect, with p99 sitting where little of the mass lives.
   A cross-check, not a substitute for per-request p95/p99.
 
-The fix is the instrument, not the metric: the driver moves in-cluster (#27) so that
-client-observed per-request TTFT is measured with no WAN in it. Subtracting a measured RTT
-baseline was considered and rejected - a per-request correction that cannot be verified.
+The fix is the instrument, not the metric: the driver now runs **in-cluster** (#27), so
+client-observed per-request TTFT is measured with no WAN in it. Switching to engine-side data
+instead would have been metric-switching after seeing a null, which is indefensible however
+good the reasoning; re-running the *originally pre-registered* metric on a *fixed instrument*
+is not. Subtracting a measured RTT baseline was also considered and rejected - a per-request
+correction that cannot be verified.
+
+**This divides `results/` in two.** Every cell whose `run.json` has no `driver` block was
+recorded over the WAN and its `ttft_s` carries that offset; cells with `driver.location:
+in-cluster` do not. Do not pool the two, and read any pre-#27 client TTFT as an upper bound
+with a per-cell constant in it. Load imbalance is unaffected in both, being server-side.
 
 ## Statistics (pre-registered)
 
