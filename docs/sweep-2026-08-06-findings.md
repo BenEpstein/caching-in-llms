@@ -1,14 +1,14 @@
 # Confirmatory sweep 2026-08-06: run log, diagnosis, and the open question
 
-> status: live · 2026-08-06 · run log and measured diagnosis for the #31 confirmatory sweep.
-> Decisions and their rationale live in `CHANGELOG.md` (2026-08-06) and issue #31; this doc is
-> the artifact those point at.
+> status: live · 2026-08-06 (revised, same day) · run log and measured diagnosis for the #31
+> confirmatory sweep. Decisions and their rationale live in `CHANGELOG.md` and issues #31 / #50;
+> this doc is the artifact those point at.
 >
-> **Parts 1 and 2 are settled fact - what ran and what it measured. Part 3 is deliberately
-> unresolved.** It lays out the option space with the argument on both sides of each branch and
-> ends in a list of decisions nobody has made yet. It is not a plan to execute. Whoever picks
-> this up should expect to argue it, and should treat any ranking they find here as one input,
-> not an answer.
+> **Parts 1 and 2 are settled fact - what ran and what it measured.** Part 3 was written as an
+> open option space and is now **closed**: it records what was decided and why the question it
+> posed dissolved rather than being answered. Two things in the original text are superseded and
+> are marked where they appear - the `b0` drift reading (Part 1) and the "free goodput holdout"
+> (Part 3). Open work moved to #50.
 
 ## Part 1 - What ran
 
@@ -142,151 +142,111 @@ per-seed improvement correlates −0.929 with how bad `kvaware` was on that seed
 bad tail rather than shifting the distribution. Exploratory, found after the null, labelled as
 such - but it is the seed of the next experiment.
 
-## Part 3 - How do we show we are better? (open, for the next session to argue)
+## Part 3 - How we show we are better (CLOSED 2026-08-06)
 
-This part is deliberately NOT a plan. It is the option space plus the evidence for and against
-each branch, because the decision is a judgement about what this project is trying to prove and
-that is not settled. Nothing here is pre-registered. Anyone picking this up should expect to
-argue the options, not execute them.
+This part was written as an open option space ending in six decisions nobody had made. It is
+now closed. The question did not get answered so much as dissolve, and the record of how is
+worth more than the option table it replaces. Decisions and their rationale are in `CHANGELOG.md`
+and #31; what remains open moved to #50.
 
-### The question under all of it
+### What landed
 
-**What counts as "better" for this project?** Four defensible answers, and they lead to
-different experiments:
+| | |
+|---|---|
+| Goodput metric `ttft_slo_miss`, tunable `--slo`, fig12, `reproduce.sh` coverage, unit tests | #49 |
+| `roundrobin` comparator at n=20 | #51 |
+| `roundrobin` on fig12 as the capacity floor | #52 |
 
-| answer | the claim it produces | do we already have it? |
-|---|---|---|
-| Balance | "48% less load imbalance, p=1e-5" | **Yes, banked.** |
-| Latency | "X% lower TTFT p95" | No - null at n=20, and the operating point could not test it |
-| Goodput | "X% more requests meet the SLO" | Not measured. Exploratory signal looks better than p95's |
-| Capacity | "N% more traffic on the same 2 GPUs at fixed SLO" | Not measured. Strongest claim, most cluster time |
-| Predictability | "63% less variance in p95" | Measured, but exploratory and post-hoc |
+Descriptive, mean over 20 seeds per arm, at the documented 150 ms objective:
 
-Ben's stated position (2026-08-06): balance alone *"doesn't mean anything to me, we need to
-show that we are better."* That argues against stopping at the banked claim. It does not by
-itself pick between goodput, capacity and latency.
+| arm | goodput @150 ms | achieved req/s | Load Imbalance |
+|---|---|---|---|
+| `kvaware` | 42.0% | 14.32 | 2.448 |
+| `loadaware-b0.5` | **49.4%** | 14.35 | **1.269** |
+| `loadaware-b0` (ablation) | 40.0% | 14.12 | 2.956 |
+| `roundrobin` | 7.6% | **10.31** | 1.678 |
 
-### Option 0 - run nothing else, write up what exists
+### The resolution: report the curve, not a point
 
-The case FOR, which deserves a hearing before any cluster time is spent: the rubric is
-Correctness 40 + Reproducibility 30 + Performance Gain 15 + Clarity 15. Correctness and
-reproducibility are 70% and are in good shape - `reproduce.sh` is green, the harness caught its
-own broken co-primary and its own lying captions. Performance Gain is 15% and a significant
-48% balance improvement with a clean ablation already earns a share of it. A null on latency,
-honestly reported, costs less than most people assume and demonstrates exactly the discipline
-§6 is graded on.
+The selection problem people worry about with goodput attaches to **one sentence only** - a
+p-value at a chosen objective. "−19.0% missed at 150 ms, p=0.0021" is a claim about one point
+out of a scan of eight, and that sentence would need a pre-registration or a holdout to stand.
 
-The case AGAINST: "we balanced the fleet" is a mechanism claim. A reader who wants to know
-whether the system got *better* is not answered, and §5 asks for relative improvement on a
-metric. Also the `b0` sentinel failure is a live loose end regardless of what else is decided.
+`fig12-goodput.png` selects nothing. It plots goodput across the whole 50-400 ms sweep, so the
+result is a statement about the entire function and there is no hidden search inside it.
+Measured across the 176-point grid: the gain is positive at **168 of 176** points, negative only
+between 56 and 70 ms and by at most **0.18 points** (where both arms serve ~1% and the curves
+are indistinguishable), and peaks at **+8.2 points at 124 ms**. Turning the load term off puts
+the curve **below** the baseline across the range.
 
-**Cheapest thing that closes a real gap either way:** the ~20 min closing `kvaware` bracket. It
-resolves drift-vs-placement on `b0` and is worth doing under every option including this one.
+So the reportable result needs no further cluster time and no chosen threshold:
 
-### Option A - move the operating point, keep TTFT p95
+> Across every TTFT objective where the metric has room to move, `loadaware-b0.5` serves more
+> requests within objective than `kvaware`; with the Load Penalty off, it serves fewer.
 
-Rerun the same design at the knee. Keeps the metric the project originally pre-registered, so
-there is no metric-substitution question to answer at all.
+That is descriptive, not a tested claim, and it sits beside the pre-registered null rather than
+replacing it. Reporting the data more completely is not the same as claiming significance from
+a search.
 
-- **For:** cleanest possible story - same metric, same test, one variable changed, and the
-  change is justified by measured evidence (zero queueing) rather than by the null.
-- **Against:** p95 median-paired was a poor instrument for what the policy does even where it
-  worked. It clips the tail on bad seeds and costs slightly on good ones, which is a *shape*
-  change; a paired test on the median is nearly blind to it (12/20 signs). Moving the operating
-  point may not fix that.
+### Three arms, three failure modes - the framing the roundrobin cell buys
 
-### Option B - move the operating point AND switch to goodput
+- `roundrobin` balances load and ignores Cache-Hit Benefit. It cannot carry the workload:
+  **10.31 of 16 offered req/s**, and it needs ~15 s to bring 99% of requests in.
+- `kvaware` maximises Cache-Hit Benefit and ignores Load Penalty. It carries the workload but at
+  **2.45× Load Imbalance**.
+- `loadaware-b0.5` weighs both, and is best on every column above.
 
-Measure the fraction of requests meeting a fixed TTFT SLO.
+Goodput is the one figure a saturated arm belongs on, because its denominator is requests
+*sent*: every arm was offered the identical frozen workload at the same rate, so falling behind
+counts as missed. A p95 contrast instead conditions on the requests that finished, which
+flatters the arm that fell behind. Reported as capacity, not as latency (#51).
 
-- **For:** directly monetises the tail-clipping the policy actually does. Per-seed goodput is a
-  proportion, so the same paired exact Wilcoxon applies with no new statistics. Exploratory
-  check below suggests more signal than p95 even at the un-queued operating point.
-- **Against:** it is a metric change following a null, and no amount of good reasoning makes
-  that look innocent to a hostile reader. It requires choosing an SLO threshold, which is a new
-  researcher degree of freedom that has to be nailed down in advance and justified on service
-  grounds, not on the data.
+### SUPERSEDED: the "free goodput holdout"
 
-### Option C - capacity at fixed SLO
+An earlier revision of this doc, and #50, proposed the `20260805-0*` 5-cell n=20 sweep as a
+zero-cost out-of-sample check on goodput. **It is not usable.** That sweep predates #27
+(`8c51b66`, "run the measured replay in-cluster"): its `run.json` carries no `driver` key and
+its directory no `window.env`, and its commit `a6eb563` is timestamped 00:47 against a 00:52
+cell start. It is **WAN-measured**, and the offset is ~88 ms on TTFT p50 (0.261 s vs 0.173 s
+in-cluster on `kvaware`).
 
-Ramp each arm until p95 breaches an SLO; report the sustainable rate.
-
-- **For:** the strongest claim available - "serves N% more traffic on the same two A10s" is
-  what a systems audience actually accepts, and it is unambiguously a performance result.
-- **Against:** roughly 2x the cluster time (a ramp per arm), and the ramp itself needs a
-  stopping rule pre-registered or it becomes optional-stopping by another name.
-
-### Which levers move the operating point (needed by A, B and C)
-
-Load-aware routing can only pay when being on the busy engine hurts. Open question which of
-these to use, and in what combination:
-
-1. **Raise offered rate.** SM utilisation is already 87-91%, so the knee is probably 18-24
-   req/s. `benchmarks/rate_pilot.sh` exists. Cheapest to try.
-2. **Shrink the prefix pool** (128 -> 32 or 16) **or raise Zipf skew** (s = 0.9 -> 1.2). Both
-   raise contention without raising total work, which is the interesting direction.
-3. **Lengthen decode (OSL).** Longer residency per request is what converts placement into
-   queueing, so this is arguably the most direct lever - but OSL 128 at rate 16 already
-   saturates (65% of offered achieved), so it has to be paired with a lower rate.
-
-> **The trap on all three: the window closes at both ends.** Past the knee both engines pin at
-> capacity and imbalance *collapses* - measured, 2.99x at OSL 64, 3.98x at 128, 1.89x at 256.
-> Overshooting produces a null that looks like the policy failing when it is the workload
-> saturating. Any ramp needs to find the knee, not clear it.
-
-Any change to `workload_gen.py` or `freeze_workloads.py` **requires a rebuilt bench image** -
-both ship inside it, so `42e6a32` cannot be reused across such a change.
-
-### Feasibility check on existing data (EXPLORATORY - not a claim)
-
-Computed post-hoc purely to answer "does a goodput metric have signal at all", and relevant to
-weighing Option B against Option A:
-
-| SLO | `kvaware` | `b0.5` | delta | seeds better |
-|---|---|---|---|---|
-| TTFT < 150 ms | 42.2% | 49.6% | +7.3 pts | **16/20** |
-| TTFT < 200 ms | 67.8% | 74.9% | +7.1 pts | 14/20 |
-| TTFT < 250 ms | 82.0% | 89.2% | +7.2 pts | 12/20 |
-| TTFT < 300 ms | 89.8% | 95.4% | +5.7 pts | 10/20 |
-
-16/20 at the tight SLO against 12/20 for the p95 median-paired test, at an operating point with
-no queueing at all.
-
-> **This table is also the argument against Option B, not just for it.** Four thresholds were
-> computed and the best-looking one is quoted first. If the next pre-registration picks 150 ms
-> because of this table, that is multiple testing with the correction omitted. Whoever chooses
-> B must fix one threshold in advance on service grounds and disclose that this scan happened.
-
-### The decisions someone has to actually make
-
-1. Is Option 0 acceptable - do we spend more cluster time at all?
-2. If not: A, B, or C? (Equivalently: is the metric-substitution cost of B/C worth the better
-   instrument?)
-3. Which lever moves the operating point, and does the workload profile change (which forces an
-   image rebuild) or only the rate (which does not)?
-4. If B: what SLO, justified how?
-5. If C: what is the ramp's stopping rule?
-6. Does the closing `kvaware` bracket go in? (Recommended under all options; ~20 min.)
+An additive offset of that size is survivable for a ratio or a median difference and fatal for a
+**threshold** metric: a 150 ms objective sits mid-distribution in-cluster and below the median
+over the WAN, so effect size and power both change for reasons that are network rather than
+policy. There is therefore **no independent in-cluster dataset in the repository** to confirm
+goodput against; every in-cluster n=20 sweep at rate 16 is the one the metric was chosen on.
+That is a reason to report the curve descriptively, not a reason to spend an hour manufacturing
+a holdout.
 
 ## Part 4 - Integrity guardrails for whoever picks this up
 
 The project's credibility rests on having reported a null. Protect that.
 
-1. **Do not re-analyse this sweep's data with a new metric and call it a result.** Goodput on
-   these cells is exploratory, full stop. A performance claim needs a new run at a new operating
-   point with its own pre-registration.
+1. **Do not turn a post-hoc metric into a tested claim.** Goodput on these cells is exploratory
+   and stays exploratory. The distinction that matters, and it is finer than the original
+   wording of this rule: reporting the **whole goodput curve descriptively** selects nothing and
+   is honest; attaching a **p-value at one chosen objective** is a claim about one point out of
+   a scan of eight and needs a pre-registration or an independent dataset. §5 reports the curve.
+   The 150 ms statistic stays labelled EXPLORATORY in `analyze.py`'s output, in
+   `results/expected/stats.txt` and in the CHANGELOG, and is not the headline.
 2. **The reason for changing metric must be the diagnosis, not the null.** It is defensible to
    say "we measured zero queueing on the baseline, so the operating point could not test the
-   hypothesis, so we moved the operating point and chose a metric suited to it." It is not
-   defensible to say "p95 did not work so we tried something else." Both produce the same next
-   experiment; only the first is honest, and the difference is visible in whether the
-   pre-registration cites the queueing data.
-3. **Pre-register and get both sign-offs before the first cell.** Same discipline as #31.
-4. **Include a closing `kvaware` bracket.** This run proved the sentinel was needed and that
-   dropping it costs interpretability. ~20 min.
-5. **Report the sequence in §6.** First run: p95 null at rate 16, zero queueing. Second run: new
-   operating point, new metric. A reader who discovers that ordering themselves will assume the
-   worst; a reader who is told it up front sees a diagnosis.
+   hypothesis". It is not defensible to say "p95 did not work so we tried something else". The
+   difference is visible in whether the write-up cites the queueing data.
+3. **Pre-register before the first cell.** Ben's approval only - the two-sign-off rule is
+   superseded (2026-08-06).
+4. **`b0` is not a drift control.** It was chosen as one on the assumption that β=0 makes
+   `loadaware` behave like `kvaware`, and departure 3 in `routing_logic.py` means it does not.
+   Whatever the next run uses, it cannot be this. **No closing `kvaware` bracket** - decided, and
+   the earlier revision of this rule recommending one is withdrawn.
+5. **Report the sequence in §6.** Pre-registered p95 null at rate 16 with zero queueing measured,
+   then goodput as a descriptive follow-up on the same data, disclosed as such. A reader who
+   discovers that ordering themselves will assume the worst; a reader who is told it up front
+   sees a diagnosis.
+6. **§6 must state the rule 6 departure in those words.** Claim 1's p-value came from code
+   committed nine minutes after the data existed (Part 1). Authorised, documented, and not
+   labelled exploratory - which is a departure from the pre-registration and has to be
+   volunteered rather than found.
 
 ## Part 5 - Loose ends
 
@@ -321,7 +281,11 @@ The project's credibility rests on having reported a null. Protect that.
   They were dropped, not preserved: `scripts/reproduce.sh` check 1 (#28) requires every summary
   row to have committed raw data, and those rows fail it - on `main` as well as here, so that
   check fails on `main` today. Rows survive at `ffe1c77:results/summary-per-seed.csv`.
-  `reproduce.sh` now passes 5/5 on this branch.
+  `reproduce.sh` passes 5/5 on `main`, now over the confirmatory cells rather than the superseded 2026-08-05 ones, and runs in CI.
+- **The `20260805-0*` sweep is WAN-measured and is excluded from the evidence base.** No
+  `driver` key, no `window.env`, commit `a6eb563` predates #27. See Part 3.
+- **`roundrobin` is passed to `plot_results.py` via `--comparator`, never as a positional run.**
+  In `cells` it reaches every figure and its 11 s p95 flattens fig1's whole beta curve.
 - **No GPU memory occupancy is collected.** DCGM has `GPU_UTIL`, `MEM_COPY_UTIL`,
   `POWER_USAGE` only - no `FB_USED`. `MEM_COPY_UTIL` is bandwidth, not occupancy.
   `vllm_kv_cache_usage_perc` is the working proxy and is what fig10's "GPU memory" panel plots.
