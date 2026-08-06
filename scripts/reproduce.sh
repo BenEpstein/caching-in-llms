@@ -110,25 +110,46 @@ python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/summary.csv" >/dev/
 verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary-per-seed.csv"
 
 echo "==> 4/5 the reported statistics regenerate"
-: "${HEADLINE:=results/20260805-013208-loadaware-b0.5}"
-: "${BASELINE:=results/20260805-005210-kvaware}"
-: "${ABLATION:=results/20260805-011148-loadaware-b0}"
+# The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
+# and §6 report. These defaults used to name the 2026-08-05 early-hours sweep while
+# docs/figures had already been regenerated from the confirmatory one (a37cae5), so this
+# script regenerated a superseded experiment and still passed: it diffed old-against-old and
+# never touched the figures actually committed. A check that verifies the wrong run reads
+# exactly like a check that passes.
+: "${HEADLINE:=results/20260805-232541-loadaware-b0.5}"
+: "${BASELINE:=results/20260805-230541-kvaware}"
+: "${ABLATION:=results/20260806-002645-loadaware-b0}"
+: "${BETA1:=results/20260805-234559-loadaware-b1.0}"
+: "${BETA2:=results/20260806-000626-loadaware-b2.0}"
+: "${SLO:=0.150}"   # analyze.TTFT_SLO_S; overridable like the cell paths above
 {
   echo "# headline: $(basename "$HEADLINE") vs $(basename "$BASELINE")"
   python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" | grep -E "Wilcoxon|median relative"
+  echo "# co-primary (balance): same pair, --metric imbalance"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric imbalance | grep -E "Wilcoxon|median relative"
   echo "# ablation: $(basename "$ABLATION") vs $(basename "$BASELINE")"
   python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" | grep -E "Wilcoxon|median relative"
+  # EXPLORATORY, and labelled as such in the baseline file a reader diffs against. It is
+  # here because fig12 is committed and every committed number has to regenerate; it is not
+  # here because it is evidence. See analyze.TTFT_SLO_S.
+  # "EXPLORATORY" is in the grep alternation on purpose. analyze.py prints that caveat
+  # beside the p-value precisely so it cannot be separated from the number; a grep that
+  # kept only the Wilcoxon line would strip it back off and leave two bare "significant"
+  # verdicts in a committed baseline file.
+  echo "# EXPLORATORY goodput: --metric ttft_slo_miss (see analyze.TTFT_SLO_S)"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 
 echo "==> 5/5 the numbers behind every figure regenerate"
 python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
-  "$ROOT/results/20260805-015202-loadaware-b1.0" "$ROOT/results/20260805-021215-loadaware-b2.0" \
+  "$ROOT/$BETA1" "$ROOT/$BETA2" \
   --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
 check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
 nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
-if [ "$nfigs" -ge 11 ]; then ok "$nfigs figures rendered"
-else fail "expected at least 11 figures, got $nfigs"; fi
+if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
+else fail "expected at least 12 figures, got $nfigs"; fi
 
 echo
 if [ "${#FAILURES[@]}" -eq 0 ]; then
