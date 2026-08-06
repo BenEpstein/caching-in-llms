@@ -292,6 +292,26 @@ The project's credibility rests on having reported a null. Protect that.
 
 - **`docs/handoffs/` is gitignored** (`.gitignore:16`, issue #29). This document is in `docs/`
   so it is on the branch. If a working-notes handoff is wanted too, it will not be committed.
+  `docs/handoffs/prereg-review-31.md` was deleted 2026-08-06: it was superseded by this file and
+  its status header still claimed the Amendment 1 gate was passed when it was not. Carried
+  forward from it, because it exists nowhere else:
+- **`BENCH_TAG=42e6a32` names the image that was smoke-validated, not whatever `main` hashes
+  to, and the two have diverged.** `main`'s `load_driver.py` lost an unused closed-loop mode
+  after the image was built, and `analyze.py` - which also ships in the image
+  (`Dockerfile.bench:29`) - has since gained the imbalance move and the `ALPHA` constant. None
+  of it touches the measurement path: the image uses `analyze.percentile` via `load_driver`,
+  and that function is untouched. **Do not rebuild the image to "sync" it.** A rebuild is
+  required only when `workload_gen.py` or `freeze_workloads.py` change, because those define
+  the frozen workload the image self-verifies. A gratuitous rebuild discards the validation
+  that makes `42e6a32` citable.
+- **The `42e6a32` validation evidence exists as a claim, not a file.** A 3-seed smoke passed on
+  it (in-pod manifest check, 0.00% pooled error, `utilization_coverage` 1.000) and a 20-seed
+  shakedown passed on the pre-merge `90dd30a`. Both output directories were untracked and were
+  lost to a `git clean` from a concurrent session. The numbers are recorded in rev 2 and in the
+  CHANGELOG; the `run.json`/`job.log` that proved them are gone. Re-runnable in ~10 min if the
+  artifact is ever needed:
+  `SEEDS="1 2 3" BENCH_TAG=42e6a32 ./benchmarks/run_cell.sh kvaware 16 results-smoke`
+  (keep it outside `results/`, do not commit it - it is not a measurement).
 - **`docs/handoffs/prereg-review-31.md`** (untracked) still reads
   `status: signed-off-ready-to-run` with "Blockers: None ... it is ticked" directly under a box
   stating Amendment 1 was unsigned. It was unsigned at session start; both boxes were ticked
