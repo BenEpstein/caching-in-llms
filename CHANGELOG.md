@@ -8,6 +8,31 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (later) - bench image import regression (#31)
+
+### Fixed
+- **`import utilization` at analyze.py module level broke the bench image.** `load_driver.py`
+  does `from analyze import percentile` and runs *inside* that image, whose `Dockerfile.bench`
+  COPY ships six files and not `utilization.py`, so `import load_driver` raised
+  `ModuleNotFoundError` - the measurement path, i.e. every future sweep. Shipped on `main` in
+  `e3794a0` and turned `bench-image` red. Import moved inside `per_seed_imbalance`; the image
+  is unchanged, so `BENCH_TAG` semantics are untouched.
+- **It was catchable pre-merge and was missed.** `bench-image.yml` triggers on `push` with a
+  paths filter, so it runs on any branch push touching `benchmarks/**`. It ran on `e3794a0` and
+  **failed at 22:41:23Z; #46 was merged at 22:48:13Z**. The PR head at merge was `a939f51`, a
+  docs-only commit the paths filter skipped, so no run existed for the head SHA and
+  `gh pr view --json statusCheckRollup` reported the *previous* commit's `build` success -
+  green, carried forward from a commit predating the break. The rollup was read as proof and
+  the branch's workflow-run history was never checked.
+- **Guard:** `test_analyze_module_level_imports_survive_the_bench_image` parses
+  `Dockerfile.bench` for the shipped file list and fails if `analyze.py` gains a module-level
+  import of a local module not in it. Verified to fail on the real bug, not just pass on the
+  fix. It runs under pytest on every commit with no paths filter, so it cannot go stale the way
+  the rollup did.
+- **Process note:** a green `statusCheckRollup` does not mean the head commit was tested. When a
+  paths filter skips the head, the rollup carries the last run's conclusion forward. Check the
+  workflow run history for the branch and confirm the run's `headSha` matches.
+
 ## 2026-08-06 - Confirmatory sweep run; claim 1 passes, claim 2 null (#31)
 
 Full run log, diagnosis and next-experiment proposal: `docs/sweep-2026-08-06-findings.md`.

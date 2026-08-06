@@ -44,7 +44,14 @@ import random
 import sys
 from typing import Dict, List, Sequence
 
-import utilization
+# NOTE: `utilization` is imported INSIDE per_seed_imbalance, not here, and must
+# stay that way. load_driver.py does `from analyze import percentile` and runs
+# inside the bench image, whose Dockerfile.bench COPY line ships six files and
+# does NOT include utilization.py. A module-level import here therefore breaks
+# `import load_driver` in the image - which is the measurement path, so it breaks
+# every future sweep. It did: it shipped on main and the bench-image workflow
+# went red. test_analyze.py::test_analyze_module_level_imports_survive_the_bench_image
+# guards it now, because that workflow triggers on push and cannot run on a PR.
 
 # Validity rule 1, AMENDED 2026-08-04 (pre-registered on #3 before the run).
 #
@@ -180,6 +187,10 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     filter, making it the third in the repo, and the copy lacked read_series's
     worker_id disambiguation.
     """
+    # Deliberately function-level: see the NOTE beside this module's imports.
+    # utilization.py is not in the bench image, and analyze.py is.
+    import utilization
+
     series = utilization.read_series(
         run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
     if not series:
