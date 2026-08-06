@@ -343,3 +343,62 @@ def test_compare_imbalance_without_a_dump_says_so(tmp_path):
     with pytest.raises(SystemExit) as e:
         cmd_compare(cand, base, "imbalance")
     assert "no imbalance value for seeds" in str(e.value)
+
+
+# ---- bench-image import contract --------------------------------------------
+
+def test_analyze_module_level_imports_survive_the_bench_image():
+    """analyze.py must not import a local module the bench image does not ship.
+
+    load_driver.py does `from analyze import percentile` and runs INSIDE that
+    image, so a module-level `import utilization` in analyze.py makes
+    `import load_driver` raise ModuleNotFoundError there - breaking the
+    measurement path for every future sweep. That shipped to main on 2026-08-06
+    and turned the bench-image workflow red.
+
+    It WAS catchable before merge and was missed. bench-image.yml triggers on
+    `push` with a paths filter, so it runs on any branch push touching
+    benchmarks/**: it ran on that commit and failed at 22:41:23Z, and the merge
+    happened at 22:48:13Z. The PR head at merge was a later docs-only commit that
+    the paths filter skipped, so no run existed for the head SHA and
+    `statusCheckRollup` carried the previous commit's success forward - green,
+    from a commit that predated the break.
+
+    This test runs under pytest on every commit, with no paths filter and nothing
+    to carry forward, so the signal cannot go stale the same way. It reads
+    Dockerfile.bench rather than hardcoding the file list so it stays true when
+    that list changes.
+    """
+    import ast
+
+    bench = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(bench)
+
+    dockerfile = open(os.path.join(root, "Dockerfile.bench")).read()
+    # The COPY lines are backslash-continued; flatten before scanning.
+    shipped = {
+        os.path.basename(tok)[:-3]
+        for tok in dockerfile.replace("\\\n", " ").split()
+        if tok.startswith("benchmarks/") and tok.endswith(".py")
+    }
+    assert "analyze" in shipped, "this test assumes analyze.py ships in the image"
+
+    local = {f[:-3] for f in os.listdir(bench) if f.endswith(".py")}
+    tree = ast.parse(open(os.path.join(bench, "analyze.py")).read())
+    top_level = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+
+    imported = set()
+    for node in top_level:
+        if isinstance(node, ast.Import):
+            imported |= {a.name.split(".")[0] for a in node.names}
+        elif node.level == 0 and node.module:
+            imported.add(node.module.split(".")[0])
+
+    missing = sorted((imported & local) - shipped)
+    assert not missing, (
+        f"analyze.py imports {missing} at module level, but Dockerfile.bench does "
+        f"not COPY {missing} into the image. `import load_driver` will raise "
+        f"ModuleNotFoundError in the bench image. Either move the import inside "
+        f"the function that needs it, or add the file to Dockerfile.bench (which "
+        f"changes BENCH_TAG and needs a rebuilt, re-validated image)."
+    )
