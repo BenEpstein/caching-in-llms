@@ -8,6 +8,26 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (fig12) - roundrobin joins the goodput figure (#31)
+
+### Added
+- **`roundrobin` on `fig12-goodput.png`** as a fourth line, and its curve in
+  `results/expected/figure-data.json` so `reproduce.sh` checks it. 7.6% of requests under
+  150 ms against `kvaware` 42.0% and `loadaware-b0.5` 49.4%.
+- `plot_results.py --comparator <run-dir>` and `COMPARATOR` in `reproduce.sh`.
+
+### Decided
+- **Goodput is the one figure a SATURATED arm belongs on, and p95 is not.** Goodput's
+  denominator is requests *sent*: every arm was offered the identical 500-request frozen
+  workload at the same Poisson rate, so `roundrobin` delivering 10.31 of 16 req/s simply
+  counts as missed. A p95 contrast instead conditions on the requests that finished, which
+  flatters the arm that fell behind. The figure caption states the 10.3-of-16 delivery and
+  the ~15 s needed to reach 99%, so the curve cannot be read as a latency result.
+- **The framing cell is passed via `--comparator`, never as a positional run.** In `cells` it
+  reaches every figure, and its 11 s p95 compresses fig1 - the centerpiece - until the whole
+  beta curve is a flat line on the floor. Measured, not hypothetical: that is what the first
+  attempt produced. Scoped to fig12, the other eleven figures regenerate byte-identical.
+
 ## 2026-08-06 (roundrobin) - the third comparator, at n=20 (#31)
 
 ### Added

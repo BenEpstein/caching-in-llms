@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import matplotlib
 
@@ -625,13 +625,31 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
 GOODPUT_SLOS_MS = range(50, 401, 2)
 
 
-def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str) -> Dict:
-    """Mean per-seed goodput vs objective, for the three cells fig12 draws.
+def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str,
+                   comparator: Optional[Dict] = None) -> Dict:
+    """Mean per-seed goodput vs objective, for the cells fig12 draws.
 
     Separated from the drawing so the series is a value fig_goodput can hand on:
     `reproduce.sh` diffs the numbers behind every figure precisely because PNGs
     are not byte-comparable, and a curve that only exists as pixels is a
     committed figure with nothing checking it.
+
+    `comparator` is an already-loaded cell passed in from outside, NOT a name
+    looked up in `cells`, and that is load-bearing. roundrobin is a descriptive
+    framing cell rather than part of the beta grid (benchmarks/README.md, "Sweep
+    design"). Putting it in `cells` puts it in EVERY figure, and its 11 s p95
+    then compresses the y-axis of fig1 - the centerpiece - until the whole beta
+    curve is a flat line on the floor. Measured, not hypothetical: that is what
+    the first attempt at this produced. It reaches exactly one figure by
+    construction, and a sweep with no roundrobin cell still plots.
+
+    Including a SATURATED arm here is deliberate and is sound only because
+    goodput's denominator is requests SENT. roundrobin delivers 10.31 of 16
+    offered req/s, so a p95 contrast against it compares arms carrying different
+    load and flatters it by conditioning on the requests that finished. Goodput
+    does not condition: every arm was offered the identical 500-request frozen
+    workload at the same Poisson rate, and falling behind simply counts as
+    missed. This is the one figure where the saturated arm belongs.
     """
     curves = {}
     for role, name in (("baseline", base), ("candidate", cand), ("ablation", ablation)):
@@ -646,18 +664,30 @@ def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str) -> Di
             100 * sum(goodput(t, n, ms / 1000) for t, n in by_seed.values()) / len(by_seed)
             for ms in GOODPUT_SLOS_MS
         ]
+    if comparator:
+        by_seed = read_seed_ttfts(comparator["dir"])
+        curves["comparator"] = [
+            100 * sum(goodput(t, n, ms / 1000) for t, n in by_seed.values()) / len(by_seed)
+            for ms in GOODPUT_SLOS_MS
+        ]
     curves["slo_ms"] = list(GOODPUT_SLOS_MS)
     return curves
 
 
 def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
-                ablation: str = "loadaware-b0") -> Dict:
+                ablation: str = "loadaware-b0",
+                comparator: Optional[Dict] = None) -> Dict:
     """Goodput against the TTFT objective: baseline, headline arm, ablation.
 
     Three cells and no more. Every arm on one axes turns a 7-point gap on a
     0-100 scale into five near-coincident lines, and the argument this figure
     carries has exactly three terms: what the baseline serves, what the load
     term adds, and that the addition disappears when the load term is off.
+
+    A fourth line is drawn when a `roundrobin` cell is present. It is the floor
+    the two cache-aware policies are standing on, and it belongs on THIS figure
+    rather than beside a p95 - see goodput_curves for why a saturated arm is
+    comparable here and nowhere else.
 
     The lower panel is the same difference on its own scale. Without it the gap
     is legible only where the curves are steep; with it the effect is a shape a
@@ -673,7 +703,7 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     diffs a curve the committed PNG does not show reads exactly like a check
     that passes.
     """
-    curves = goodput_curves(cells, cand, base, ablation)
+    curves = goodput_curves(cells, cand, base, ablation, comparator)
     x = curves["slo_ms"]
     gain = [c - b for b, c in zip(curves["baseline"], curves["candidate"])]
     drop = [a - b for b, a in zip(curves["baseline"], curves["ablation"])]
@@ -694,8 +724,11 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
         ("baseline", "tab:red", "-", base),
         ("candidate", "tab:blue", "-", cand),
         ("ablation", "dimgray", ":", f"{ablation} (ablation)"),
+        ("comparator", "tab:orange", "-.",
+         f"{comparator['cell'] if comparator else ''} (cache-blind)"),
     ):
-        top.plot(x, curves[role], color=color, ls=ls, lw=2.4, label=label, zorder=3)
+        if role in curves:
+            top.plot(x, curves[role], color=color, ls=ls, lw=2.4, label=label, zorder=3)
     top.annotate("", xy=(x[mark], curves["candidate"][mark]),
                  xytext=(x[mark], curves["baseline"][mark]),
                  arrowprops=dict(arrowstyle="<->", color="tab:blue", lw=2.2))
@@ -706,9 +739,17 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     top.set_ylim(0, 100)
     top.grid(alpha=0.3)
     top.legend(loc="upper left", fontsize=9.5, framealpha=0.95)
+    subtitle = ""
+    if "comparator" in curves:
+        # Stated on the image: roundrobin is measured PAST ITS OWN KNEE, and a
+        # reader who takes its curve for a latency result rather than a capacity
+        # one has been misled by a figure that had room to say so.
+        subtitle = ("\nroundrobin delivers 10.3 of 16 offered req/s and needs ~15 s "
+                    "to reach 99% - a capacity floor, not a latency contrast")
     top.set_title(
         "Goodput vs TTFT SLO, marked at the documented objective\n"
-        "EXPLORATORY: computed after the pre-registered TTFT p95 null on this data",
+        "EXPLORATORY: computed after the pre-registered TTFT p95 null on this data"
+        + subtitle,
         fontsize=11,
     )
 
@@ -780,6 +821,10 @@ def main() -> None:
     ap.add_argument("--dump-data", default=None,
                     help="also write the series behind the figures as JSON, for "
                          "scripts/reproduce.sh to diff (PNGs are not byte-comparable)")
+    ap.add_argument("--comparator", default=None,
+                    help="run dir of a descriptive framing cell (roundrobin). Drawn on "
+                         "fig12 ONLY and deliberately NOT added to the positional runs: "
+                         "in `cells` its 11 s p95 flattens fig1's whole beta curve.")
     ap.add_argument("--cand", required=True,
                     help="headline loadaware cell, e.g. loadaware-b0.5 - the arm the "
                          "pre-registration names as the comparison of record")
@@ -805,7 +850,8 @@ def main() -> None:
     fig_inflight_vs_time(cells, os.path.join(args.out, "fig11-inflight-vs-time.png"),
                          cand=args.cand)
     goodput_series = fig_goodput(cells, os.path.join(args.out, "fig12-goodput.png"),
-                                 cand=args.cand)
+                                 cand=args.cand,
+                                 comparator=load(args.comparator) if args.comparator else None)
     if args.dump_data:
         dump_data(cells, args.dump_data, goodput_series)
     print(f"wrote figures to {args.out}")
