@@ -8,6 +8,32 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (roundrobin) - the third comparator, at n=20 (#31)
+
+### Added
+- **`roundrobin` at n=20, rate 16** (`results/20260806-144135-roundrobin`), replacing the
+  n=3 probe. Same frozen workload manifest, same rate and OSL as the confirmatory sweep.
+  Valid: pooled error 0.08%, `utilization_coverage` 1.000 on all ten series.
+
+| arm | n | achieved | TTFT p50 | TTFT p95 | ITL p95 | Load Imbalance |
+|---|---|---|---|---|---|---|
+| `kvaware` | 20 | 14.32 | 0.173 | 0.334 | 157.4 ms | 2.448 |
+| `loadaware-b0.5` | 20 | 14.35 | 0.152 | 0.290 | 136.2 ms | 1.269 |
+| `loadaware-b0` | 20 | 14.12 | 0.182 | 0.378 | 183.9 ms | 2.956 |
+| `roundrobin` | 20 | **10.31** | 1.417 | 11.161 | 911.3 ms | 1.678 |
+
+### Decided
+- **Report roundrobin as a CAPACITY result, not a latency one.** It sustains 10.31 of 16
+  offered req/s while both cache-aware policies sustain 14.3, so its latency numbers are
+  measured past its own knee and are not a like-for-like comparison at equal delivered load.
+  The defensible statement is that cache-blind placement cannot carry the workload; a paired
+  p95 contrast against a saturated arm would not be one. It also runs in a separate window
+  from the confirmatory sweep, which the capacity statement is robust to and a latency
+  contrast would not be.
+- **Round-robin equalizes request COUNTS, not load.** Its Load Imbalance is 1.678, better
+  than `kvaware`'s 2.448 but worse than `loadaware-b0.5`'s 1.269, because a cache miss costs
+  far more in-flight residency than a hit. Descriptive, from one cell, not a tested claim.
+
 ## 2026-08-06 (latest) - goodput lands in the pipeline (#31)
 
 ### Added
