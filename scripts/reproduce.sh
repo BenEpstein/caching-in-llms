@@ -121,6 +121,7 @@ echo "==> 4/5 the reported statistics regenerate"
 : "${ABLATION:=results/20260806-002645-loadaware-b0}"
 : "${BETA1:=results/20260805-234559-loadaware-b1.0}"
 : "${BETA2:=results/20260806-000626-loadaware-b2.0}"
+: "${COMPARATOR:=results/20260806-144135-roundrobin}"   # framing cell: fig12 ONLY, never a positional run
 : "${SLO:=0.150}"   # analyze.TTFT_SLO_S; overridable like the cell paths above
 {
   echo "# headline: $(basename "$HEADLINE") vs $(basename "$BASELINE")"
@@ -141,7 +142,7 @@ check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 
 echo "==> 5/5 the numbers behind every figure regenerate"
 python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
-  "$ROOT/$BETA1" "$ROOT/$BETA2" \
+  "$ROOT/$BETA1" "$ROOT/$BETA2" --comparator "$ROOT/$COMPARATOR" \
   --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
 check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
 nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
