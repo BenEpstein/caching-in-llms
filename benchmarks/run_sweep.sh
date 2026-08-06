@@ -129,3 +129,6 @@ echo "      ablation:                  same two commands on <loadaware-b0.5-dir>
 echo "      placement + drift:         same two commands on <loadaware-b0-dir> <kvaware-dir>"
 echo "    The last one does double duty: b0 vs kvaware is the ablation contrast AND,"
 echo "    because b0 ran at maximum separation from kvaware, the drift check."
+echo "    EXPLORATORY, below the line - NOT a tested claim unless a pre-registration"
+echo "    fixed the metric AND the --slo before the data existed (analyze.TTFT_SLO_S):"
+echo "      goodput: python3 benchmarks/analyze.py compare --metric ttft_slo_miss [--slo 0.15] <cand-dir> <base-dir>"

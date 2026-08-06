@@ -1,6 +1,14 @@
-# headline: 20260805-013208-loadaware-b0.5 vs 20260805-005210-kvaware
-Wilcoxon signed-rank (one-sided, exact): W+=65.0 n=20 p=0.0715 ≥ 0.025  ✗ not significant
-median relative reduction: 7.8% (bootstrap 95% CI [-3.2%, 13.9%])
-# ablation: 20260805-011148-loadaware-b0 vs 20260805-005210-kvaware
-Wilcoxon signed-rank (one-sided, exact): W+=124.0 n=20 p=0.7625 ≥ 0.025  ✗ not significant
-median relative reduction: -4.6% (bootstrap 95% CI [-14.8%, 10.3%])
+# headline: 20260805-232541-loadaware-b0.5 vs 20260805-230541-kvaware
+Wilcoxon signed-rank (one-sided, exact): W+=72.0 n=20 p=0.1153 ≥ 0.025  ✗ not significant
+median relative reduction: 2.7% (bootstrap 95% CI [-4.3%, 15.4%])
+# co-primary (balance): same pair, --metric imbalance
+Wilcoxon signed-rank (one-sided, exact): W+=5.0 n=20 p=0.0000 < 0.025  ✓ significant
+median relative reduction: 48.1% (bootstrap 95% CI [37.7%, 56.3%])
+# ablation: 20260806-002645-loadaware-b0 vs 20260805-230541-kvaware
+Wilcoxon signed-rank (one-sided, exact): W+=161.0 n=20 p=0.9836 ≥ 0.025  ✗ not significant
+median relative reduction: -13.2% (bootstrap 95% CI [-18.5%, -5.8%])
+# EXPLORATORY goodput: --metric ttft_slo_miss (see analyze.TTFT_SLO_S)
+Wilcoxon signed-rank (one-sided, exact): W+=31.0 n=20 p=0.0021 < 0.025  ✓ significant
+median relative reduction: 19.0% (bootstrap 95% CI [10.7%, 22.1%])
+Wilcoxon signed-rank (one-sided, exact): W+=128.0 n=20 p=0.8058 ≥ 0.025  ✗ not significant
+median relative reduction: -3.6% (bootstrap 95% CI [-9.3%, 7.0%])

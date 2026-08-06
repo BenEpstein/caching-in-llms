@@ -8,6 +8,47 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (latest) - goodput lands in the pipeline (#31)
+
+### Added
+- **`ttft_slo_miss`, a goodput metric wired end to end**: `analyze.py compare --metric
+  ttft_slo_miss [--slo]`, `seed_stats`, `fig12-goodput.png`, `reproduce.sh`, unit tests and a
+  §4-style tunable (`analyze.TTFT_SLO_S`, default 0.150 s, documented in
+  `benchmarks/README.md`). The tested quantity is the MISS rate, not goodput, so it runs
+  through the *same committed* Wilcoxon and relative-reduction bootstrap as `ttft_p95` with no
+  inverted test and no new statistics; figures plot the complement.
+- **On the confirmatory sweep** (`b0.5` vs `kvaware`, n=20): −19.0% missed requests at the
+  150 ms objective, CI [10.7%, 22.1%], p=0.0021; −12.4%, p=0.0004 at 125 ms. The `b0`
+  ablation is null and slightly negative (−3.6%, p=0.8058), so the gain tracks the load term
+  rather than the run window.
+
+### Decided
+- **Goodput on this sweep is EXPLORATORY and is labelled so in the code, not only in a doc.**
+  It was first computed *after* the pre-registered `ttft_p95` test returned null on the same
+  data, and `compare` prints that caveat beside the p-value so an operator pasting output into
+  the report cannot lose it. A performance claim needs a fresh run whose pre-registration
+  fixes the metric and the objective before the data exists. Evidence:
+  `docs/sweep-2026-08-06-findings.md` Part 3, and the effect is broad rather than peaked
+  (7.4 points at 150 ms, 8.2 at 124 ms), so the objective is a service-grounds choice.
+- **The objective stays out of `results/summary-per-seed.csv`.** That table is the evidence a
+  reader checks the report against; baking one provisional threshold into it would read as a
+  threshold already chosen. The driver CSVs are committed, so any objective is recomputable.
+
+### Fixed
+- **`reproduce.sh` was verifying a superseded sweep.** Its `HEADLINE`/`BASELINE`/`ABLATION`
+  defaults named the 2026-08-05 early-hours cells while `docs/figures` had been regenerated
+  from the confirmatory sweep in `a37cae5`. It diffed old-against-old, passed 5/5, and never
+  touched the figures actually committed - a check verifying the wrong run reads exactly like
+  a check that passes. Repointed at the confirmatory cells; `results/expected/` regenerated,
+  and the balance co-primary (p=0.0000, −48.1%) is now covered too, which it was not before.
+- **A relative reduction against a zero baseline raised `ZeroDivisionError` from inside the
+  bootstrap**, ~80 lines from its cause. `ttft_p95` and `imbalance` are never zero so it could
+  not fire until goodput arrived. `compare` now refuses up front and, for `ttft_slo_miss`,
+  says the objective is loose enough that the baseline misses nothing.
+- **`compare` names an unknown `--metric`** instead of raising a bare `KeyError` from a list
+  comprehension - the failure mode that left `--metric imbalance` untestable for its whole
+  life.
+
 ## 2026-08-06 (later) - bench image import regression (#31)
 
 ### Fixed

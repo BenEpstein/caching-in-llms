@@ -14,6 +14,9 @@ import pytest
 
 from analyze import (
     HARD_ERROR_RATE,
+    TTFT_SLO_S,
+    goodput,
+    read_seed_ttfts,
     cmd_compare,
     read_run,
     seed_id,
@@ -402,3 +405,121 @@ def test_analyze_module_level_imports_survive_the_bench_image():
         f"the function that needs it, or add the file to Dockerfile.bench (which "
         f"changes BENCH_TAG and needs a rebuilt, re-validated image)."
     )
+
+
+# ---- goodput / ttft_slo_miss ------------------------------------------------
+#
+# EXPLORATORY metric (added 2026-08-06): goodput was first computed after the
+# pre-registered ttft_p95 test returned null on the confirmatory sweep. These
+# tests pin its arithmetic, not its standing as evidence - see analyze.TTFT_SLO_S
+# and docs/sweep-2026-08-06-findings.md Part 3.
+
+def test_goodput_counts_strictly_under_the_slo():
+    """A request that lands exactly ON the objective missed it.
+
+    Pinned because the boundary is a real choice, not an accident of `<`: an SLO
+    is "answered in under 150 ms", and off-by-one at the boundary moves the
+    number by however many samples pile up there. On the committed runs that is
+    a handful; on a synthetic or heavily-quantised workload it need not be.
+    """
+    assert goodput([0.1, 0.149, 0.150, 0.2], sent=4, slo=0.150) == 0.5
+
+
+def test_goodput_denominator_is_requests_sent_so_an_error_is_a_miss():
+    """The one place this module counts errors INTO a statistic.
+
+    Every latency percentile excludes them (seed_stats), because a percentile
+    describes service delivered. Goodput describes service promised, and a
+    request that never answered did not meet a latency objective.
+    """
+    # four successes all comfortably under the SLO, plus one error not in `ttfts`
+    assert goodput([0.01] * 4, sent=5, slo=0.150) == pytest.approx(0.8)
+
+
+def test_goodput_with_nothing_sent_is_nan_not_a_divide_by_zero():
+    assert math.isnan(goodput([], sent=0, slo=0.150))
+
+
+def test_seed_stats_slo_miss_is_one_minus_goodput(tmp_path):
+    p = tmp_path / "driver-seed1.csv"
+    # 3 of 4 under 150 ms
+    _write_csv(p, [_row(i, t, 1.0) for i, t in enumerate([0.05, 0.10, 0.14, 0.90])])
+    s = seed_stats(str(p))
+    assert s["ttft_slo_miss"] == pytest.approx(0.25)
+    assert s["ttft_slo_s"] == TTFT_SLO_S
+
+
+def test_seed_stats_slo_miss_follows_the_slo_argument(tmp_path):
+    """The tunable is genuinely tunable: the same CSV, two objectives."""
+    p = tmp_path / "driver-seed1.csv"
+    _write_csv(p, [_row(i, t, 1.0) for i, t in enumerate([0.05, 0.10, 0.14, 0.90])])
+    assert seed_stats(str(p), slo=1.0)["ttft_slo_miss"] == pytest.approx(0.0)
+    assert seed_stats(str(p), slo=0.06)["ttft_slo_miss"] == pytest.approx(0.75)
+
+
+def test_read_run_threads_the_slo_through_to_every_seed(tmp_path):
+    d = _run_dir(tmp_path, "cell", [1, 2, 3])
+    assert {s["ttft_slo_s"] for s in read_run(d, slo=0.42)} == {0.42}
+
+
+def test_read_seed_ttfts_is_keyed_by_seed_number_and_sorted(tmp_path):
+    """Sorted because the goodput figure sweeps hundreds of objectives per seed;
+    keyed by seed number for the same reason read_run is - list position and seed
+    number have diverged in this repo before."""
+    d = tmp_path / "cell"
+    d.mkdir()
+    _write_csv(d / "driver-seed2.csv", [_row(i, t, 1.0) for i, t in enumerate([0.3, 0.1])])
+    _write_csv(d / "driver-seed10.csv", [_row(i, t, 1.0) for i, t in enumerate([0.2])])
+    got = read_seed_ttfts(str(d))
+    assert sorted(got) == [2, 10]
+    assert got[2] == ([0.1, 0.3], 2)
+
+
+def test_read_seed_ttfts_counts_errors_in_sent_but_not_in_the_samples(tmp_path):
+    d = tmp_path / "cell"
+    d.mkdir()
+    rows = [_row(0, 0.1, 1.0), _row(1, 99.0, 99.0, status="error")]
+    _write_csv(d / "driver-seed1.csv", rows)
+    ttfts, sent = read_seed_ttfts(str(d))[1]
+    assert ttfts == [0.1] and sent == 2
+
+
+def _slo_run_dir(tmp_path, name, seeds, ttfts):
+    """A cell whose every seed has a MIX of hits and misses at the default SLO."""
+    d = tmp_path / name
+    d.mkdir()
+    for s in seeds:
+        _write_csv(d / f"driver-seed{s}.csv",
+                   [_row(i, t, 1.0) for i, t in enumerate(ttfts)])
+    return str(d)
+
+
+def test_compare_runs_the_same_wilcoxon_on_the_slo_miss_rate(tmp_path):
+    """No new statistics: the miss rate goes through the committed Wilcoxon and
+    the committed bootstrap, exactly as ttft_p95 does."""
+    cand = _slo_run_dir(tmp_path, "cand", [1, 2, 3], [0.05, 0.10, 0.14, 0.90])
+    base = _slo_run_dir(tmp_path, "base", [1, 2, 3], [0.05, 0.90, 0.90, 0.90])
+    assert cmd_compare(cand, base, "ttft_slo_miss") == 0
+
+
+def test_compare_refuses_an_slo_the_baseline_never_misses(tmp_path):
+    """A seed the baseline already passes perfectly cannot show an improvement,
+    and (base-cand)/base is undefined there. Before this guard the bootstrap
+    raised ZeroDivisionError ~80 lines from the cause."""
+    cand = _slo_run_dir(tmp_path, "cand", [1, 2], [0.01, 0.02])
+    base = _slo_run_dir(tmp_path, "base", [1, 2], [0.01, 0.02])
+    with pytest.raises(SystemExit) as e:
+        cmd_compare(cand, base, "ttft_slo_miss")
+    assert "baseline ttft_slo_miss is exactly 0" in str(e.value)
+    assert "tighter --slo" in str(e.value)
+
+
+def test_compare_names_an_unknown_metric_instead_of_raising_keyerror(tmp_path):
+    """`--metric imbalance` raised a bare KeyError for the whole life of the
+    co-primary and the operator could not tell a typo from a broken run."""
+    cand = _run_dir(tmp_path, "cand", [1, 2, 3])
+    base = _run_dir(tmp_path, "base", [1, 2, 3])
+    with pytest.raises(SystemExit) as e:
+        cmd_compare(cand, base, "goodput")
+    assert "unknown metric 'goodput'" in str(e.value)
+    assert "ttft_slo_miss" in str(e.value)

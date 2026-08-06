@@ -14,6 +14,7 @@ figure can never disagree with the table it sits next to.
   fig9-throughput.png         sustained tok/s and req/s per arm
   fig10-utilization.png       §3 utilization: GPU, GPU memory, CPU, host memory
   fig11-inflight-vs-time.png  per-engine in-flight vs time, baseline vs headline (#31 DoD)
+  fig12-goodput.png           goodput vs TTFT SLO - EXPLORATORY, see analyze.TTFT_SLO_S
 
 Usage:
   python3 plot_results.py results/<...>-loadaware-b0 results/<...>-kvaware ... \
@@ -33,7 +34,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import utilization  # noqa: E402
-from analyze import percentile, read_run  # noqa: E402
+from analyze import goodput, percentile, read_run, read_seed_ttfts  # noqa: E402
 
 BASELINE_STYLE = {"kvaware": ("tab:red", "-"), "roundrobin": ("tab:gray", "--")}
 
@@ -619,6 +620,92 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
+                ablation: str = "loadaware-b0") -> None:
+    """Goodput against the TTFT objective: baseline, headline arm, ablation.
+
+    Three cells and no more. Every arm on one axes turns a 7-point gap on a
+    0-100 scale into five near-coincident lines, and the argument this figure
+    carries has exactly three terms: what the baseline serves, what the load
+    term adds, and that the addition disappears when the load term is off.
+
+    The lower panel is the same difference on its own scale. Without it the gap
+    is legible only where the curves are steep; with it the effect is a shape a
+    reader can see at a glance, which is the whole reason the figure exists.
+
+    NOT A CLAIM. Goodput was first computed after the pre-registered ttft_p95
+    test returned null on this data, so the caption says so - a figure that
+    travels into a talk without its doc has to carry its own provenance.
+    """
+    picked = {}
+    for role, name in (("baseline", base), ("candidate", cand), ("ablation", ablation)):
+        c = next((x for x in cells if x["cell"] == name), None)
+        if not c:
+            raise SystemExit(
+                f"fig_goodput: {role} cell '{name}' missing. "
+                f"Available: {[x['cell'] for x in cells]}"
+            )
+        picked[role] = c
+
+    slos = [t / 1000 for t in range(50, 401, 2)]
+    curves = {}
+    for role, c in picked.items():
+        by_seed = read_seed_ttfts(c["dir"])
+        curves[role] = [
+            100 * sum(goodput(t, n, s) for t, n in by_seed.values()) / len(by_seed)
+            for s in slos
+        ]
+
+    x = [s * 1000 for s in slos]
+    gain = [c - b for b, c in zip(curves["baseline"], curves["candidate"])]
+    drop = [a - b for b, a in zip(curves["baseline"], curves["ablation"])]
+    peak = max(range(len(x)), key=lambda i: gain[i])
+
+    fig, (top, bot) = plt.subplots(
+        2, 1, figsize=(9.5, 7.4), sharex=True, gridspec_kw={"height_ratios": [3, 1.15]}
+    )
+    top.fill_between(x, curves["baseline"], curves["candidate"],
+                     color="tab:blue", alpha=0.22, lw=0, label="goodput the load term buys")
+    top.fill_between(x, curves["ablation"], curves["baseline"],
+                     color="dimgray", alpha=0.16, lw=0, label="lost with the load term off")
+    for role, color, ls, label in (
+        ("baseline", "tab:red", "-", base),
+        ("candidate", "tab:blue", "-", cand),
+        ("ablation", "dimgray", ":", f"{ablation} (ablation)"),
+    ):
+        top.plot(x, curves[role], color=color, ls=ls, lw=2.4, label=label, zorder=3)
+    top.annotate("", xy=(x[peak], curves["candidate"][peak]),
+                 xytext=(x[peak], curves["baseline"][peak]),
+                 arrowprops=dict(arrowstyle="<->", color="tab:blue", lw=2.2))
+    top.annotate(f"+{gain[peak]:.1f} points\nat {x[peak]:.0f} ms",
+                 xy=(x[peak] + 8, (curves["baseline"][peak] + curves["candidate"][peak]) / 2),
+                 color="tab:blue", fontweight="bold", fontsize=11, va="center")
+    top.set_ylabel("goodput: % of requests sent under the SLO")
+    top.set_ylim(0, 100)
+    top.grid(alpha=0.3)
+    top.legend(loc="upper left", fontsize=9.5, framealpha=0.95)
+    top.set_title(
+        f"Goodput vs TTFT SLO - {len(read_seed_ttfts(picked['baseline']['dir']))} seeds per arm\n"
+        "EXPLORATORY: computed after the pre-registered TTFT p95 null on this data",
+        fontsize=11,
+    )
+
+    bot.fill_between(x, 0, gain, color="tab:blue", alpha=0.28, lw=0)
+    bot.plot(x, gain, color="tab:blue", lw=2.2, label=f"{cand} - {base}")
+    bot.fill_between(x, 0, drop, color="dimgray", alpha=0.22, lw=0)
+    bot.plot(x, drop, color="dimgray", lw=2.0, ls=":", label=f"{ablation} - {base}")
+    bot.axhline(0, color="k", lw=1.2)
+    bot.set_xlabel("TTFT SLO (ms)")
+    bot.set_ylabel("difference\n(points)")
+    bot.set_xlim(x[0], x[-1])
+    bot.grid(alpha=0.3)
+    bot.legend(loc="lower right", fontsize=9)
+
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def dump_data(cells: List[Dict], out: str) -> None:
     """Write the series behind the figures as JSON, for `scripts/reproduce.sh` to diff.
 
@@ -681,6 +768,7 @@ def main() -> None:
     fig_utilization(cells, os.path.join(args.out, "fig10-utilization.png"))
     fig_inflight_vs_time(cells, os.path.join(args.out, "fig11-inflight-vs-time.png"),
                          cand=args.cand)
+    fig_goodput(cells, os.path.join(args.out, "fig12-goodput.png"), cand=args.cand)
     if args.dump_data:
         dump_data(cells, args.dump_data)
     print(f"wrote figures to {args.out}")
