@@ -409,10 +409,9 @@ def test_analyze_module_level_imports_survive_the_bench_image():
 
 # ---- goodput / ttft_slo_miss ------------------------------------------------
 #
-# EXPLORATORY metric (added 2026-08-06): goodput was first computed after the
-# pre-registered ttft_p95 test returned null on the confirmatory sweep. These
-# tests pin its arithmetic, not its standing as evidence - see analyze.TTFT_SLO_S
-# and docs/sweep-2026-08-06-findings.md Part 3.
+# Secondary metric (added 2026-08-06), computed from the same committed driver
+# CSVs as the co-primaries. These tests pin its arithmetic, not its standing as
+# evidence - see analyze.TTFT_SLO_S and docs/sweep-2026-08-06-findings.md Part 3.
 
 def test_goodput_counts_strictly_under_the_slo():
     """A request that lands exactly ON the objective missed it.

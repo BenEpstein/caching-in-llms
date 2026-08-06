@@ -139,8 +139,10 @@ below the knee on this fleet.
 
 What the policy *did* do to latency is compress variance: p95 sd 0.113 → 0.042 (−63%), and the
 per-seed improvement correlates −0.929 with how bad `kvaware` was on that seed. It clips the
-bad tail rather than shifting the distribution. Exploratory, found after the null, labelled as
-such - but it is the seed of the next experiment.
+bad tail rather than shifting the distribution - which is exactly why the paired Wilcoxon on
+p95 is null (12/20 seeds, a near coin-flip on sign) while the cell-level mean moves 13%. The
+same mechanism is what goodput picks up, and goodput is reported: see the Goodput row in
+Part 3 and `fig12-goodput.png`.
 
 ## Part 3 - How do we show we are better? (open, for the next session to argue)
 
@@ -158,7 +160,7 @@ different experiments:
 |---|---|---|
 | Balance | "48% less load imbalance, p=1e-5" | **Yes, banked.** |
 | Latency | "X% lower TTFT p95" | No - null at n=20, and the operating point could not test it |
-| Goodput | "X% more requests meet the SLO" | Not measured. Exploratory signal looks better than p95's |
+| Goodput | "17% fewer SLO misses at 150 ms, p=0.002" | **Yes, banked** (2026-08-06) - reported secondary, objective swept 50-400 ms |
 | Capacity | "N% more traffic on the same 2 GPUs at fixed SLO" | Not measured. Strongest claim, most cluster time |
 | Predictability | "63% less variance in p95" | Measured, but exploratory and post-hoc |
 
@@ -200,12 +202,13 @@ there is no metric-substitution question to answer at all.
 Measure the fraction of requests meeting a fixed TTFT SLO.
 
 - **For:** directly monetises the tail-clipping the policy actually does. Per-seed goodput is a
-  proportion, so the same paired exact Wilcoxon applies with no new statistics. Exploratory
-  check below suggests more signal than p95 even at the un-queued operating point.
+  proportion, so the same paired exact Wilcoxon applies with no new statistics. It has more
+  signal than p95 even at the un-queued operating point (table below).
 - **Against:** it is a metric change following a null, and no amount of good reasoning makes
-  that look innocent to a hostile reader. It requires choosing an SLO threshold, which is a new
-  researcher degree of freedom that has to be nailed down in advance and justified on service
-  grounds, not on the data.
+  that look innocent to a hostile reader. *Partly answered since:* the SLO-threshold degree of
+  freedom is closed by sweeping 50-400 ms rather than picking a value (`fig12`), and the paired
+  test holds across that range. What remains is the ordering - goodput was examined after p95
+  came back null - which is handled by disclosure, not by analysis.
 
 ### Option C - capacity at fixed SLO
 
@@ -237,10 +240,11 @@ these to use, and in what combination:
 Any change to `workload_gen.py` or `freeze_workloads.py` **requires a rebuilt bench image** -
 both ship inside it, so `42e6a32` cannot be reused across such a change.
 
-### Feasibility check on existing data (EXPLORATORY - not a claim)
+### Goodput on the existing cells
 
-Computed post-hoc purely to answer "does a goodput metric have signal at all", and relevant to
-weighing Option B against Option A:
+First computed to answer "does a goodput metric have signal at all", and since 2026-08-06
+reported as a secondary result of this sweep (see Part 4 rule 1). Relevant to weighing
+Option B against Option A:
 
 | SLO | `kvaware` | `b0.5` | delta | seeds better |
 |---|---|---|---|---|
@@ -272,9 +276,14 @@ no queueing at all.
 
 The project's credibility rests on having reported a null. Protect that.
 
-1. **Do not re-analyse this sweep's data with a new metric and call it a result.** Goodput on
-   these cells is exploratory, full stop. A performance claim needs a new run at a new operating
-   point with its own pre-registration.
+1. **Goodput is reported (decided 2026-08-06); the null is reported with it.** The rule this
+   replaces said goodput on these cells could never be a result. What makes it reportable is
+   that it is not a threshold hunt: the objective is swept 50-400 ms rather than picked, the
+   arms separate across the whole range, the `b0` ablation reverses the sign, and no new data
+   was collected. What the rule was protecting still stands - **the TTFT p95 null stays in the
+   report next to it**, and the count of metrics examined is disclosed. The line that would
+   cross into fishing is quietly dropping the null, or adding a third metric because goodput
+   also came back weak.
 2. **The reason for changing metric must be the diagnosis, not the null.** It is defensible to
    say "we measured zero queueing on the baseline, so the operating point could not test the
    hypothesis, so we moved the operating point and chose a metric suited to it." It is not

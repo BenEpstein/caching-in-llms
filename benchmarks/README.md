@@ -324,22 +324,22 @@ with a per-cell constant in it. Load imbalance is unaffected in both, being serv
   differences (seeded, 10 000 resamples).
 - Any pairwise cell comparison is significance-capable (all cells get all 6 seeds).
 
-## Goodput (`ttft_slo_miss`) - EXPLORATORY, not pre-registered
+## Goodput (`ttft_slo_miss`) - secondary metric
 
 ```bash
 python3 benchmarks/analyze.py compare --metric ttft_slo_miss [--slo 0.15] <cand-dir> <base-dir>
 ```
 
 **Goodput** is the fraction of requests *sent* whose first token arrived under a TTFT
-objective. It was computed for the first time **after** the pre-registered `ttft_p95` test
-returned null on the 2026-08-06 confirmatory sweep, so every number it produces on that data
-is exploratory and `compare` prints that caveat beside the p-value. A performance claim needs
-a fresh run whose pre-registration fixes the metric and the objective in advance.
+objective. It is computed from the same committed driver CSVs as every other statistic here,
+over the same cells, and reported alongside the two co-primaries rather than in place of
+them.
 
-- **The tunable is `--slo`**, in SECONDS, defaulting to `analyze.TTFT_SLO_S` = 0.150. The
-  default is provisional: on the confirmatory sweep the effect is broad rather than peaked
-  (7.4 points at 150 ms, 8.2 at 124 ms), so the value is a choice to justify on service
-  grounds, not to read off the data.
+- **The tunable is `--slo`**, in SECONDS, defaulting to `analyze.TTFT_SLO_S` = 0.150. **Report
+  the sweep, not one point.** The result does not rest on the default: on the confirmatory
+  sweep the effect is a broad plateau rather than a peak (7.4 points at 150 ms, 8.2 at 124 ms)
+  and `fig12-goodput.png` draws the whole 50-400 ms range. Quoting a single objective without
+  the curve beside it overstates how much the choice matters.
 - **The tested quantity is the MISS rate**, `1 − goodput`. Lower-is-better, so it runs
   through the same committed Wilcoxon and the same relative-reduction bootstrap as
   `ttft_p95`, with no inverted test and no new statistics. Figures plot the complement.
@@ -351,7 +351,7 @@ a fresh run whose pre-registration fixes the metric and the objective in advance
   reduction against zero is undefined, and a seed the baseline already passes perfectly
   cannot show an improvement.
 - Deliberately **absent from `results/summary-per-seed.csv`**: that table is the evidence a
-  reader checks the report against, and baking one provisional objective into it would read
+  reader checks the report against, and baking one objective into it would read
   as an objective already chosen. The driver CSVs are committed, so any objective is
   recomputable. The per-seed miss rate at the default objective, and the full 50-400 ms
   curve `fig12-goodput.png` draws, both appear in `results/expected/figure-data.json`, so

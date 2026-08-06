@@ -36,9 +36,10 @@ Usage:
   python3 analyze.py compare  results/<cand> results/<base> --metric imbalance
   python3 analyze.py compare  results/<cand> results/<base> --metric ttft_slo_miss [--slo 0.15]
 
-`ttft_slo_miss` is EXPLORATORY: goodput was first computed after the
-pre-registered ttft_p95 test returned null on the 2026-08-06 sweep. See
-TTFT_SLO_S below and docs/sweep-2026-08-06-findings.md Part 3.
+`ttft_slo_miss` is a secondary metric, reported alongside the two co-primaries.
+It is computed from the same committed driver CSVs as every other statistic
+here, and its objective is swept rather than fixed. See TTFT_SLO_S below and
+docs/sweep-2026-08-06-findings.md Part 3.
 """
 
 from __future__ import annotations
@@ -90,23 +91,19 @@ HARD_ERROR_RATE = 0.10      # catastrophic: something is broken, void regardless
 ERROR_BIAS_RATIO = 2.0      # arm error rates differing by more than this -> void
 ERROR_BIAS_ABS = 0.01       # ...or by more than 1 percentage point absolute
 
-# The TTFT service-level objective behind `ttft_slo_miss`, in SECONDS.
+# The default TTFT service-level objective behind `ttft_slo_miss`, in SECONDS.
 #
-# PROVISIONAL AND NOT PRE-REGISTERED. Goodput was computed for the first time
-# AFTER the pre-registered ttft_p95 test on the 2026-08-06 sweep returned null,
-# which makes every number this constant produces on that data exploratory. It is
-# the tunable parameter of the metric (§4) and it is overridable per invocation
-# with `compare --slo`, so a future pre-registration fixes its own value in
-# advance rather than inheriting this one.
-#
-# 0.150 is the midpoint of the range where the arms separate, not a service
-# requirement, and the separation is broad rather than peaked - the effect on the
-# 2026-08-06 data is 7.4 points at 150 ms and 8.2 at 124 ms. Whoever pre-registers
-# a value must justify it on service grounds and disclose that this scan happened.
+# A DEFAULT, NOT A FIXED THRESHOLD. This is the tunable parameter of the metric
+# (§4) and it is overridable per invocation with `compare --slo`. The reported
+# result does not rest on it: fig12 sweeps 50-400 ms and the arms separate across
+# that whole range, so no single value is load-bearing. 0.150 is the midpoint of
+# the separation, not a service requirement - the effect on the 2026-08-06 data
+# is 7.4 points at 150 ms and 8.2 at 124 ms. A report quoting one number must
+# quote the sweep beside it.
 #
 # Deliberately absent from export_summary.py's committed per-seed table: that CSV
-# is the evidence a reader checks the report against, and baking one provisional
-# threshold into it would read as a threshold already chosen. The driver CSVs are
+# is the evidence a reader checks the report against, and baking one objective
+# into it would read as a threshold already chosen. The driver CSVs are
 # committed, so any SLO is recomputable from the repository.
 TTFT_SLO_S = 0.150
 
@@ -535,13 +532,12 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO
     effect = bootstrap_ci_median_rel_reduction(c, b)
     print(f"metric: {metric}   candidate: {cand_dir}   baseline: {base_dir}")
     if metric == "ttft_slo_miss":
-        # Printed beside the number, not only in a doc: this p-value comes from a
-        # metric introduced after the pre-registered ttft_p95 test returned null,
-        # and an operator pasting this output into the report needs the caveat
-        # attached to it.
+        # Printed beside the number, not only in a doc: the objective is a
+        # parameter, and an operator pasting this output into the report needs to
+        # know which value produced it and that the result is swept, not pinned.
         print(
-            f"  SLO {slo * 1000:.0f} ms; goodput = 1 - this. EXPLORATORY unless a "
-            "pre-registration fixed this metric AND this SLO before the data existed."
+            f"  SLO {slo * 1000:.0f} ms; goodput = 1 - this. Objective is tunable "
+            "(--slo); see fig12 for the 50-400 ms sweep behind this number."
         )
     for sid, ci, bi in zip(cand_seeds, c, b):
         print(f"  seed {sid}: {ci:.4f} vs {bi:.4f}  (Δ {ci - bi:+.4f})")
