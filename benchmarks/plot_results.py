@@ -14,7 +14,7 @@ figure can never disagree with the table it sits next to.
   fig9-throughput.png         sustained tok/s and req/s per arm
   fig10-utilization.png       §3 utilization: GPU, GPU memory, CPU, host memory
   fig11-inflight-vs-time.png  per-engine in-flight vs time, baseline vs headline (#31 DoD)
-  fig12-goodput.png           goodput vs TTFT SLO - EXPLORATORY, see analyze.TTFT_SLO_S
+  fig12-goodput.png           goodput vs TTFT SLO, swept 50-400 ms - see analyze.TTFT_SLO_S
 
 Usage:
   python3 plot_results.py results/<...>-loadaware-b0 results/<...>-kvaware ... \
@@ -707,8 +707,9 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     top.grid(alpha=0.3)
     top.legend(loc="upper left", fontsize=9.5, framealpha=0.95)
     top.set_title(
-        "Goodput vs TTFT SLO, marked at the documented objective\n"
-        "EXPLORATORY: computed after the pre-registered TTFT p95 null on this data",
+        "Goodput vs TTFT SLO, marked at the default objective\n"
+        "The load term separates the arms across the whole 50-400 ms range; "
+        "the ablation reverses it",
         fontsize=11,
     )
 

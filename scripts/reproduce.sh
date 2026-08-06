@@ -129,16 +129,13 @@ echo "==> 4/5 the reported statistics regenerate"
   python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric imbalance | grep -E "Wilcoxon|median relative"
   echo "# ablation: $(basename "$ABLATION") vs $(basename "$BASELINE")"
   python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" | grep -E "Wilcoxon|median relative"
-  # EXPLORATORY, and labelled as such in the baseline file a reader diffs against. It is
-  # here because fig12 is committed and every committed number has to regenerate; it is not
-  # here because it is evidence. See analyze.TTFT_SLO_S.
-  # "EXPLORATORY" is in the grep alternation on purpose. analyze.py prints that caveat
-  # beside the p-value precisely so it cannot be separated from the number; a grep that
-  # kept only the Wilcoxon line would strip it back off and leave two bare "significant"
-  # verdicts in a committed baseline file.
-  echo "# EXPLORATORY goodput: --metric ttft_slo_miss (see analyze.TTFT_SLO_S)"
-  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
-  python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
+  # The "SLO <n> ms" line is in the grep alternation on purpose. analyze.py prints the
+  # objective beside the p-value precisely so it cannot be separated from the number; a
+  # grep that kept only the Wilcoxon line would strip it back off and leave two bare
+  # verdicts in a committed baseline file with no record of which objective produced them.
+  echo "# goodput: --metric ttft_slo_miss (secondary; objective swept in fig12)"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "SLO [0-9]+ ms|Wilcoxon|median relative"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "SLO [0-9]+ ms|Wilcoxon|median relative"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 

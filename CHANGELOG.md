@@ -8,6 +8,47 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (goodput promoted) - `ttft_slo_miss` is a reported secondary, not exploratory
+
+### Decided
+- **Goodput (`ttft_slo_miss`) is no longer labelled exploratory** (Ben, 2026-08-06). It is a
+  secondary metric of the #31 confirmatory sweep, reported alongside the two co-primaries.
+  Rationale: it is computed from the same committed driver CSVs, over the same five cells, as
+  every other statistic in the sweep - no new data, no new run, and any objective is
+  recomputable from the repository. The objective is **swept, not pinned**: `fig12` draws
+  50-400 ms and the arms separate across the whole range, so the 150 ms default is a reporting
+  choice rather than a load-bearing threshold. Supporting evidence: the effect is a plateau
+  (~7 points, 120-250 ms) rather than a peak; the `b0` ablation runs **negative** across the
+  same range, which no measurement artefact produces; and `b0.5` ran 20 min *after* `kvaware`,
+  so window drift biases this pair conservatively. Superseded the previous framing recorded
+  under "Goodput on this sweep is EXPLORATORY" (2026-08-06, earlier entry).
+- **What did not change: the pre-registered verdicts.** TTFT p95 remains the null (p=0.1153)
+  and imbalance remains the pass (p=1e-5, −48.1%). Goodput is reported *beside* them, not in
+  place of the null. `results/expected/stats.txt` regenerates every figure byte-identical -
+  only caveat prose moved.
+
+### Changed
+- **The "EXPLORATORY" stamp removed from the six places it was emitted**, so the runtime output
+  and the written result agree: `analyze.py` (module docstring, `TTFT_SLO_S` comment, and the
+  line `compare` prints beside the p-value), `plot_results.py` (fig12 title + layout table),
+  `run_sweep.sh` (closing banner), `benchmarks/README.md` (§ heading + body),
+  `test_analyze.py` (section comment). `compare` now prints the objective and points at the
+  sweep instead. Two of those printed at runtime, so leaving them would have made
+  `reproduce.sh` contradict the report.
+- **`scripts/reproduce.sh` greps `SLO [0-9]+ ms` instead of `EXPLORATORY`.** The objective must
+  stay welded to the p-value in the committed baseline; only the string it matches changed.
+  `results/expected/stats.txt` regenerated - **all statistics identical**, caveat text only.
+- Verified: `pytest benchmarks/` 130 passed, `scripts/reproduce.sh` 5/5, `figure-data.json`
+  diff-identical to the committed baseline.
+
+### Fixed
+- **Threshold-sensitivity was asserted but never tabulated.** `fig12` plots the mean goodput
+  gap across the sweep; it does not show whether the *paired* test holds off the default. It
+  does: `b0.5` vs `kvaware` is significant at α=0.025 at 100/124/150/175/400/500 ms
+  (p=0.0001 … 0.0215) and marginal in the 200-300 ms band (p=0.035-0.057), positive at every
+  threshold, never significant the wrong way, 13-18 of 20 seeds better throughout. `b0` is
+  negative at every threshold. Recomputable from committed CSVs via `compare --slo`.
+
 ## 2026-08-06 (roundrobin) - the third comparator, at n=20 (#31)
 
 ### Added
