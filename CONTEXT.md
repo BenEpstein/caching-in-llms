@@ -50,6 +50,16 @@ words with exactly these meanings. Implementation details live elsewhere.
   `docs/decisions/second-optimization.md` (frozen; handoff doc removed 2026-08-01, in git history).
 - **Hot Prefix** — a shared prompt prefix popular enough that its placement materially
   skews load; produced deliberately by the Zipfian workload.
+- **TTFT SLO** - a service-level objective on time-to-first-token, in seconds. The
+  tunable behind **Goodput**; `analyze.TTFT_SLO_S` holds the provisional default.
+  Always say "objective", never "threshold" - the latter is what the pre-registered
+  alpha is, and the two must not blur.
+- **Goodput** - the fraction of requests *sent* whose first token arrived under the
+  **TTFT SLO**. Denominator is requests sent, so an error is a miss. The quantity the
+  paired test consumes is its complement, the *miss rate* (`ttft_slo_miss`), because
+  every test here is one-sided lower-is-better. EXPLORATORY as of 2026-08-06: first
+  computed after the pre-registered TTFT p95 null, so it is not a tested claim until a
+  pre-registration fixes the metric and the objective before the data exists.
 - **Affinity Probe** — the smoke test: N requests sharing a long prefix; pass = the
   Controller reports both workers registered and follow-up requests land on the
   cache-holding instance.

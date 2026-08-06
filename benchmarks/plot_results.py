@@ -34,7 +34,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import utilization  # noqa: E402
-from analyze import goodput, percentile, read_run, read_seed_ttfts  # noqa: E402
+from analyze import (  # noqa: E402
+    TTFT_SLO_S, goodput, percentile, read_run, read_seed_ttfts,
+)
 
 BASELINE_STYLE = {"kvaware": ("tab:red", "-"), "roundrobin": ("tab:gray", "--")}
 
@@ -620,8 +622,36 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     plt.close(fig)
 
 
+GOODPUT_SLOS_MS = range(50, 401, 2)
+
+
+def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str) -> Dict:
+    """Mean per-seed goodput vs objective, for the three cells fig12 draws.
+
+    Separated from the drawing so the series is a value fig_goodput can hand on:
+    `reproduce.sh` diffs the numbers behind every figure precisely because PNGs
+    are not byte-comparable, and a curve that only exists as pixels is a
+    committed figure with nothing checking it.
+    """
+    curves = {}
+    for role, name in (("baseline", base), ("candidate", cand), ("ablation", ablation)):
+        c = next((x for x in cells if x["cell"] == name), None)
+        if not c:
+            raise SystemExit(
+                f"fig12 goodput: {role} cell '{name}' missing. "
+                f"Available: {[x['cell'] for x in cells]}"
+            )
+        by_seed = read_seed_ttfts(c["dir"])
+        curves[role] = [
+            100 * sum(goodput(t, n, ms / 1000) for t, n in by_seed.values()) / len(by_seed)
+            for ms in GOODPUT_SLOS_MS
+        ]
+    curves["slo_ms"] = list(GOODPUT_SLOS_MS)
+    return curves
+
+
 def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
-                ablation: str = "loadaware-b0") -> None:
+                ablation: str = "loadaware-b0") -> Dict:
     """Goodput against the TTFT objective: baseline, headline arm, ablation.
 
     Three cells and no more. Every arm on one axes turns a 7-point gap on a
@@ -636,30 +666,22 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     NOT A CLAIM. Goodput was first computed after the pre-registered ttft_p95
     test returned null on this data, so the caption says so - a figure that
     travels into a talk without its doc has to carry its own provenance.
+
+    Returns the curves it drew, for dump_data to record. Handing them over beats
+    letting dump_data recompute them from its own copy of these three cell
+    names: two call sites that must agree can stop agreeing, and a check that
+    diffs a curve the committed PNG does not show reads exactly like a check
+    that passes.
     """
-    picked = {}
-    for role, name in (("baseline", base), ("candidate", cand), ("ablation", ablation)):
-        c = next((x for x in cells if x["cell"] == name), None)
-        if not c:
-            raise SystemExit(
-                f"fig_goodput: {role} cell '{name}' missing. "
-                f"Available: {[x['cell'] for x in cells]}"
-            )
-        picked[role] = c
-
-    slos = [t / 1000 for t in range(50, 401, 2)]
-    curves = {}
-    for role, c in picked.items():
-        by_seed = read_seed_ttfts(c["dir"])
-        curves[role] = [
-            100 * sum(goodput(t, n, s) for t, n in by_seed.values()) / len(by_seed)
-            for s in slos
-        ]
-
-    x = [s * 1000 for s in slos]
+    curves = goodput_curves(cells, cand, base, ablation)
+    x = curves["slo_ms"]
     gain = [c - b for b, c in zip(curves["baseline"], curves["candidate"])]
     drop = [a - b for b, a in zip(curves["baseline"], curves["ablation"])]
-    peak = max(range(len(x)), key=lambda i: gain[i])
+    # Annotated at the DOCUMENTED objective, never at argmax(gain). Pointing the
+    # figure's largest text at the best-looking point on a 176-point sweep is the
+    # same post-hoc scan analyze.TTFT_SLO_S warns about, drawn at 11 pt bold - and
+    # a figure travels into a talk without the caveat its docstring carries.
+    mark = min(range(len(x)), key=lambda i: abs(x[i] - TTFT_SLO_S * 1000))
 
     fig, (top, bot) = plt.subplots(
         2, 1, figsize=(9.5, 7.4), sharex=True, gridspec_kw={"height_ratios": [3, 1.15]}
@@ -674,18 +696,18 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
         ("ablation", "dimgray", ":", f"{ablation} (ablation)"),
     ):
         top.plot(x, curves[role], color=color, ls=ls, lw=2.4, label=label, zorder=3)
-    top.annotate("", xy=(x[peak], curves["candidate"][peak]),
-                 xytext=(x[peak], curves["baseline"][peak]),
+    top.annotate("", xy=(x[mark], curves["candidate"][mark]),
+                 xytext=(x[mark], curves["baseline"][mark]),
                  arrowprops=dict(arrowstyle="<->", color="tab:blue", lw=2.2))
-    top.annotate(f"+{gain[peak]:.1f} points\nat {x[peak]:.0f} ms",
-                 xy=(x[peak] + 8, (curves["baseline"][peak] + curves["candidate"][peak]) / 2),
+    top.annotate(f"+{gain[mark]:.1f} points\nat {x[mark]:.0f} ms",
+                 xy=(x[mark] + 8, (curves["baseline"][mark] + curves["candidate"][mark]) / 2),
                  color="tab:blue", fontweight="bold", fontsize=11, va="center")
     top.set_ylabel("goodput: % of requests sent under the SLO")
     top.set_ylim(0, 100)
     top.grid(alpha=0.3)
     top.legend(loc="upper left", fontsize=9.5, framealpha=0.95)
     top.set_title(
-        f"Goodput vs TTFT SLO - {len(read_seed_ttfts(picked['baseline']['dir']))} seeds per arm\n"
+        "Goodput vs TTFT SLO, marked at the documented objective\n"
         "EXPLORATORY: computed after the pre-registered TTFT p95 null on this data",
         fontsize=11,
     )
@@ -704,9 +726,10 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     fig.tight_layout()
     fig.savefig(out, dpi=160)
     plt.close(fig)
+    return curves
 
 
-def dump_data(cells: List[Dict], out: str) -> None:
+def dump_data(cells: List[Dict], out: str, goodput_series: Dict) -> None:
     """Write the series behind the figures as JSON, for `scripts/reproduce.sh` to diff.
 
     Figures are NOT diffed as PNG bytes. Matplotlib output moves with font availability,
@@ -718,6 +741,9 @@ def dump_data(cells: List[Dict], out: str) -> None:
     exactly what this dumps: the per-seed stats every latency figure is drawn from, plus the
     per-cell aggregates the rest use. Stable across environments, and it fails loudly when a
     number moves.
+
+    `goodput_series` arrives from fig_goodput rather than being recomputed here - see that
+    function for why.
     """
     payload = []
     for c in sorted(cells, key=lambda c: c["cell"]):
@@ -731,8 +757,18 @@ def dump_data(cells: List[Dict], out: str) -> None:
                 for s in sorted(c["seeds"], key=lambda s: s["seed"])
             ],
         })
+    # fig12's curve is a per-SLO sweep, not a per-seed stat, so it is invisible to
+    # the per-cell payload above. Without this the committed figure had nothing
+    # checking the 176 points it actually draws.
+    out_obj = {
+        "cells": payload,
+        "goodput_curves": {
+            k: vs if k == "slo_ms" else [round(v, 6) for v in vs]
+            for k, vs in goodput_series.items()
+        },
+    }
     with open(out, "w") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
+        json.dump(out_obj, f, indent=2, sort_keys=True)
         f.write("\n")
     print(f"wrote figure data for {len(payload)} cells to {out}")
 
@@ -768,9 +804,10 @@ def main() -> None:
     fig_utilization(cells, os.path.join(args.out, "fig10-utilization.png"))
     fig_inflight_vs_time(cells, os.path.join(args.out, "fig11-inflight-vs-time.png"),
                          cand=args.cand)
-    fig_goodput(cells, os.path.join(args.out, "fig12-goodput.png"), cand=args.cand)
+    goodput_series = fig_goodput(cells, os.path.join(args.out, "fig12-goodput.png"),
+                                 cand=args.cand)
     if args.dump_data:
-        dump_data(cells, args.dump_data)
+        dump_data(cells, args.dump_data, goodput_series)
     print(f"wrote figures to {args.out}")
 
 

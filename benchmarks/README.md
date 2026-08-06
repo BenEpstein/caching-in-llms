@@ -353,8 +353,9 @@ a fresh run whose pre-registration fixes the metric and the objective in advance
 - Deliberately **absent from `results/summary-per-seed.csv`**: that table is the evidence a
   reader checks the report against, and baking one provisional objective into it would read
   as an objective already chosen. The driver CSVs are committed, so any objective is
-  recomputable. It does appear in `results/expected/figure-data.json`, which backs
-  `fig12-goodput.png`.
+  recomputable. The per-seed miss rate at the default objective, and the full 50-400 ms
+  curve `fig12-goodput.png` draws, both appear in `results/expected/figure-data.json`, so
+  `reproduce.sh` checks the numbers the committed figure actually plots.
 
 ## Validity rules (pre-registered - no post-hoc exceptions)
 

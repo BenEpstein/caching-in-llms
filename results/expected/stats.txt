@@ -8,7 +8,9 @@ median relative reduction: 48.1% (bootstrap 95% CI [37.7%, 56.3%])
 Wilcoxon signed-rank (one-sided, exact): W+=161.0 n=20 p=0.9836 ≥ 0.025  ✗ not significant
 median relative reduction: -13.2% (bootstrap 95% CI [-18.5%, -5.8%])
 # EXPLORATORY goodput: --metric ttft_slo_miss (see analyze.TTFT_SLO_S)
+  SLO 150 ms; goodput = 1 - this. EXPLORATORY unless a pre-registration fixed this metric AND this SLO before the data existed.
 Wilcoxon signed-rank (one-sided, exact): W+=31.0 n=20 p=0.0021 < 0.025  ✓ significant
 median relative reduction: 19.0% (bootstrap 95% CI [10.7%, 22.1%])
+  SLO 150 ms; goodput = 1 - this. EXPLORATORY unless a pre-registration fixed this metric AND this SLO before the data existed.
 Wilcoxon signed-rank (one-sided, exact): W+=128.0 n=20 p=0.8058 ≥ 0.025  ✗ not significant
 median relative reduction: -3.6% (bootstrap 95% CI [-9.3%, 7.0%])

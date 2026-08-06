@@ -19,8 +19,8 @@ with a pointer to the evidence — those matter as much as code.
   inverted test and no new statistics; figures plot the complement.
 - **On the confirmatory sweep** (`b0.5` vs `kvaware`, n=20): −19.0% missed requests at the
   150 ms objective, CI [10.7%, 22.1%], p=0.0021; −12.4%, p=0.0004 at 125 ms. The `b0`
-  ablation is null and slightly negative (−3.6%, p=0.8058), so the gain tracks the load term
-  rather than the run window.
+  ablation is null and slightly negative (−3.6%, p=0.8058), which is consistent (exploratory,
+  not a tested claim) with the gain tracking the load term rather than the run window.
 
 ### Decided
 - **Goodput on this sweep is EXPLORATORY and is labelled so in the code, not only in a doc.**

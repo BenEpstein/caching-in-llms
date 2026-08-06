@@ -121,6 +121,7 @@ echo "==> 4/5 the reported statistics regenerate"
 : "${ABLATION:=results/20260806-002645-loadaware-b0}"
 : "${BETA1:=results/20260805-234559-loadaware-b1.0}"
 : "${BETA2:=results/20260806-000626-loadaware-b2.0}"
+: "${SLO:=0.150}"   # analyze.TTFT_SLO_S; overridable like the cell paths above
 {
   echo "# headline: $(basename "$HEADLINE") vs $(basename "$BASELINE")"
   python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" | grep -E "Wilcoxon|median relative"
@@ -131,9 +132,13 @@ echo "==> 4/5 the reported statistics regenerate"
   # EXPLORATORY, and labelled as such in the baseline file a reader diffs against. It is
   # here because fig12 is committed and every committed number has to regenerate; it is not
   # here because it is evidence. See analyze.TTFT_SLO_S.
+  # "EXPLORATORY" is in the grep alternation on purpose. analyze.py prints that caveat
+  # beside the p-value precisely so it cannot be separated from the number; a grep that
+  # kept only the Wilcoxon line would strip it back off and leave two bare "significant"
+  # verdicts in a committed baseline file.
   echo "# EXPLORATORY goodput: --metric ttft_slo_miss (see analyze.TTFT_SLO_S)"
-  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss | grep -E "Wilcoxon|median relative"
-  python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss | grep -E "Wilcoxon|median relative"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
+  python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "EXPLORATORY|Wilcoxon|median relative"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 

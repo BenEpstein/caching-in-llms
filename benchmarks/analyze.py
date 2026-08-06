@@ -15,12 +15,16 @@ exists:
 
 stdlib-only, deterministic (bootstrap is seeded).
 
-UNITS: every latency field this module produces is in SECONDS - `ttft_*`, `e2e_*`
-AND `itl_*`. The driver writes inter-token gaps in milliseconds under a column
-named `itls_ms`, and seed_stats divides by 1000 on read, so the `itl_p95` that
-comes out of here is seconds despite the source column's name. The names carry no
-unit suffix and are the column headers in the committed summary CSV, so a reader
-checking a figure against that CSV has nothing but this note to go on. Not
+UNITS: every latency MEASUREMENT this module produces is in SECONDS - `ttft_*`,
+`e2e_*` AND `itl_*`. Two `ttft_`-prefixed fields are not measurements and are the
+exceptions: `ttft_slo_miss` is a dimensionless fraction, and `ttft_slo_s` carries
+an explicit `_s` because it is the objective those misses were counted against
+rather than something observed. The driver writes inter-token gaps in
+milliseconds under a column named `itls_ms`, and seed_stats divides by 1000 on
+read, so the `itl_p95` that comes out of here is seconds despite the source
+column's name. The names carry no unit suffix and are the column headers in the
+committed summary CSV, so a reader checking a figure against that CSV has
+nothing but this note to go on. Not
 renamed deliberately: the names are load-bearing in export_summary.py,
 plot_results.py, load_gate.py and the already-committed
 results/summary-per-seed.csv.
@@ -47,7 +51,7 @@ import json
 import os
 import random
 import sys
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 # NOTE: `utilization` is imported INSIDE per_seed_imbalance, not here, and must
 # stay that way. load_driver.py does `from analyze import percentile` and runs
@@ -132,32 +136,35 @@ def goodput(ttfts: Sequence[float], sent: int, slo: float) -> float:
     the number by well under a point. The choice matters for what happens if a
     future arm fails a lot, not for the runs analysed so far.
     """
-    return sum(1 for t in ttfts if t < slo) / sent if sent else float("nan")
+    if not sent:
+        return float("nan")
+    return sum(1 for t in ttfts if t < slo) / sent
 
 
-def read_seed_ttfts(run_dir: str) -> Dict[int, tuple]:
+def _ok_ttfts(rows: List[Dict]) -> List[float]:
+    """Sorted TTFTs of the requests that succeeded. One definition, two callers."""
+    return sorted(float(r["ttft_s"]) for r in rows if r["status"] == "ok" and r["ttft_s"])
+
+
+def read_seed_ttfts(run_dir: str) -> Dict[int, Tuple[List[float], int]]:
     """{seed: (sorted successful TTFTs, requests sent)} for every seed in a cell.
 
     The raw material for goodput at ANY objective. seed_stats bakes one value of
     TTFT_SLO_S into `ttft_slo_miss` because the paired test needs a single number
     per seed; the goodput figure sweeps a whole range and needs the samples.
     """
-    return {
-        seed_id(p): _ttfts_and_sent(list(csv.DictReader(open(p))))
-        for p in _driver_csvs(run_dir)
-    }
-
-
-def _ttfts_and_sent(rows: List[Dict]) -> tuple:
-    ok = [float(r["ttft_s"]) for r in rows if r["status"] == "ok" and r["ttft_s"]]
-    return sorted(ok), len(rows)
+    out = {}
+    for path in _driver_csvs(run_dir):
+        rows = list(csv.DictReader(open(path)))
+        out[seed_id(path)] = (_ok_ttfts(rows), len(rows))
+    return out
 
 
 def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
     """Per-seed metrics from one driver CSV. Errors excluded from latency, counted."""
     rows = list(csv.DictReader(open(csv_path)))
     ok = [r for r in rows if r["status"] == "ok"]
-    ttft = [float(r["ttft_s"]) for r in ok if r["ttft_s"]]
+    ttft = _ok_ttfts(rows)
     e2e = [float(r["e2e_s"]) for r in ok if r["e2e_s"]]
     # Pooled over every inter-token gap in the seed, not over per-request
     # summaries: "ITL p99" means the 99th percentile of gaps. Absent on CSVs
@@ -515,14 +522,13 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO
     # median is a median OF, without saying so.
     zeros = [sid for sid, bi in zip(cand_seeds, b) if bi == 0]
     if zeros:
+        hint = ""
+        if metric == "ttft_slo_miss":
+            hint = (f" - the {slo * 1000:.0f} ms objective is loose enough that the "
+                    "baseline misses nothing on those seeds; choose a tighter --slo")
         raise SystemExit(
             f"baseline {metric} is exactly 0 on seed(s) {zeros}, so a relative "
-            f"reduction is undefined there"
-            + (
-                f" - the {slo * 1000:.0f} ms objective is loose enough that the "
-                "baseline misses nothing on those seeds; choose a tighter --slo"
-                if metric == "ttft_slo_miss" else ""
-            )
+            f"reduction is undefined there{hint}"
         )
     diffs = [ci - bi for ci, bi in zip(c, b)]
     test = wilcoxon_exact_one_sided(diffs)
