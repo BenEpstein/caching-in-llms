@@ -1,34 +1,9 @@
 """Utilization metrics (§3): GPU, memory, CPU - read from the per-cell collectors.
 
-§3 requires memory and CPU/GPU utilization alongside latency, hit rate and
-throughput. Most of what this module reads was already being collected per cell
-and read by nothing; the LMCache memory gauges were added alongside it (#35),
-so they exist only on cells run from that commit onward.
-
-Where each number comes from, and why (decided on #35):
-
-  GPU utilization   DCGM_FI_DEV_GPU_UTIL / _POWER_USAGE / _MEM_COPY_UTIL, per GPU
-                    vLLM's /metrics exposes neither SM% nor power, so there is no
-                    Prometheus substitute for this half of the requirement. DCGM
-                    stays the source of record and is polled through
-                    port-forwards - promoting it into Prometheus would need a
-                    RoleBinding in `nvidia-gpu-operator`, which costs the property
-                    that `oc apply -f deploy/` works in any namespace without
-                    cluster-admin.
-
-  GPU memory        vllm:kv_cache_usage_perc, per engine.
-                    Scraped in-cluster and therefore immune to the WAN that
-                    truncates dcgm.csv. It is also the resource the policy
-                    contends for.
-
-  Memory            lmcache:local_cache_usage, per engine (the host RAM the
-                    LMCache CPU backend holds) + process_resident_memory_bytes
-                    and router_memory_usage_percent for the router.
-
-  CPU               router_cpu_usage_percent and process_cpu_seconds_total, router
-                    only. The engines export no process_* metrics at all - verified
-                    at the endpoint, not inferred from absence - so engine host-CPU
-                    is UNAVAILABLE and is reported as such rather than faked.
+Which series answers which §3 requirement, why DCGM is the GPU source of record,
+and why engine host-CPU is UNAVAILABLE rather than substituted: benchmarks/README.md,
+"Utilization (§3): where each number comes from". The LMCache memory gauges arrived
+with this module (#35), so they exist only on cells run from that commit onward.
 
 Coverage: every series is checked against the cell's measured window and the
 covered fraction recorded in run.json. A utilization source that comes back

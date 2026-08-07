@@ -63,8 +63,9 @@ METRICS = [
     "lmcache:request_cache_hit_rate_sum",
     "lmcache:request_cache_hit_rate_count",
     # §3 utilization (#35). Every series from here down is READ by
-    # utilization.py, whose docstring owns which number comes from where (the
-    # process_* pair only ever returns the router). Deliberately not a wider
+    # utilization.py; which number comes from where is in benchmarks/README.md,
+    # "Utilization (§3)" (the process_* pair only ever returns the router).
+    # Deliberately not a wider
     # net: #35 exists because series were collected and read by nothing, and
     # adding more unread ones reproduces the thing it fixed.
     # Rejected candidates: local_storage_usage / remote_cache_usage (flat zero in
