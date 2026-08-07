@@ -82,7 +82,7 @@ DEFAULT_STEP_S = 5.0
 # Prometheus series this module reads, and the job whose samples count.
 # The job filter is not cosmetic: the router re-exports vllm:* per backend under
 # one shared `instance`, so dropping it merges both engines into one synthetic
-# series (the same trap export_summary.per_seed_imbalance documents).
+# series (the same trap analyze.per_seed_imbalance documents).
 ENGINE_JOB, ROUTER_JOB = "vllm-engines", "router"
 ENGINE_GAUGES = ["vllm_kv_cache_usage_perc", "lmcache_local_cache_usage",
                  "lmcache_active_memory_objs_count"]

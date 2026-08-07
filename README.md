@@ -147,9 +147,8 @@ a different workload manifest — "identical workload across arms" is enforced, 
 ## Reproduce the benchmarks on a cluster
 
 Requires a 2-GPU Kubernetes/OpenShift cluster with the vLLM Production Stack chart. Full
-procedure, metrics, validity rules, and the pre-registered statistics are in
-[`benchmarks/README.md`](benchmarks/README.md); cluster-specific gotchas are in
-[`deploy/README.md`](deploy/README.md).
+procedure, deployment steps, cluster gotchas, metrics, validity rules, and the
+pre-registered statistics are in [`benchmarks/README.md`](benchmarks/README.md).
 
 ```bash
 python3 benchmarks/freeze_workloads.py          # regenerate the SHA-pinned workload

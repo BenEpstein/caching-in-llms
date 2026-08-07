@@ -160,12 +160,9 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
     """
     labels, values = [], []
     for c in sorted(cells, key=lambda c: (c["arm"], c["beta"] or 0)):
-        path = os.path.join(c["dir"], "prom", "lmcache_lookup_hit_rate.json")
-        if not os.path.exists(path):
-            continue
-        series = json.load(open(path)).get("data", {}).get("result", [])
-        samples = [float(v[1]) for s in series for v in s.get("values", [])
-                   if v[1] not in ("NaN", "+Inf", "-Inf")]
+        per_pod = utilization.read_series(
+            c["dir"], "lmcache_lookup_hit_rate", utilization.ENGINE_JOB)
+        samples = [v for pts in per_pod.values() for _, v in pts]
         if not samples:
             continue
         labels.append(c["cell"])
@@ -194,13 +191,14 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
 
 
 def counter_delta(run_dir: str, metric: str) -> float:
-    """Total increase of a Prometheus counter over the window, summed over series."""
-    path = os.path.join(run_dir, "prom", metric.replace(":", "_") + ".json")
-    if not os.path.exists(path):
+    """Total increase of a Prometheus counter over the window, summed over engine series."""
+    per_pod = utilization.read_series(
+        run_dir, metric.replace(":", "_"), utilization.ENGINE_JOB)
+    if not per_pod:
         return float("nan")
     total = 0.0
-    for s in json.load(open(path))["data"]["result"]:
-        vals = [float(v[1]) for v in s["values"] if v[1] not in ("NaN", "+Inf", "-Inf")]
+    for pts in per_pod.values():
+        vals = [v for _, v in pts]
         if len(vals) >= 2:
             total += max(vals) - min(vals)
     return total
@@ -311,7 +309,7 @@ def fig_paired(cells: List[Dict], out: str, cand: str, base: str = "kvaware") ->
 
     `cand` is REQUIRED. It first defaulted to the literal "loadaware-b0.1" and returned
     silently when that cell was absent; that was replaced by an inference accepting exactly
-    one non-b0 loadaware cell, which the standard grid (BETA_GRID="0 0.5 1.0 2.0") never
+    one non-b0 loadaware cell, which the standard grid (BETA_GRID="0.5 1.0 2.0 0") never
     satisfies - it always yields three, so the default path could not fire at all (#30).
 
     Both failures were the same shape: an interface that looks like it has a working default.
@@ -467,11 +465,8 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     labels, lows, highs = [], [], []
     for c in ordered:
-        # job=vllm-engines only. The router exports the same metric per backend
-        # under a single shared `instance`, so including it merges both engines
-        # into one synthetic series - see export_summary.per_seed_imbalance.
-        # The parse lives in utilization.read_series; this was the third verbatim
-        # copy of it in the repo.
+        # job=vllm-engines only - read_series owns the router-reexport filter
+        # (see utilization.ENGINE_JOB and analyze.per_seed_imbalance).
         per_pod = utilization.read_series(
             c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
         means = sorted(sum(y for _, y in v) / len(v) for v in per_pod.values() if v)

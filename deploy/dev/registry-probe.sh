@@ -15,7 +15,8 @@
 # Exit:   0 = registry live, 1 = registry empty (do not measure)
 #
 # ALWAYS use a seed you have not used before on these engine pods: a prefix whose
-# admits were lost is poisoned for the life of the engine process (see deploy/README.md).
+# admits were lost is poisoned for the life of the engine process (see the cluster
+# gotchas in benchmarks/README.md).
 set -uo pipefail
 
 NS="${NS:-cache-llm}"

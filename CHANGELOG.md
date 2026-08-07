@@ -8,6 +8,46 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-07 (#55) - dead code, parse consolidation, deploy README folded
+
+### Changed
+- **The Prometheus `query_range` parse is now ONE implementation**:
+  `load_gate._engine_series` and the two inline parses in `plot_results.py`
+  (`fig_hit_rate`, `counter_delta`) all collapsed onto `utilization.read_series`,
+  which owns the `job=vllm-engines` router-trap filter. `reproduce.sh` regenerates
+  identical figure data, so the consolidation is behavior-preserving on committed
+  runs. `test_load_gate`'s router test narrowed to the gate-level wiring assert
+  (the filter itself is covered once, on the shared helper, by `test_utilization`);
+  `test_analyze`'s router test stays as `per_seed_imbalance`'s wiring guard.
+- **`deploy/README.md` folded into `benchmarks/README.md`** ("Deploying the stack"
+  + a cluster-gotchas index; each gotcha's fix already lives in code or a values
+  comment). Deleted with it: `deploy/nocache-arm.md` (#25 closed premise-wrong) and
+  `docs/sweep-2026-08-06-findings.md` (conclusions live in the report's "An
+  instrument problem, not a result"; goodput ruling landed in `a137f5a`). This
+  completes the three deletions #59 deferred to #55.
+- `run_sweep.sh`'s per-cell seed map collapsed to a plain cell list - every entry
+  carried the identical 20-seed list since the 3-seed subset was retired.
+
+### Decided
+- **`Dockerfile` / `Dockerfile.bench` stay separate** (#55, answering #30's fog
+  item): router-under-test vs measurement instrument - different bases, different
+  CI workflows; merging couples instrument rebuilds to SUT rebuilds.
+- **Kept, re-argued under #30's adversarial test**: `scarcity_gate.sh` and
+  `load_gate.py` (report-cited operator gates; the former carries its historical
+  one-shot argument in its header), the `alpha` column (provenance for
+  pre-`7e2dffb` rows, pending #57), `rate_pilot`'s 3-line `pct()` (consolidating
+  would reintroduce the deleted `sys.path` hack), and the four distinct `send_ts`
+  window computations (four different semantics; a shared helper couples them
+  without killing a bug class).
+
+### Fixed
+- Stale text swept in `benchmarks/README.md` (closed-loop driver row, seed counts,
+  `BETA_GRID` order - b0 runs LAST as the drift sentinel, duplicate rows/steps);
+  stale `export_summary.per_seed_imbalance` and deleted-findings-doc pointers
+  repointed at `analyze` / the report. Post-review (/code-review + /simplify): the
+  folded `oc exec` diagnostic lost a dash, and the SCC note + helm list-replacement
+  pitfall from the deleted docs got a destination in the gotchas list.
+
 ## 2026-08-07 (upstream conformance, #65) - the real pinned packages now test the patch
 
 ### Added

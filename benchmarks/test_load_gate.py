@@ -7,7 +7,8 @@ Two groups:
      the important cases are the FAILURES: saturated-but-symmetric, and
      asymmetric-but-idle (which is exactly what the 2026-08-03 sweep was).
   2. The paths Ben flagged as having zero coverage: ITL parsing, the old-CSV
-     `.get()` fallback, and the `job=vllm-engines` filter - that last one
+     `.get()` fallback, and the `job=vllm-engines` filter WIRING (the filter
+     itself lives in utilization.read_series and is tested there) - that filter
      silently corrupted 17 of 74 committed seed rows before it was caught, and
      nothing stopped it returning.
 """
@@ -17,7 +18,7 @@ import json
 import pytest
 
 from analyze import seed_stats
-from load_gate import MIN_ASYMMETRY, _engine_series, gate, relative_imbalance
+from load_gate import MIN_ASYMMETRY, gate, relative_imbalance
 
 # --------------------------------------------------------------------------
 # fixtures: a minimal run directory
@@ -174,17 +175,16 @@ def test_out_of_window_samples_are_excluded(tmp_path):
     assert r["mean_idlest"] == pytest.approx(16.0)
 
 
-def test_router_job_series_are_ignored(tmp_path):
-    """`vllm:num_requests_running` is exported per-backend under job=router too,
-    where all series share one instance label. Counting them creates a synthetic
-    third 'engine' averaging the real two - it corrupted 17 of 74 seed rows."""
+def test_router_job_series_are_ignored_by_the_gate(tmp_path):
+    """The job filter itself is covered on utilization.read_series (its own
+    test); this guards the WIRING - gate() must consume the filtered path, or
+    router re-exports average into asymmetry (the 17-of-74-rows corruption)."""
     run = _write_run(
         tmp_path,
         running={"a": [(100.0, 40.0)], "b": [(100.0, 16.0)]},
         job="router",
     )
     assert "error" in gate(run)
-    assert _engine_series(run, "vllm_num_requests_running") == {}
 
 
 def test_missing_dump_is_an_error_not_a_pass(tmp_path):
