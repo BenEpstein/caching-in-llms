@@ -8,6 +8,32 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-06 (charting) - #30 converted into a repo-cleanup submap
+
+### Decided
+- **"Clean the repo for submission" is seven decisions, not one.** #30 was converted from a
+  dead-code ticket into a [wayfinder submap](https://github.com/BenEpstein/caching-in-llms/issues/30)
+  under map #1; its inventory moved down intact to #55. Destination is a **pass/fail test on
+  each file**, not a subjective standard: *every tracked file is either cited by the root
+  README / report / one-pager, executed by CI, or data a report number comes from - nothing
+  else survives.* Children: #55 dead code, #56 comments, #57 `results/`, #58 figures, #59
+  docs, #60 tests, #61 agent scaffolding, plus #32 re-parented.
+- **No git history rewrite.** Pruning `results/` leaves the clone at 65 MB because history
+  carries every byte, but `filter-repo` breaks every commit SHA, PR link, and provenance
+  pointer the report and CHANGELOG make into `results/`. Reproducibility is 30% of the grade;
+  readability is graded on what a reader sees, not on download size.
+- **The report's prose stays with #8; this map prunes around it.** Consequence recorded on
+  #58: the figure keep-rule is stated against **§5's requirements**, not against what
+  `report.md` currently cites - `report.md` cites 3 of the 12 figures generated, and deleting
+  on today's citation list would delete figures #8 later wants.
+- **Two READMEs survive, not one** - root and `benchmarks/`. §3 explicitly requires a
+  benchmark README, so collapsing to a single file costs rubric points.
+- **Approval is live and in-session**, not a delete-list comment per ticket (Ben, 2026-08-06).
+  This is what caps ticket size: a session proposing deletions across four unrelated areas
+  is one that cannot actually be reviewed live.
+- **#32 (front-door README) absorbed into the submap** and re-parented off #1. Every prune
+  changes what the README should say; split across two maps it gets written twice.
+
 ## 2026-08-06 (goodput promoted) - `ttft_slo_miss` is a reported secondary, not exploratory
 
 ### Decided
