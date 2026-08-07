@@ -8,6 +8,45 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-07 (docs consolidation) - seven docs deleted, five graded documents survive
+
+### Decided
+- **The graded surface is five documents** (Ben, 2026-08-07, issue #59): `README.md`,
+  `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3), `docs/report/report.md`
+  (§6), `CHANGELOG.md`, with `CONTEXT.md` as their shared glossary. Rule now lives in CLAUDE.md
+  so the surface does not regrow; the survival test and the per-file verdicts are on #59.
+- **`docs/baseline-justification.md` stays standalone** (Ben, 2026-08-07), reversing the
+  in-session plan to fold §2 into the README: §2 gets one artifact a grader can open.
+- **`docs/decisions/` is deleted, not merely closed.** The standing rule already sent decisions
+  to issues + CHANGELOG, and its last file's only citation was map #1's Out-of-scope entry.
+
+### Added
+- **README § "What we changed upstream"** - the three-file diff table, the only place the
+  `parser.py` change is written down.
+
+### Removed
+- Seven docs: `requirements-audit`, `project-brief`, `feasibility-verification`,
+  `upstream-findings`, `decisions/second-optimization`, `patches/README`, `deploy/dev/README`.
+  Each one's still-live content is archived verbatim on the ticket that consumes it -
+  `upstream-findings` and `patches/README` on #10, `second-optimization` on #1 - and the
+  overlay's apply rules moved into `deploy/dev/apply-router-patch.sh`'s own header.
+
+### Changed
+- **Report Appendix A** drops the `requirements-audit.md` row. Prose untouched - #8 owns it.
+- **`CONTEXT.md`, `CLAUDE.md`, `tests/test_loadaware_routing.py`, `registry-probe.sh`**
+  re-pointed off deleted files.
+
+### Fixed
+- **README claimed 168 tests; the suite is 196.** Also corrected: `deploy/dev/` was described
+  as dev-only, but `registry-probe.sh` and `revert-router-patch.sh` are called by
+  `rate_pilot.sh`, `run_cell.sh` and `scarcity_gate.sh`, so they are reproduce-path files.
+
+### Deferred
+- **`deploy/README.md`, `deploy/nocache-arm.md`, `docs/sweep-2026-08-06-findings.md` → #55**,
+  which carries the edit sites. Decision made; only the edit waits, since all three need
+  `benchmarks/` changes that #30 holds until the in-flight runs land.
+- **§2 is 641 words against the spec's "≤1 page" → #8**, which regenerates the deliverable.
+
 ## 2026-08-06 (charting) - #30 converted into a repo-cleanup submap
 
 ### Decided

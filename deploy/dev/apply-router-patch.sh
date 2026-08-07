@@ -8,6 +8,18 @@
 # Usage:  ./apply-router-patch.sh <file> [<file> ...]
 # Revert: ./revert-router-patch.sh
 #
+# Point it at the tracked files in `patches/`, never at scratch copies in `deploy/dev/work/`
+# (gitignored). Pass EVERY patched file in one invocation: the ConfigMap is rebuilt from
+# exactly the files given, so naming one drops the others. `loadaware` needs all three:
+#
+#   ./apply-router-patch.sh \
+#     patches/lmcache/v1/cache_controller/controllers/kv_controller.py \
+#     patches/vllm_router/routers/routing_logic.py \
+#     patches/vllm_router/parsers/parser.py
+#
+# To refresh a stock copy from the pinned image:
+#   oc exec -n cache-llm deploy/stack-deployment-router -- cat $SP/<path> > patches/<path>
+#
 # Only files whose basename matches a branch of `patch_target()` can be applied — the
 # mount path must be the file's real location inside the image. (It is a `case`, not an
 # associative array: macOS ships bash 3.2, which has no `declare -A`.)
