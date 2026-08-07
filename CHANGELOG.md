@@ -16,9 +16,9 @@ with a pointer to the evidence — those matter as much as code.
   (`fig_hit_rate`, `counter_delta`) all collapsed onto `utilization.read_series`,
   which owns the `job=vllm-engines` router-trap filter. `reproduce.sh` regenerates
   identical figure data, so the consolidation is behavior-preserving on committed
-  runs. Retired `test_load_gate::test_router_job_series_are_ignored` (the filter is
-  now covered once, on the shared helper, by `test_utilization`); kept
-  `test_analyze`'s router test as the caller-level guard (#60's note on #55).
+  runs. `test_load_gate`'s router test narrowed to the gate-level wiring assert
+  (the filter itself is covered once, on the shared helper, by `test_utilization`);
+  `test_analyze`'s router test stays as `per_seed_imbalance`'s wiring guard.
 - **`deploy/README.md` folded into `benchmarks/README.md`** ("Deploying the stack"
   + a cluster-gotchas index; each gotcha's fix already lives in code or a values
   comment). Deleted with it: `deploy/nocache-arm.md` (#25 closed premise-wrong) and
@@ -41,13 +41,12 @@ with a pointer to the evidence — those matter as much as code.
   without killing a bug class).
 
 ### Fixed
-- Stale text swept in `benchmarks/README.md`: closed-loop driver row, duplicate
-  `utilization.py` row, "all 6 seeds", the `BETA_GRID` default order (b0 runs
-  LAST - drift sentinel), duplicate step "4.", `cold_start.sh` row now says what
-  it does. Stale `export_summary.per_seed_imbalance` pointers in `utilization.py`,
-  `plot_results.py`, `load_gate.py` repointed at `analyze.per_seed_imbalance`.
-  `analyze.py`/`test_analyze.py` goodput notes repointed from the deleted findings
-  doc to the report.
+- Stale text swept in `benchmarks/README.md` (closed-loop driver row, seed counts,
+  `BETA_GRID` order - b0 runs LAST as the drift sentinel, duplicate rows/steps);
+  stale `export_summary.per_seed_imbalance` and deleted-findings-doc pointers
+  repointed at `analyze` / the report. Post-review (/code-review + /simplify): the
+  folded `oc exec` diagnostic lost a dash, and the SCC note + helm list-replacement
+  pitfall from the deleted docs got a destination in the gotchas list.
 
 ## 2026-08-07 (test-suite audit) - 196 → 190, and the audit's own blind spot
 

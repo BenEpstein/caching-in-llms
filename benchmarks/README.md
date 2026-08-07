@@ -153,12 +153,11 @@ on the same pod (router logs, `grep -i routing`).
   workers register on reply port 9001 and heartbeat on 9002, the chart exposes only 9000,
   and registration hangs **silently** - every lookup misses and kvaware degrades to QPS
   routing with no error anywhere. `run_cell.sh` re-applies the port patch before every
-  cell. Diagnose via `Registered instance-worker` router log lines (this router build
-  exposes no registered-workers gauge). Upstream-PR candidate.
+  cell. Diagnose via `Registered instance-worker` router log lines. Upstream-PR candidate.
 - **lmcache version skew router↔engine fails silently** (msgspec ZMQ schema drift): both
   images are digest-pinned to the same lmcache minor - see `Dockerfile` and the image pins
   in `deploy/values-baseline-kvaware.yaml`. Check live:
-  `oc exec <pod> - /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`.
+  `oc exec <pod> -- /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`.
 - **A router restart re-registers workers only because `workerHeartbeatTime` is set**, and
   the KV registry stays blind ~40 s afterwards (#13) - admits in that window are lost for
   the life of the engine process. Measurements gate on `deploy/dev/registry-probe.sh`;
@@ -172,6 +171,11 @@ on the same pod (router logs, `grep -i routing`).
   ceph-rbd RWO).
 - Router discovers engines via the K8s API; the chart's RBAC handles it. Verify:
   `oc auth can-i list pods --as=system:serviceaccount:cache-llm:stack-router-service-account`.
+- SCC errors on the non-root images: `anyuid` is not the first resort - check the actual UID
+  requirement (`oc adm policy who-can use scc/anyuid`) and prefer `nonroot-v2`.
+- Values overlays: `servingEngineSpec.modelSpec` is a **list**, and helm *replaces* lists on a
+  second `-f` file - everything in the base entry silently vanishes. Override list members
+  with `--set` by index instead. (Grafana login for the route above: admin / cache-llm.)
 
 ## Running it
 
@@ -290,7 +294,7 @@ cluster:                                     Job pod: verify dataset
 
 ```
 results/<ts>-<cell>/
-  driver-seed{1..6}.csv     client-observed per-request TTFT/E2E/tokens (percentile source of
+  driver-seed{1..20}.csv    client-observed per-request TTFT/E2E/tokens (percentile source of
                             truth; send_ts is wall-clock epoch, so per-seed windows derive from it)
   prom/*.json               vllm:num_requests_running/waiting, request_queue_time, kv_cache_usage,
                             lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution

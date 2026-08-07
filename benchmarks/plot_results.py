@@ -309,7 +309,7 @@ def fig_paired(cells: List[Dict], out: str, cand: str, base: str = "kvaware") ->
 
     `cand` is REQUIRED. It first defaulted to the literal "loadaware-b0.1" and returned
     silently when that cell was absent; that was replaced by an inference accepting exactly
-    one non-b0 loadaware cell, which the standard grid (BETA_GRID="0 0.5 1.0 2.0") never
+    one non-b0 loadaware cell, which the standard grid (BETA_GRID="0.5 1.0 2.0 0") never
     satisfies - it always yields three, so the default path could not fire at all (#30).
 
     Both failures were the same shape: an interface that looks like it has a working default.
@@ -465,11 +465,8 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     labels, lows, highs = [], [], []
     for c in ordered:
-        # job=vllm-engines only. The router exports the same metric per backend
-        # under a single shared `instance`, so including it merges both engines
-        # into one synthetic series - see analyze.per_seed_imbalance.
-        # The parse lives in utilization.read_series; this was the third verbatim
-        # copy of it in the repo.
+        # job=vllm-engines only - read_series owns the router-reexport filter
+        # (see utilization.ENGINE_JOB and analyze.per_seed_imbalance).
         per_pod = utilization.read_series(
             c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
         means = sorted(sum(y for _, y in v) / len(v) for v in per_pod.values() if v)
