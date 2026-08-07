@@ -35,7 +35,7 @@ import asyncio
 import importlib.util
 
 import pytest
-from conftest import REPO, stub_fields, stubbed_message_names, unused_message_names
+from stub_surface import REPO, stub_fields, stubbed_message_names, unused_message_names
 
 lmcache = pytest.importorskip(
     "lmcache", reason="conformance needs the real lmcache install (CI-only)"
@@ -59,7 +59,7 @@ LOCAL = "LocalCPUBackend"
 # --- 1. message classes: real fields == the fields the stubs declare ---------
 
 
-#: Derived from tests/conftest.py itself (see conformance/conftest.py), so the
+#: Derived from tests/conftest.py itself (see conformance/stub_surface.py), so the
 #: parametrization can never drift from what the offline suite actually stubs.
 @pytest.mark.parametrize("name", stubbed_message_names())
 def test_message_fields_match_the_stub_exactly(name):

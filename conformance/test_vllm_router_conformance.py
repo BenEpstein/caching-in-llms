@@ -22,7 +22,7 @@ CI-only, like the rest of conformance/ - see the module docstring next door.
 import importlib.util
 
 import pytest
-from conftest import REPO, stub_fields
+from stub_surface import REPO, stub_fields
 
 vllm_router = pytest.importorskip(
     "vllm_router", reason="conformance needs the real vllm_router install (CI-only)"

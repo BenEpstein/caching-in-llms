@@ -80,6 +80,7 @@ jobs:
       # "Must not change" means the summary too, not just both exit codes: a patch
       # that turned passes into skips would otherwise stay green.
       - name: Compare the two summaries
+        shell: bash
         run: |
           for f in baseline patched; do
             tail -1 /tmp/$f.out | sed -E 's/ in [0-9.]+s.*//' > /tmp/$f.sum
