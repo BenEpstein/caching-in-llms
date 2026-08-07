@@ -1,0 +1,95 @@
+# Upstream conformance (#65): run the REAL pinned packages against our patch.
+#
+# The offline suites (ci.yml) load the patch files against stubs and never import a real
+# upstream package. This job is the third leg: it installs the exact versions the measured
+# router ran - production-stack @ 37bafbcf5 (the commit in the image tag
+# 0.1.9.dev9-g37bafbcf5.d20260107; the dev build was never published to PyPI) and
+# lmcache==0.3.9.post2 - then proves
+#   1. upstream's own router tests pass unmodified (baseline),
+#   2. they still pass with our two patched files copied over (the diff is inert), and
+#   3. the offline test doubles are faithful to the real lmcache (conformance/).
+#
+# Separate workflow from ci.yml, path-gated: neither package installs on macOS (lmcache
+# needs torch; the PyPI vllm-router needs a Rust toolchain), so this can never join the
+# laptop-runnable `pytest benchmarks/ tests/` path, and the repo is private so Actions
+# minutes are metered - it runs only when the patch or its tests change.
+
+name: Upstream conformance
+
+on:
+  push:
+    paths:
+      - "patches/**"
+      - "tests/**"
+      - "conformance/**"
+      - ".github/workflows/upstream-conformance.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upstream-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: vllm-project/production-stack
+          ref: 37bafbcf540fcdff1d36db3fe1b6453f404ef5d7
+          path: upstream
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # CPU torch first: lmcache leaves torch unpinned and pip would otherwise pull the
+      # CUDA build plus its nvidia-* wheels (several GB) onto a GPU-less runner.
+      - name: Install the pinned real packages
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ./upstream lmcache==0.3.9.post2 pytest pytest-asyncio
+
+      # Run from upstream/ so upstream's own pyproject pytest options (asyncio_mode=auto)
+      # apply, exactly as their CI runs them. `shell: bash` turns on pipefail, so a
+      # red pytest still fails the step through the tee.
+      - name: Baseline - upstream router tests, unmodified
+        working-directory: upstream
+        shell: bash
+        run: pytest src/tests -q | tee /tmp/baseline.out
+
+      # The import proves the copy landed where `import vllm_router` resolves (the
+      # editable install maps to upstream/src): LoadAwareRouter exists only in our file.
+      - name: Overlay our two patched files
+        run: |
+          cp patches/vllm_router/routers/routing_logic.py upstream/src/vllm_router/routers/routing_logic.py
+          cp patches/vllm_router/parsers/parser.py upstream/src/vllm_router/parsers/parser.py
+          python -c "from vllm_router.routers.routing_logic import LoadAwareRouter"
+
+      # The whole point of the router half: the same suite, same result, with our
+      # additions-only diff in place.
+      - name: Patched - same tests, result must not change
+        working-directory: upstream
+        shell: bash
+        run: pytest src/tests -q | tee /tmp/patched.out
+
+      # "Must not change" means the summary too, not just both exit codes: a patch
+      # that turned passes into skips would otherwise stay green.
+      - name: Compare the two summaries
+        shell: bash
+        run: |
+          for f in baseline patched; do
+            tail -1 /tmp/$f.out | sed -E 's/ in [0-9.]+s.*//' > /tmp/$f.sum
+          done
+          diff /tmp/baseline.sum /tmp/patched.sum && cat /tmp/patched.sum
+
+      # Preflight import: importorskip exists for laptop runs, but here a broken
+      # lmcache install must fail the job, never skip it to green.
+      - name: Conformance - real packages vs the offline stubs
+        run: |
+          python -c "import lmcache.v1.token_database, lmcache.v1.cache_controller.message, vllm_router"
+          pytest conformance/ -q

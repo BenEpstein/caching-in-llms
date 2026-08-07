@@ -54,9 +54,9 @@ with a pointer to the evidence — those matter as much as code.
   (`fig_hit_rate`, `counter_delta`) all collapsed onto `utilization.read_series`,
   which owns the `job=vllm-engines` router-trap filter. `reproduce.sh` regenerates
   identical figure data, so the consolidation is behavior-preserving on committed
-  runs. Retired `test_load_gate::test_router_job_series_are_ignored` (the filter is
-  now covered once, on the shared helper, by `test_utilization`); kept
-  `test_analyze`'s router test as the caller-level guard (#60's note on #55).
+  runs. `test_load_gate`'s router test narrowed to the gate-level wiring assert
+  (the filter itself is covered once, on the shared helper, by `test_utilization`);
+  `test_analyze`'s router test stays as `per_seed_imbalance`'s wiring guard.
 - **`deploy/README.md` folded into `benchmarks/README.md`** ("Deploying the stack"
   + a cluster-gotchas index; each gotcha's fix already lives in code or a values
   comment). Deleted with it: `deploy/nocache-arm.md` (#25 closed premise-wrong) and
@@ -79,13 +79,42 @@ with a pointer to the evidence — those matter as much as code.
   without killing a bug class).
 
 ### Fixed
-- Stale text swept in `benchmarks/README.md`: closed-loop driver row, duplicate
-  `utilization.py` row, "all 6 seeds", the `BETA_GRID` default order (b0 runs
-  LAST - drift sentinel), duplicate step "4.", `cold_start.sh` row now says what
-  it does. Stale `export_summary.per_seed_imbalance` pointers in `utilization.py`,
-  `plot_results.py`, `load_gate.py` repointed at `analyze.per_seed_imbalance`.
-  `analyze.py`/`test_analyze.py` goodput notes repointed from the deleted findings
-  doc to the report.
+- Stale text swept in `benchmarks/README.md` (closed-loop driver row, seed counts,
+  `BETA_GRID` order - b0 runs LAST as the drift sentinel, duplicate rows/steps);
+  stale `export_summary.per_seed_imbalance` and deleted-findings-doc pointers
+  repointed at `analyze` / the report. Post-review (/code-review + /simplify): the
+  folded `oc exec` diagnostic lost a dash, and the SCC note + helm list-replacement
+  pitfall from the deleted docs got a destination in the gotchas list.
+
+## 2026-08-07 (upstream conformance, #65) - the real pinned packages now test the patch
+
+### Added
+- **`conformance/`** (28 tests, CI-only): installs the real `lmcache==0.3.9.post2` and the real
+  `vllm_router` at the pinned commit, and proves the offline doubles faithful on *both* halves
+  of `tests/conftest.py` - message fields and the router-side dataclasses (expected surface read
+  from the conftest by AST parse, names *and* positional order; router classes as positional
+  prefixes since upstream grows trailing fields), the `ChunkedTokenDatabase.process_tokens`
+  contract `PrefixHashTokenDatabase` reimplements, `SingletonABCMeta` behavior, the
+  `LMCacheControllerManager` handler contract, and both patched files imported and exercised
+  with zero stubs - including `loadaware`'s `select_url` scoring real `RequestStats`/
+  `EndpointInfo` objects, which upstream's tests never do.
+- **`.github/workflows/upstream-conformance.yml`**: one path-gated ubuntu job - production-stack
+  checked out at `37bafbcf5` (the exact commit in the measured router image tag), upstream's own
+  `src/tests` run unmodified (baseline), rerun with our two patched files overlaid, summaries
+  diffed (turning passes into skips would fail, not just exit codes), overlay reachability
+  proven by importing `LoadAwareRouter` through the editable install, and a preflight import so
+  a broken lmcache install fails rather than skip-to-green. CPU torch pinned first so the
+  GPU-less runner skips the multi-GB CUDA wheels.
+
+### Fixed
+- **One stub misdeclaration found and fixed**: `tests/conftest.py`'s `EngineStats` declared
+  `gpu_cache_hit_rate`; the real class at the pin has `gpu_prefix_cache_hit_rate`. Read by
+  nothing (loadaware ignores engine stats), so no offline test or measured result moves - but
+  it is exactly the drift class this suite exists to catch, and the prefix check now holds it.
+  Everything else was faithful: baseline 45/45, patched 45/45, conformance 28/28. The
+  `tests/conftest.py` provenance header ("read from the running pod") is now a tested claim,
+  not a trusted one. The 190 offline tests still pass byte-identically and
+  `scripts/reproduce.sh` still exits 0 with no new local dependency.
 
 ## 2026-08-07 (test-suite audit) - 196 → 190, and the audit's own blind spot
 

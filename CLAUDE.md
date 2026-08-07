@@ -85,9 +85,6 @@ The **graded** surface is five documents: `README.md` (front door + the upstream
 `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3 operator manual),
 `docs/report/report.md` (§6), and `CHANGELOG.md`. `CONTEXT.md` is the glossary those five share.
 **Do not add to that set** - fold new writing into one of them, or put it on the ticket.
-The three docs #59 ruled dead - `deploy/README.md`, `deploy/nocache-arm.md`,
-`docs/sweep-2026-08-06-findings.md` - are deleted (#55). Their surviving content lives in
-`benchmarks/README.md`, the report, CHANGELOG, and on #31.
 Every doc except `README.md` and `docs/report/report.md` carries a status header
 (`> status: live | frozen · date · one-line trust note`); `frozen` means historical record:
 verify against tickets/CHANGELOG before relying on it, never base new decisions on it.
