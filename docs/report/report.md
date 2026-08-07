@@ -33,13 +33,13 @@ a prefix cached on instance A, no matter how good A's eviction policy is.
 
 That makes placement a cache policy, not a load-balancing detail, and our measurements set the
 scale of the lever. Under an identical workload, round-robin placement against the same cache
-posts a median TTFT p95 of **11.528 s** against **0.426 s** for cache-aware placement — **27×**,
-produced entirely by the routing decision — with a vLLM prefix-cache hit rate of **0.685**
+posts a median TTFT p95 of **11.004 s** against **0.320 s** for cache-aware placement - **34×**,
+produced entirely by the routing decision - with a vLLM prefix-cache hit rate of **0.682**
 against 0.912.
 
 The instructive part is *why*, and it is not that round-robin balances badly. **Round-robin is
-better balanced than the cache-aware baseline** — imbalance 1.723 against `kvaware`'s 2.680 —
-and still 27× slower. It equalises request *counts*, not *work*: a request sent to the engine
+better balanced than the cache-aware baseline** - imbalance 1.490 against `kvaware`'s 2.358 -
+and still 34× slower. It equalises request *counts*, not *work*: a request sent to the engine
 that does not hold its prefix pays a full 2048-token prefill. Balanced counts, ruined locality.
 
 That is the argument of this project in one comparison. Load-awareness has to be added **on top
@@ -278,7 +278,7 @@ comparison, same test, same n, same stopping rule - and the latency row above is
 
 The instrument was genuinely fixed. Moving the driver in-cluster cut the TTFT p10 floor from
 240.6 ms to 96.8 ms while engine-side TTFT *rose*, so the non-engine term collapsed from
-~226 ms to ~21 ms - from three to four times the effect under study, to well below it. The
+~226 ms to ~21 ms - from three to four times the effect under study, to well below it.[^wan] The
 measurement can now answer its own question. The answer is that at this operating point there
 is no latency effect to find.
 
@@ -290,6 +290,12 @@ into a faster first token.
 
 This is a limitation of the operating point, not evidence against the policy - and the honest
 form of that statement is the null above, not a metric chosen afterwards to replace it.
+
+[^wan]: These two figures are the one exception to "every number here regenerates from committed
+data". They were measured on the 2026-08-04 cells, which were pruned from the working tree and
+are in git history. The retained WAN sweep supports the same argument on committed data: p10
+157.4 → 101.9 ms, non-engine term 124.6 → 48.5 ms, and the 45–59% share above. See
+`results/README.md`.
 
 ![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png)
 
@@ -477,17 +483,38 @@ and no GPU.
 
 | Arm | Run directory | Rate | Seeds |
 |---|---|---|---|
-| `kvaware` (baseline) | `results/20260805-005210-kvaware` | 16 | 20 |
-| `loadaware` β = 0 (ablation) | `results/20260805-011148-loadaware-b0` | 16 | 20 |
-| `loadaware` β = 0.5 (**headline**) | `results/20260805-013208-loadaware-b0.5` | 16 | 20 |
-| `loadaware` β = 1.0 (shipped default) | `results/20260805-015202-loadaware-b1.0` | 16 | 20 |
-| `loadaware` β = 2.0 | `results/20260805-021215-loadaware-b2.0` | 16 | 20 |
-| `roundrobin` | `results/20260804-191644-roundrobin` | 16 | 3 |
-| Earlier absolute-β sweeps (superseded) | `results/20260803-*`, `results/20260804-*` | 7.5–16 | 3–20 |
+| `kvaware` (baseline) | `results/20260805-230541-kvaware` | 16 | 20 |
+| `loadaware` β = 0 (ablation) | `results/20260806-002645-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.5 (**headline**) | `results/20260805-232541-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 (shipped default) | `results/20260805-234559-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `results/20260806-000626-loadaware-b2.0` | 16 | 20 |
+| `roundrobin` (comparator) | `results/20260806-144135-roundrobin` | 16 | 20 |
 
-Runs before `20260805` used the pre-normalization policy (absolute load, with an α term) and a
-laptop-side driver. They are kept because they are the evidence behind the design change, not
-because they are comparable to the current arms.
+These six cells are the evidence base for every **reported** number and figure, and
+`scripts/reproduce.sh` regenerates all of it from exactly these directories.
+
+The superseded **WAN sweep** is kept alongside them, because *An instrument problem, not a
+result* is an argument about measurement and the measurement is its evidence:
+
+| Arm | Run directory | Rate | Seeds |
+|---|---|---|---|
+| `kvaware` | `results/20260805-005210-kvaware` | 16 | 20 |
+| `loadaware` β = 0 | `results/20260805-011148-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.5 | `results/20260805-013208-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 | `results/20260805-015202-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `results/20260805-021215-loadaware-b2.0` | 16 | 20 |
+
+Same arms, same frozen workload, same offered rate - driven from a laptop over the public
+internet instead of from inside the cluster. They are **not results**, and they are deliberately
+excluded from `results/summary-per-seed.csv` so that one table means one instrument. They get
+their own full figure set (`docs/figures-wan/`), whose underlying series `reproduce.sh`
+regenerates and diffs on every run, so the instrument argument is as reproducible as the results
+it justifies. As everywhere else here, the check is on the numbers behind the figures, not on
+the PNG bytes.
+
+Earlier generations still - the 2026-08-03 characterization sweeps at 7.5-16 req/s and the
+2026-08-04 absolute-β cells, which used the pre-normalization policy with an α term - are in git
+history rather than the working tree. `results/README.md` indexes what is here and what is not.
 
 Each run directory contains the per-request driver CSVs, the Prometheus scrapes, `dcgm.csv`,
 and a `run.json` recording the arm, β, rate, workload profile, router image and image ID, git
@@ -499,9 +526,15 @@ commit, and the workload manifest with per-seed SHA-256 checksums.
 pip install -r requirements.txt
 pytest benchmarks/ tests/ -q
 
+./scripts/reproduce.sh   # regenerates every statistic and figure below from the six runs
+
+# ...or by hand. The headline pair, the utilization report over the five policy cells, and
+# the figures. `roundrobin` is passed as --comparator, never positionally: it is the framing
+# cell for fig12, not a point on the β grid.
 python3 benchmarks/analyze.py compare \
-  results/20260805-013208-loadaware-b0.5 results/20260805-005210-kvaware
-python3 benchmarks/utilization.py report results/20260805-*
-python3 benchmarks/plot_results.py results/20260805-0* \
+  results/20260805-232541-loadaware-b0.5 results/20260805-230541-kvaware
+python3 benchmarks/utilization.py report results/20260805-2* results/20260806-0*
+python3 benchmarks/plot_results.py results/20260805-2* results/20260806-0* \
+  --comparator results/20260806-144135-roundrobin \
   --cand loadaware-b0.5 --out docs/figures
 ```

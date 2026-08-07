@@ -110,9 +110,9 @@ pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last** as the dri
 | `loadaware-b2.0` | loadaware β=2.0 | CI-built, SHA-tagged |
 
 `roundrobin` is run separately as a descriptive framing cell, not as part of the sweep. Cell
-names outside this grid (`b0.1`, `b0.25`, `b0.034`, `b4.0`) appear in older `results/`
-directories and **can no longer be generated** — they came from the retired per-rate β
-calibration, before the load term was normalized against the fleet mean.
+names outside this grid (`b0.1`, `b0.25`, `b0.034`, `b4.0`) came from the retired per-rate β
+calibration, before the load term was normalized against the fleet mean, and **can no longer be
+generated**. Their run dirs were pruned from the working tree by #57 and are in git history.
 
 Built images only - the dev-loop ConfigMap overlay (`deploy/dev/`) is **never** measured.
 No mock or simulation anywhere: every reported number comes from the real cluster.
@@ -122,9 +122,10 @@ No mock or simulation anywhere: every reported number comes from the real cluste
 OSL 64 (`run_cell.sh` `MAX_TOKENS`) is a deliberate choice, not the driver default it used
 to be - and it is passed explicitly, so `run.json` records it. **Caveat for older runs:**
 `osl_tokens` postdates the 2026-08-04 cells, so earlier run dirs omit the key entirely and
-ran at the driver default of 64. Piloted 2026-08-05, raw data
-committed under `results/osl-pilot/` (`20260805-002149-kvaware` at OSL 128,
-`20260805-003128-kvaware` at 256, both at rate 16):
+ran at the driver default of 64. Piloted 2026-08-05 under `results/osl-pilot/`
+(`20260805-002149-kvaware` at OSL 128, `20260805-003128-kvaware` at 256, both at rate 16);
+those dirs were pruned by #57 and are in git history, so the outcome is recorded here rather
+than recomputable:
 
 | OSL | outcome |
 |---|---|
@@ -136,29 +137,30 @@ Imbalance is **non-monotonic in load**: once both engines pin at capacity there 
 better to send anything, so the window in which load-aware routing can help closes at
 **both** ends - too little load and there is no queue to route around, too much and both
 engines are equally saturated. On this 2×A10 fleet, rate 16 / OSL 64 sits inside that
-window; moving either knob moves the experiment out of it. `roundrobin` is not run at this
-operating point: at rate 16 it saturates, 10.74 req/s achieved against 16 offered (67%).
+window; moving either knob moves the experiment out of it. `roundrobin` **saturates** here -
+10.40 req/s achieved against 16 offered (65%) in `20260806-144135-roundrobin` - which is the
+point: it is reported as the cache-blind capacity floor, not as a tuned arm.
 
 Excluded from the grid separately (no effect, not the load window): β=0.25, which at n=3
-measured imbalance 2.257 against a same-hour kvaware control of
-2.113 - no effect. The useful range starts at 0.5.
+measured imbalance 2.257 against a same-hour kvaware control of 2.113 - no effect. The useful
+range starts at 0.5. That cell was pruned by #57; the numbers are recorded here.
 
 ### Two eras of `beta`
 
-`beta` names two different policies, and `results/` contains both. The split is
-`git_commit` in each `run.json` (and in `summary-per-seed.csv`):
+`beta` named two different policies. **Every run dir now in the tree is relative-era** - the
+absolute-era cells were pruned by #57 - so this matters only when reading git history or the
+CHANGELOG, never when comparing what is on disk. The split is `git_commit` in each `run.json`:
 
 | `git_commit` | Load term |
 |---|---|
 | before `7e2dffb` | `beta ×` **absolute** in-flight count |
 | `7e2dffb` onward | `beta × (load − fleet_mean) / max(1, mean)` |
 
-`loadaware-b0.5` and `loadaware-b1.0` appear under **both**. The same cell name is a
-different policy, and the values do not convert by a constant: the relative form
-self-adjusts per request while the absolute one does not, so `beta_rel = beta_abs ×
-mean_load` holds only at the mean and mispredicted the observed values by ~2× when
-checked (#22). Never pool or compare across the boundary without saying which side each cell
-is on.
+The same cell name means a different policy on each side, and the values do not convert by a
+constant: the relative form self-adjusts per request while the absolute one does not, so
+`beta_rel = beta_abs × mean_load` holds only at the mean and mispredicted the observed values
+by ~2× when checked (#22). Never pool across the boundary without saying which side a cell is
+on.
 
 - Absolute-era values seen: 0, 0.034, 0.068, 0.1, 0.5, 1.0
 - Relative-era values seen: 0, 0.25, 0.5, 1.0, 2.0
@@ -412,7 +414,8 @@ differ - the methodology's "identical workload across arms" is enforced, not ass
 
 ### What is committed vs. what stays local
 
-**`results/` is tracked in git** (changed 2026-08-03) - 1069 files, ~67 MB. Every number in the
+**`results/` is tracked in git** (changed 2026-08-03) - 496 files, ~54 MB across 11 run dirs in
+two generations; `results/README.md` is the index. Every number in the
 report has to be checkable by a reader who cannot rerun the cluster, and a derived table alone
 asks that reader to take the derivation on trust, so the raw artifacts are committed too:
 
@@ -441,13 +444,18 @@ grouping by it silently merges two different experiments.
 
 Driver CSVs are the only **per-request** latency source: the router exposes average-latency
 gauges only, and its `gpu_prefix_cache_*` gauges are dead (0.0) in this build - both ignored.
-Per-request is not the same as trustworthy, though. The driver has so far run on a laptop
-against the cluster's public route, and **45-59% of every recorded `ttft_s` is that network**.
-Measured RTT to the route host: avg 44.4 ms (min 18.7, max 132, sd 39.7). Over one evening the
-non-engine component of client TTFT moved **258 -> 478 ms while engine-side TTFT stayed flat at
-0.168 -> 0.180 s** - a per-cell systematic offset larger than the effect under study, so more
-seeds cannot average it away. The signature is a floor shift (p10 rose 2.0x), which is what a
-constant network offset looks like and not what a routing policy does.
+Per-request is not the same as trustworthy, though. The driver **used to** run on a laptop
+against the cluster's public route, and **45-59% of every recorded `ttft_s` was that network**.
+Measured RTT to the route host: avg 44.4 ms (min 18.7, max 132, sd 39.7). On the retained WAN
+cells (`results/20260805-0*`) the non-engine component of client TTFT swings **121 -> 195 ms
+between two cells an hour apart** while engine-side TTFT stays in a 133-159 ms band - a per-cell
+systematic offset larger than the effect under study, so more seeds cannot average it away. The
+signature is a floor shift, which is what a constant network offset looks like and not what a
+routing policy does.
+
+**The driver now runs in-cluster** and every reported number comes from that instrument: same
+decomposition on the confirmatory cells is 48.5 ms non-engine (25.8%) for `kvaware` and 45.2 ms
+(27.2%) for β=0.5. `results/README.md` carries the full per-cell table for both generations.
 
 Two consequences for reading anything under `results/`:
 
@@ -549,7 +557,7 @@ them.
 6. **Preemption is recorded and reported per arm, never used to void a run** (#3
    amendment): under concentration it is a genuine consequence of the baseline's placement,
    so gating on it would discard the baseline arm systematically. Caveat: the
-   `vllm:num_preemptions_total` dump postdates the nine pre-amendment cells (2026-08-03 up
-   to and including `20260803-212450-kvaware`) - for those run dirs the file is absent and
-   `load_gate` reports 0 preemptions because there is no data, not because there were none.
-   The four later 2026-08-03 dirs do carry it, so the boundary is the amendment, not the date.
+   `vllm:num_preemptions_total` dump postdates the nine pre-amendment 2026-08-03 cells, where
+   the file is absent and `load_gate` reports 0 preemptions because there is no data, not
+   because there were none. Those dirs were pruned by #57, so every run now in the tree carries
+   the dump and the caveat applies only to git history.

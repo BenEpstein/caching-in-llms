@@ -1,1 +1,0 @@
-{"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {"__name__": "router_memory_usage_percent", "instance": "stack-router-service:80", "job": "router"}, "values": [[1785602721, "38.9"], [1785602726, "39"], [1785602731, "39"], [1785602736, "39"]]}]}}
