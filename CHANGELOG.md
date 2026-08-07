@@ -8,6 +8,61 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-08 (#61) - the agent scaffolding stops shipping
+
+> **Read this before you pull.** Merging #61 **deletes `CLAUDE.md`, `CONTEXT.md` and this
+> file from your working tree**, and because they are gitignored afterwards `git status`
+> stays clean, so the loss is silent. This is not the `CLAUDE.local.md` pattern - that file
+> was never tracked, so no deletion ever propagated. Back the three up before pulling, or
+> restore them after:
+>
+> ```bash
+> for f in CLAUDE.md CONTEXT.md CHANGELOG.md; do
+>   git show "$(git rev-list -1 HEAD - "$f")^:$f" > "$f"
+> done
+> ```
+
+### Decided
+- **`CLAUDE.md`, `CONTEXT.md` and `CHANGELOG.md` are untracked and gitignored** (#61,
+  Ben in session). They are documentation *of how the project was built by an agent*,
+  not documentation *of the project*; #30's file-justification test asks whether a grader
+  needs a file, and none of the three passes on its own merit. Nothing in the submission
+  cited `CLAUDE.md` at all. **This entry is the last one written while `CHANGELOG.md` is
+  still tracked**; everything above it survives in git history at this commit.
+- **Disclosure was not the deciding argument, because it is already settled.** Five
+  commits are authored `Claude Opus 5 <noreply@anthropic.com>` and history rewrite is
+  ruled out on #30, so the AI-assisted workflow is visible in `git log` whether or not
+  these files ship. The spec (`docs/references/Final Project Guidelines.pdf`) says
+  nothing about AI assistance. The decision shapes the *reading surface*, not the
+  project's honesty about how it was built.
+- **No term a reader meets is left undefined, but the definitions are spread across the
+  surviving docs, not concentrated in the report.** Verified term by term:
+  `report.md` defines relative load and the β exchange rate ("Change 2") and load
+  imbalance ("Experimental setup"); `benchmarks/README.md` defines goodput and the TTFT
+  SLO; `README.md` uses the name "cache-hit benefit" and gives its formula three lines
+  later. **The phrase "cache-hit benefit" never appears in `report.md`, and goodput is
+  used there without being defined** - both are worth fixing when #8 next touches report
+  prose, which owns that text. What `CONTEXT.md` uniquely carried is *authoring
+  discipline* - Relative Load is not Load Imbalance, "objective" not "threshold", never
+  headline the policy as "load balancing" - guidance for whoever writes next rather than
+  content a grader reads. Terms with no surviving definition (Affinity Probe, Replication
+  Policy, Worker Registration) appear in no tracked file, so nothing dangles.
+
+### Changed
+- **The graded surface is now four documents**: `README.md`, `docs/baseline-justification.md`
+  (§2), `benchmarks/README.md` (§3), `docs/report/report.md` (§6). `CHANGELOG.md` drops
+  out of the five #59 named two days earlier.
+- Four inbound pointers resolved rather than left dangling: the README's Documents table
+  loses its `CHANGELOG.md` and `CONTEXT.md` rows; the two test docstrings that cited
+  `CONTEXT.md` for definitions now cite `report.md`'s sections; and the two source comments
+  that cited a CHANGELOG *date* for their evidence - `export_summary.py`'s beta-semantics
+  pooling rule and `routing_logic.py`'s chunk-rounding justification for the `min()` guard -
+  now carry the fact inline, since both are validity arguments a reader has to be able to
+  check.
+
+### Fixed
+- README claimed **196 tests**; the suite has been **190** since #60 pruned it.
+
 ## 2026-08-07 (#55) - dead code, parse consolidation, deploy README folded
 
 ### Changed
