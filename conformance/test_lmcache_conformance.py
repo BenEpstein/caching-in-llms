@@ -31,12 +31,11 @@ offline suites must stay laptop-runnable with no install. The
 ``.github/workflows/upstream-conformance.yml``.
 """
 
-import ast
 import asyncio
 import importlib.util
-from pathlib import Path
 
 import pytest
+from conftest import REPO, stub_fields, stubbed_message_names, unused_message_names
 
 lmcache = pytest.importorskip(
     "lmcache", reason="conformance needs the real lmcache install (CI-only)"
@@ -52,8 +51,6 @@ if getattr(lmcache, "__file__", None) is None:
 from lmcache.v1.cache_controller import message as real_message  # noqa: E402
 from lmcache.v1.token_database import ChunkedTokenDatabase  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[1]
-CONFTEST = REPO / "tests" / "conftest.py"
 PATCH_FILE = REPO / "patches/lmcache/v1/cache_controller/controllers/kv_controller.py"
 
 LOCAL = "LocalCPUBackend"
@@ -62,56 +59,38 @@ LOCAL = "LocalCPUBackend"
 # --- 1. message classes: real fields == the fields the stubs declare ---------
 
 
-def _conftest_tree() -> ast.Module:
-    return ast.parse(CONFTEST.read_text())
-
-
-def stub_fields(class_name: str) -> list:
-    """Field names of a stub dataclass in tests/conftest.py, in declared order."""
-    for node in ast.walk(_conftest_tree()):
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            return [
-                stmt.target.id
-                for stmt in node.body
-                if isinstance(stmt, ast.AnnAssign)
-            ]
-    raise AssertionError(f"tests/conftest.py declares no class {class_name}")
-
-
-#: Every message class the patched controller and router construct or read.
-STUBBED_MESSAGES = [
-    "KVAdmitMsg",
-    "KVEvictMsg",
-    "LookupMsg",
-    "LookupRetMsg",
-    "BatchedP2PLookupRetMsg",
-    "QueryInstMsg",
-    "QueryInstRetMsg",
-]
-
-
-@pytest.mark.parametrize("name", STUBBED_MESSAGES)
+#: Derived from tests/conftest.py itself (see conformance/conftest.py), so the
+#: parametrization can never drift from what the offline suite actually stubs.
+@pytest.mark.parametrize("name", stubbed_message_names())
 def test_message_fields_match_the_stub_exactly(name):
     """Names AND order: both sides accept positional args in field order."""
     real = getattr(real_message, name)
-    assert list(real.__struct_fields__) == stub_fields(name), (
-        f"tests/conftest.py declares {name}({', '.join(stub_fields(name))}) but "
-        f"lmcache {lmcache.__version__} has {name}({', '.join(real.__struct_fields__)})"
+    expected = stub_fields(name)
+    assert list(real.__struct_fields__) == expected, (
+        f"tests/conftest.py declares {name}({', '.join(expected)}) but the real "
+        f"lmcache has {name}({', '.join(real.__struct_fields__)})"
     )
 
 
 def test_every_stubbed_but_unused_message_exists_upstream():
     """conftest fabricates empty classes for these; they must at least exist."""
-    for node in ast.walk(_conftest_tree()):
-        if isinstance(node, ast.Assign) and any(
-            getattr(t, "id", None) == "_UNUSED_MESSAGES" for t in node.targets
-        ):
-            names = [c.value for c in node.value.elts]
-            break
-    else:
-        raise AssertionError("tests/conftest.py declares no _UNUSED_MESSAGES")
-    missing = [n for n in names if not hasattr(real_message, n)]
+    missing = [n for n in unused_message_names() if not hasattr(real_message, n)]
     assert not missing, f"not in lmcache.v1.cache_controller.message: {missing}"
+
+
+def test_controller_manager_honours_the_fake_managers_contract():
+    """FakeControllerManager stands in for this class in the routing tests:
+    KvawareRouter awaits `handle_orchestration_message(msg)` and (in prod)
+    calls `start_all()`. Both must exist on the real thing, and the handler
+    must be awaitable."""
+    from lmcache.v1.cache_controller.controller_manager import (
+        LMCacheControllerManager,
+    )
+
+    assert asyncio.iscoroutinefunction(
+        LMCacheControllerManager.handle_orchestration_message
+    )
+    assert callable(LMCacheControllerManager.start_all)
 
 
 # --- 2. the chunker: real ChunkedTokenDatabase vs the PrefixHashTokenDatabase
@@ -171,11 +150,11 @@ def test_key_is_a_rolling_prefix_hash(db):
     early_diverge = [7] + base[1:]  # diverges in chunk 1
 
     base_keys = [k for _, _, k in triples(db, base)]
-    assert [k for _, _, k in triples(db, same_prefix)][:2] == base_keys[:2]
-    assert [k for _, _, k in triples(db, same_prefix)][2] != base_keys[2]
-    assert all(
-        k != b for k, b in zip([k for _, _, k in triples(db, early_diverge)], base_keys)
-    )
+    sp_keys = [k for _, _, k in triples(db, same_prefix)]
+    ed_keys = [k for _, _, k in triples(db, early_diverge)]
+    assert sp_keys[:2] == base_keys[:2]
+    assert sp_keys[2] != base_keys[2]
+    assert all(k != b for k, b in zip(ed_keys, base_keys))
 
 
 # --- 3. the patched kv_controller against the real package, no stubs ---------

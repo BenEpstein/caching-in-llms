@@ -25,9 +25,14 @@ on:
       - ".github/workflows/upstream-conformance.yml"
   workflow_dispatch:
 
+concurrency:
+  group: upstream-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   upstream-conformance:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -50,21 +55,40 @@ jobs:
           pip install -e ./upstream lmcache==0.3.9.post2 pytest pytest-asyncio
 
       # Run from upstream/ so upstream's own pyproject pytest options (asyncio_mode=auto)
-      # apply, exactly as their CI runs them.
+      # apply, exactly as their CI runs them. `shell: bash` turns on pipefail, so a
+      # red pytest still fails the step through the tee.
       - name: Baseline - upstream router tests, unmodified
         working-directory: upstream
-        run: pytest src/tests -q
+        shell: bash
+        run: pytest src/tests -q | tee /tmp/baseline.out
 
+      # The import proves the copy landed where `import vllm_router` resolves (the
+      # editable install maps to upstream/src): LoadAwareRouter exists only in our file.
       - name: Overlay our two patched files
         run: |
           cp patches/vllm_router/routers/routing_logic.py upstream/src/vllm_router/routers/routing_logic.py
           cp patches/vllm_router/parsers/parser.py upstream/src/vllm_router/parsers/parser.py
+          python -c "from vllm_router.routers.routing_logic import LoadAwareRouter"
 
       # The whole point of the router half: the same suite, same result, with our
-      # additions-only diff in place. A single new failure here fails the job.
+      # additions-only diff in place.
       - name: Patched - same tests, result must not change
         working-directory: upstream
-        run: pytest src/tests -q
+        shell: bash
+        run: pytest src/tests -q | tee /tmp/patched.out
 
-      - name: Controller conformance - real lmcache vs the offline stubs
-        run: pytest conformance/ -q
+      # "Must not change" means the summary too, not just both exit codes: a patch
+      # that turned passes into skips would otherwise stay green.
+      - name: Compare the two summaries
+        run: |
+          for f in baseline patched; do
+            tail -1 /tmp/$f.out | sed -E 's/ in [0-9.]+s.*//' > /tmp/$f.sum
+          done
+          diff /tmp/baseline.sum /tmp/patched.sum && cat /tmp/patched.sum
+
+      # Preflight import: importorskip exists for laptop runs, but here a broken
+      # lmcache install must fail the job, never skip it to green.
+      - name: Conformance - real packages vs the offline stubs
+        run: |
+          python -c "import lmcache.v1.token_database, lmcache.v1.cache_controller.message, vllm_router"
+          pytest conformance/ -q

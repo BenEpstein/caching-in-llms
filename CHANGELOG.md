@@ -11,21 +11,31 @@ with a pointer to the evidence — those matter as much as code.
 ## 2026-08-07 (upstream conformance, #65) - the real pinned packages now test the patch
 
 ### Added
-- **`conformance/test_lmcache_conformance.py`** (19 tests, CI-only): installs the real
-  `lmcache==0.3.9.post2` and proves the offline doubles faithful - message fields (read from
-  `tests/conftest.py` by AST parse, names *and* positional order), the
-  `ChunkedTokenDatabase.process_tokens` contract `PrefixHashTokenDatabase` reimplements, and
-  the patched `kv_controller.py` imported and exercised with zero stubs.
+- **`conformance/`** (28 tests, CI-only): installs the real `lmcache==0.3.9.post2` and the real
+  `vllm_router` at the pinned commit, and proves the offline doubles faithful on *both* halves
+  of `tests/conftest.py` - message fields and the router-side dataclasses (expected surface read
+  from the conftest by AST parse, names *and* positional order; router classes as positional
+  prefixes since upstream grows trailing fields), the `ChunkedTokenDatabase.process_tokens`
+  contract `PrefixHashTokenDatabase` reimplements, `SingletonABCMeta` behavior, the
+  `LMCacheControllerManager` handler contract, and both patched files imported and exercised
+  with zero stubs - including `loadaware`'s `select_url` scoring real `RequestStats`/
+  `EndpointInfo` objects, which upstream's tests never do.
 - **`.github/workflows/upstream-conformance.yml`**: one path-gated ubuntu job - production-stack
   checked out at `37bafbcf5` (the exact commit in the measured router image tag), upstream's own
-  `src/tests` run unmodified (baseline), rerun with our two patched files overlaid (must not
-  change), then the conformance suite. CPU torch pinned first so the GPU-less runner skips the
-  multi-GB CUDA wheels.
+  `src/tests` run unmodified (baseline), rerun with our two patched files overlaid, summaries
+  diffed (turning passes into skips would fail, not just exit codes), overlay reachability
+  proven by importing `LoadAwareRouter` through the editable install, and a preflight import so
+  a broken lmcache install fails rather than skip-to-green. CPU torch pinned first so the
+  GPU-less runner skips the multi-GB CUDA wheels.
 
 ### Fixed
-- Nothing found: baseline 45/45 green, patched 45/45 green, conformance 19/19 green - the
-  fakes were faithful. The `tests/conftest.py` provenance header ("read from the running pod")
-  is now a tested claim, not a trusted one. The 196 offline tests are byte-untouched and
+- **One stub misdeclaration found and fixed**: `tests/conftest.py`'s `EngineStats` declared
+  `gpu_cache_hit_rate`; the real class at the pin has `gpu_prefix_cache_hit_rate`. Read by
+  nothing (loadaware ignores engine stats), so no offline test or measured result moves - but
+  it is exactly the drift class this suite exists to catch, and the prefix check now holds it.
+  Everything else was faithful: baseline 45/45, patched 45/45, conformance 28/28. The
+  `tests/conftest.py` provenance header ("read from the running pod") is now a tested claim,
+  not a trusted one. The 196 offline tests still pass byte-identically and
   `scripts/reproduce.sh` still exits 0 with no new local dependency.
 
 ## 2026-08-07 (docs consolidation) - seven docs deleted, five graded documents survive
