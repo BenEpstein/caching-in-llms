@@ -46,6 +46,8 @@ with a pointer to the evidence — those matter as much as code.
   "alpha" (#29), dead pointers (`CELL_SEEDS`, `deploy/README.md`, a `docs/` post-mortem
   that never existed, "Ben's open item 3").
 
+## 2026-08-07 (#55) - dead code, parse consolidation, deploy README folded
+
 ### Changed
 - **The Prometheus `query_range` parse is now ONE implementation**:
   `load_gate._engine_series` and the two inline parses in `plot_results.py`
@@ -238,6 +240,31 @@ with a pointer to the evidence — those matter as much as code.
   (p=0.0001 … 0.0215) and marginal in the 200-300 ms band (p=0.035-0.057), positive at every
   threshold, never significant the wrong way, 13-18 of 20 seeds better throughout. `b0` is
   negative at every threshold. Recomputable from committed CSVs via `compare --slo`.
+## 2026-08-06 (findings doc revised) - Part 3 closed (#31)
+
+### Decided
+- **Report the goodput CURVE, not a p-value at a chosen objective, and do not rerun.** The
+  selection problem attaches to one sentence only - "−19.0% at 150 ms, p=0.0021" is one point
+  out of a scan of eight. `fig12-goodput.png` plots the whole 50-400 ms sweep and so selects
+  nothing: measured over the 176-point grid the gain is positive at 168 points, negative only
+  in 56-70 ms and by at most 0.18 points where both arms serve ~1%, and peaks at +8.2 points at
+  124 ms; the ablation is below the baseline throughout. Descriptive, sitting beside the
+  pre-registered null rather than replacing it. Evidence: `fig12-goodput.png` and its series
+  in `results/expected/figure-data.json`; argument on #31.
+- **The `b0` drift sentinel was mis-specified, not drifting** (#31 comment `5204242990`). Load
+  share orders by policy and not by time - the two lopsided cells are the two cache-only arms
+  and they are the first and last in the window - and DCGM shows no hardware trend. Mechanism:
+  `routing_logic.py:472` departure 3, so β=0 differs from `kvaware` in its tie-break, which at
+  a 91% prefix hit rate decides nearly every placement. `b0` cannot be a drift control for any
+  future run. Post-hoc: it explains a result, it does not test one.
+
+### Changed
+- `docs/sweep-2026-08-06-findings.md`: Part 3 closed with what landed and why the question
+  dissolved; Part 4 guardrail 1 sharpened to the curve-vs-point distinction; guardrail 4
+  replaced (the closing-bracket recommendation is withdrawn, `b0` is not a drift control);
+  guardrail 6 added for the rule 6 departure. Part 1's `b0` reading and Part 3's "free goodput
+  holdout" marked SUPERSEDED in place rather than deleted.
+
 ## 2026-08-06 (fig12) - roundrobin joins the goodput figure (#31)
 
 ### Added
