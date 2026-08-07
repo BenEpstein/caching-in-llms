@@ -240,7 +240,7 @@ def test_the_gate_reports_relative_imbalance_alongside_the_absolute_gap(tmp_path
 
 
 # --------------------------------------------------------------------------
-# previously uncovered analysis paths (Ben's open item 3)
+# previously uncovered analysis paths
 # --------------------------------------------------------------------------
 
 

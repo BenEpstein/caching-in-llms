@@ -165,8 +165,6 @@ def _install_lmcache_stubs() -> None:
     lmcache_logging = types.ModuleType("lmcache.logging")
     lmcache_logging.init_logger = logging.getLogger
 
-    # `routing_logic.py` constructs an LMCacheControllerManager in
-    # `KvawareRouter.__init__`; the real one opens ZMQ sockets.
     controller_manager = types.ModuleType(
         "lmcache.v1.cache_controller.controller_manager"
     )
@@ -203,9 +201,7 @@ kv_controller = _load_patched_module()
 
 
 # --- routing_logic.py: the second patched file ------------------------------
-# Same trick, bigger import surface. `vllm_router` is only installed in the
-# router image, and `requests`/`fastapi`/`uhashring` are not test dependencies
-# (requirements.txt is httpx + pytest), so all of them get stubbed.
+# Same trick, bigger import surface.
 
 
 @dataclass

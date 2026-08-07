@@ -3,9 +3,8 @@
 Measures per request: TTFT (streaming), end-to-end latency, token counts.
 Arrival model: open loop, Poisson at --rate req/s. Open loop is tail-latency honest -
 queueing delay shows up in the latency it causes instead of throttling the send rate,
-which is the whole point when the metric under test is TTFT p95. A closed-loop mode
-existed and was never used by any caller; it was removed in #30 rather than left as
-an untested second path through the driver.
+which is the whole point when the metric under test is TTFT p95.
+Closed-loop mode was removed in #30 - do not re-add it as an untested second path.
 
 Output: one CSV row per request. Analysis/plots live elsewhere; this only records.
 
@@ -47,11 +46,9 @@ class Result:
     completion_tokens: Optional[int]
     status: str  # "ok" | "error"
     error: str = ""
-    # Inter-token latencies, ';'-joined milliseconds. Decode is ~92% of E2E at
-    # OSL=64, so without this the only thing measured about 92% of the request
-    # is an aggregate. Kept as raw gaps, not a per-request percentile: pooled
-    # ITL percentiles are the reported quantity and cannot be recovered from
-    # per-request summaries.
+    # Inter-token latencies, ';'-joined milliseconds. Raw gaps, not a per-request
+    # percentile: pooled ITL percentiles are the reported quantity and cannot be
+    # recovered from per-request summaries.
     itls_ms: str = ""
 
 
@@ -75,17 +72,15 @@ def classify_chunk(data: str) -> Tuple[Optional[dict], bool]:
     only on the final usage-only chunk - so the substring test `'"usage"' in
     data` matches every chunk and classifies nothing.
 
-    That is not hypothetical: it recorded **zero TTFT values across 500
-    requests** in the 2026-08-04 gate probe while still populating token counts,
-    because the final chunk set those. Every column looked plausible except the
-    primary metric. The token test is `choices` being non-empty - the usage-only
+    A substring test therefore records no TTFT at all while still populating
+    token counts from the final chunk - every column plausible except the
+    primary metric. The token test is `choices` being non-empty; the usage-only
     chunk carries `"choices": []`.
 
-    This parses every chunk, which the previous version was avoiding. At ~64
-    chunks x ~14 req/s that is ~900 parses/s of ~200-byte payloads - single-digit
-    microseconds each, three orders of magnitude below the measured client
-    event-loop lag floor (p50 0.6 ms, printed per seed). Correctness of the
-    primary metric outranks that optimization.
+    This parses every chunk, which the previous version was avoiding. A JSON
+    parse of a small payload costs microseconds, orders of magnitude below the
+    client event-loop lag floor the driver prints per seed, and correctness of
+    the primary metric outranks that optimization.
     """
     obj = json.loads(data)
     return obj.get("usage"), bool(obj.get("choices"))

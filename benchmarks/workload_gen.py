@@ -31,9 +31,8 @@ _WORDS = (
 @dataclasses.dataclass(frozen=True)
 class WorkloadConfig:
     # These defaults ARE the frozen evaluation workload (see the manifest under
-    # benchmarks/workloads/). `test_defaults_match_the_frozen_manifest` pins them
-    # to it: they drifted once - 20 prefixes at s=1.2 were exploratory values that
-    # outlived the freeze and were still being quoted as the shipped skew.
+    # benchmarks/workloads/); `test_defaults_match_the_frozen_manifest` pins them
+    # to it, because they have drifted from it before.
     num_requests: int = 500
     prefix_pool_size: int = 128         # number of distinct shared prefixes
     zipf_s: float = 0.9                 # skew: 0 = uniform, >1 = heavy head

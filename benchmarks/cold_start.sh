@@ -13,19 +13,11 @@
 #
 # `helm upgrade` then `rollout restart engines` satisfies (a) but violates (b):
 # the OLD engine pods are still running while the new router comes up, they
-# register, and their ids outlive them. Verified on gapu-2 2026-08-03 - the
-# router logged 4 registrations for a 2-engine cluster (two from the previous
-# run's pods) and 96/128 warm-up requests returned 500 with
-# `KeyError: 'stack-llm-deployment-vllm-854d454b6-h2rz6'`.
+# register, and their ids outlive them.
 #
 # This is NOT patched in the router: the baseline must stay unmodified or the
 # comparison is void. It is fixed by choreography - drain the engines to zero
 # FIRST, restart the router into an empty cluster, then bring engines back.
-#
-# The same defect explains the 1-3 errors/500 seen in every pilot cell: same
-# KeyError, just rare when few prefixes are in play.
-#
-# Usage:  cold_start.sh          (env: NS, ROUTER_DEPLOY, ENGINE_DEPLOY, REPLICAS)
 set -euo pipefail
 
 NS="${NS:-cache-llm}"
@@ -52,10 +44,9 @@ echo "==> bringing engines back to $REPLICAS"
 oc scale "deploy/$ENGINE_DEPLOY" -n "$NS" --replicas="$REPLICAS"
 oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
 
-# A `--routing-logic roundrobin` router never instantiates the LMCache
-# controller, so no worker ever registers and there is no stale id to guard
-# against either. Same USES_LOOKUP reason the registry probe and warm-up gate
-# are skipped on that arm.
+# A `--routing-logic roundrobin` router never instantiates the LMCache controller,
+# so no worker ever registers and there is no stale id to guard against either.
+# Same USES_LOOKUP reason the registry probe and warm-up gate are skipped on that arm.
 if [ "${EXPECT_REGISTRATIONS:-1}" != 1 ]; then
   echo "==> cold start complete (arm does not use the registry; no registrations expected)"
   exit 0
@@ -72,8 +63,8 @@ done
 [ "${registered:-0}" -ge "$REPLICAS" ] \
   || { echo "workers never registered (saw ${registered:-0})" >&2; exit 1; }
 
-# (b) again, as an assertion: every registered id must be a live pod. A stale id
-# here means the drain raced and the run would carry KeyError 500s.
+# (b) as an assertion: a stale id here means the drain raced, and the run would
+# carry KeyError 500s.
 live=$(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}')
 stale=0
 for id in $(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" 2>/dev/null \

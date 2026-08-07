@@ -246,11 +246,6 @@ def test_compare_accepts_matching_seed_sets(tmp_path):
 
 
 # ---- imbalance co-primary ---------------------------------------------------
-#
-# Added 2026-08-06. Until then `compare --metric imbalance` raised KeyError:
-# per_seed_imbalance lived in export_summary.py, so the co-primary was
-# computable and untestable at once, and run_sweep.sh printed a command for it
-# that could not work.
 
 def _prom(run_dir, engines, router=None, lo=1000.0, hi=1003.0):
     """Write a vllm_num_requests_running dump. engines: {pod: constant value}."""
@@ -260,8 +255,7 @@ def _prom(run_dir, engines, router=None, lo=1000.0, hi=1003.0):
         for pod, v in engines.items()
     ]
     if router is not None:
-        # The trap the function documents: the router re-exports the same metric
-        # for every backend under one instance label.
+        # The router trap; utilization.ENGINE_JOB documents it.
         result.append(
             {"metric": {"job": "router", "instance": "stack-router-service:80",
                         "server": "engine-1"},
@@ -406,10 +400,10 @@ def test_analyze_module_level_imports_survive_the_bench_image():
 
 # ---- goodput / ttft_slo_miss ------------------------------------------------
 #
-# Secondary metric (added 2026-08-06), computed from the same committed driver
-# CSVs as the co-primaries. These tests pin its arithmetic, not its standing as
-# evidence - see analyze.TTFT_SLO_S and the goodput ruling in
-# docs/report/report.md ("An instrument problem, not a result", a137f5a).
+# Secondary metric, computed from the same committed driver CSVs as the
+# co-primaries. These tests pin its arithmetic, not its standing as evidence -
+# see analyze.TTFT_SLO_S and the goodput ruling in docs/report/report.md
+# ("An instrument problem, not a result", a137f5a).
 
 def test_goodput_counts_strictly_under_the_slo():
     """A request that lands exactly ON the objective missed it.

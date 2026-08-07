@@ -2,6 +2,9 @@
 # Scarcity gate (methodology amendment, issue #3, 2026-08-03).
 #
 # ⚠️  HISTORICAL / ONE-SHOT. Kept deliberately (#30), not on the sweep path.
+# The procedure described below is the original one-shot. The code now warms with a
+# SINGLE pass and reads a counter delta, not the cumulative field - see the
+# NOT-the-cumulative-field comment further down.
 #
 # This script did its job once: run against the 64-prefix s=1.2 pool it FALSIFIED that
 # sizing (hit rate 0.889 against the pilot's ~0.95) and produced the amendment to 128
@@ -20,18 +23,18 @@
 # Deploys ONE arm (roundrobin - routing is irrelevant here, we are measuring the
 # engines), restarts the engines cold, verifies the realised KV pool from the
 # engine's own startup log (validity rule 5), then makes two warm-up passes over
-# the prefix pool (64 at the time this was written; 128 today) and reads vLLM's OWN
-# `Prefix cache hit rate`.
+# the prefix pool and reads vLLM's OWN prefix-cache hit rate.
 #
 # Why vLLM's metric and not LMCache's: the LMCache figure is each engine's hit
-# rate against its own CPU tier, which saturated at ~0.95 on every arm in the
-# pilot. vLLM's prefix-cache hit rate is the HBM residency that scarcity moves.
+# rate against its own CPU tier, which saturates on every arm. vLLM's
+# prefix-cache hit rate is the HBM residency that scarcity moves.
 #
-# PASS  = pass-2 hit rate well below the pilot's ~0.95 saturation -> engines are
-#         evicting, there is a placement decision to get right, run the sweep.
-# FAIL  = still ~0.95 -> scarcity did not take. Stop. Re-derive the sizing.
+# PASS  = windowed hit rate below THRESHOLD -> engines are evicting, there is a
+#         placement decision to get right, run the sweep.
+# FAIL  = still at PILOT_SATURATION -> scarcity did not take. Stop. Re-derive
+#         the sizing.
 #
-# Usage:  ./scarcity_gate.sh          # retired defaults, reproduces the 2026-08-03 run
+# Usage:  ./scarcity_gate.sh          # retired defaults, reproduces the one-shot run
 #         PROBE_RATE=16 ./scarcity_gate.sh   # probe the current operating point
 set -euo pipefail
 
@@ -47,7 +50,8 @@ ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
 
-# The pilot saturated here; the gate is "clearly below", not "any drop at all".
+# Reference only - printed beside the result, never compared. The gate's bar is
+# THRESHOLD: "clearly below", not "any drop at all".
 PILOT_SATURATION=0.95
 THRESHOLD="${THRESHOLD:-0.80}"
 
@@ -85,9 +89,8 @@ done
 # ---- warm up, then measure a load burst ------------------------------------
 # NOT the `Prefix cache hit rate` field on vLLM's periodic log line: that is
 # CUMULATIVE SINCE ENGINE START, so a time-windowed grep of it silently reports
-# whatever the running average happened to be (it read 0.085 mid-warm-up on
-# 2026-08-03 while the true windowed rate was 0.889). Use the counters and take
-# a delta.
+# the running average instead of the windowed rate, and the two can differ by an
+# order of magnitude. Use the counters and take a delta.
 #
 # Measure under LOAD, not under warm-up: at warm-up concurrency the in-flight KV
 # is negligible, so almost the whole pool is free for retention and the hit rate

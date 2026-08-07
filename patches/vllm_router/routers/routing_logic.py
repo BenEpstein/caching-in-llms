@@ -60,8 +60,8 @@ class RoutingLogic(str, enum.Enum):
 
 
 # LOADAWARE PATCH: the single tunable parameter of the `loadaware` placement
-# policy (§4 requires it exposed and documented). See `LoadAwareRouter` for the
-# score it weights and for how it is overridden.
+# policy. See `LoadAwareRouter` for the score it weights and for how it is
+# overridden.
 #
 # There is no `alpha`. An argmax is invariant under positive scaling, so
 # `alpha * benefit - beta * load` and `benefit - (beta/alpha) * load` are the
@@ -78,11 +78,9 @@ def loadaware_param(env_name: str, override: Optional[float], default: float) ->
     """LOADAWARE PATCH: resolve one tunable — explicit kwarg > env var > default.
 
     The router's argument parser is in a different file (`parsers/parser.py`),
-    and every file we patch has to be mounted into the pod and kept in sync with
-    upstream; reading the environment keeps `loadaware` a **one-file** change
-    (`oc set env deploy/stack-deployment-router LOADAWARE_BETA=0.25`, or
-    `routerSpec` env in the Helm values). The keyword argument is still honoured
-    first so a future CLI flag needs no change here.
+    so reading the environment keeps `loadaware` a **one-file** change and lets
+    the value be retuned on a running deployment. The keyword argument is still
+    honoured first so a future CLI flag needs no change here.
     """
     if override is not None:
         return float(override)
@@ -445,30 +443,27 @@ class LoadAwareRouter(KvawareRouter):
 
     and routes to the argmax, so a warm-but-saturated instance can lose to a
     cold-but-idle one. It subclasses `KvawareRouter` and overrides only the
-    selection step: `KvawareRouter` must stay **byte-identical** because it is
-    the baseline arm of the experiment.
+    selection step; `KvawareRouter` itself must stay **byte-identical**, so
+    `kvaware` behaviour is unchanged by this patch.
 
-    Four deliberate departures from `kvaware`, all report material:
+    Four deliberate departures from `kvaware`:
 
     1. **Benefit is normalized** to the fraction of the prompt already cached
        ([0, 1]) rather than a raw token count. Raw counts make beta scale with
        prompt length, so one beta would mean different policies for a 500- and
-       a 4000-token prompt - unusable for the §5 sensitivity sweep.
+       a 4000-token prompt - unusable for a beta sensitivity sweep.
     2. **Load is normalized too**, against the fleet's own mean, and this is
        what lets a single beta ship. An absolute in-flight count has no bounded
        scale: it depends on request rate, prompt length and GPU, so the same
-       beta is a different policy on every deployment. Concretely: this
-       project's beta of 0.034 was tuned where the busiest engine ran ~47
-       in-flight. On a fleet running 400 it yields a load penalty of 13.6
-       against a benefit term that is capped at 1.0, so the cache stops
-       mattering entirely and placement silently collapses to least-loaded -
-       a failure with nothing in the logs to announce it. Measured on this
-       project's own runs: across four untreated rate-16 cells the absolute
-       calibration spans 2.69x while the relative one spans 1.41x, and across
-       the three cells at comparable fleet load it spans **1.06x** (0.500,
-       0.501, 0.529) - flat. The denominator is clamped at 1 so that a fleet
-       which is essentially idle reports no imbalance to act on: at mean load
-       0.2 a single in-flight request is not a 400%-overloaded engine.
+       beta is a different policy on every deployment. Concretely: a beta
+       tuned on a fleet whose busiest engine runs a handful of in-flight
+       requests yields, on a fleet running hundreds, a load penalty far past
+       the benefit term's cap of 1.0, so the cache stops mattering entirely and
+       placement silently collapses to least-loaded - a failure with nothing in
+       the logs to announce it. The
+       denominator is clamped at 1 so that a fleet which is essentially idle
+       reports no imbalance to act on: at mean load 0.2 a single in-flight
+       request is not a 400%-overloaded engine.
     3. **Every endpoint is scored**, not only the holders in `layout_info`. An
        endpoint absent from `layout_info` scores benefit 0 - that is what makes
        "cold but idle beats warm but loaded" expressible at all.
@@ -553,48 +548,22 @@ class LoadAwareRouter(KvawareRouter):
         relative_load a fraction of *this fleet's* mean. So beta is a pure
         exchange rate between the two and carries no unit from the deployment.
 
-        With two engines the arithmetic is worth stating, because it is what
-        the sweep grid means. One engine at +r forces the other to -r, so the
-        load gap is `2 * beta * r` and a full cache hit is exactly cancelled at
-        `r = 1/(2*beta)`. At the default beta = 1.0 that is r = 0.5, and the
-        untreated cells of this project measured a relative imbalance of
-        0.47-0.50 - so the default lands on the crossover for the imbalance it
-        was built to correct, which is a coincidence of this cluster and not a
-        property of the parameterization. Larger fleets dilute the gap; the
-        per-endpoint reading in the module-level default is the one that
+        With two engines the arithmetic is worth stating. One engine at +r
+        forces the other to -r, so the load gap is `2 * beta * r` and a full
+        cache hit is exactly cancelled at `r = 1/(2*beta)`; at the default
+        beta = 1.0 that crossover is r = 0.5. Larger fleets dilute the gap, so
+        the per-endpoint reading in the module-level default is the one that
         generalizes.
 
-        **What the benefit term actually ranges over (measured 2026-08-04).**
-        The workload's ISL is 1578 tokens, of which 1544 are the shared
-        cacheable prefix and 34 a unique suffix - measured on the engine's
-        `/tokenize`, not read off `workload_gen`'s `prefix_tokens: 2048`, which
-        is a request to the generator (`_filler` emits `approx_tokens * 0.75`
-        words) and not its output. Engine-side, vLLM's HBM prefix cache served
-        **1435 of 1578 tokens per request** (90.9%) over the `kvaware` n=20
-        cell - `vllm:prefix_cache_{hits,queries}_total` count TOKENS, not
-        blocks, which is confirmable from queries/request = 1573.8 tracking ISL.
-        (`lmcache:num_hit_tokens_total` is a different tier - CPU offload - and
-        reads ~99 tokens/request because KV never became scarce. It is not this
-        number and must not be substituted for it.)
+        `matched_tokens` can come back LARGER than `prompt_tokens` - a match has
+        been observed longer than the prompt, consistent with `layout_info`
+        rounding up to LMCache's 256-token chunk boundary, though that has not
+        been confirmed. That is what the `min()` guard is for - without it
+        `benefit` would exceed 1.0 and outrank a genuine full hit.
 
-        **`matched_tokens` itself is NOT recorded anywhere**, which is a gap
-        worth naming rather than papering over: it reaches this function from
-        the Controller's `layout_info`, and the only place it surfaces is the
-        `logger.debug` below, while the deployment runs at `logLevel: INFO`.
-        So the realized ceiling of `benefit` is unverified. Do not quote one.
-
-        The open question that ceiling turns on is whether `layout_info` rounds
-        a match UP to the 256-token LMCache chunk boundary or truncates DOWN.
-        1544 tokens is 6.03 chunks: truncating gives 1536 (benefit caps at
-        0.973), rounding up gives 1792 (`min()` clamps it, benefit reaches
-        1.0). The evidence points to rounding up: the 2026-08-01 smoke test
-        sent a ~2000-token prompt and got a 2048-token match, i.e. a match
-        LONGER than the prompt (issue #5), which is the
-        whole reason the `min()` guard below exists. Not yet confirmed on this
-        workload; measuring it needs a live probe with router debug logging.
-        Either way the difference is <=2.7% on the crossover, far under this
-        cluster's run-to-run noise, so it is a documentation defect and not a
-        reason to touch the frozen dataset.
+        `matched_tokens` is not exported as a metric; it surfaces only in
+        `select_url`'s debug log, so the realized range of benefit is not
+        observable at INFO log level. Do not quote a realized ceiling.
         """
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
         return benefit - self.beta * relative_load
@@ -619,8 +588,8 @@ class LoadAwareRouter(KvawareRouter):
         chunk. Until then the dead id is the only one mapped and its match still
         reads as credit. Closing that would mean an unconditional Controller
         round-trip per request on a path that already blocks the event loop
-        (production-stack#1016), so the operational answer stands instead: gate
-        runs on `deploy/dev/registry-probe.sh` and do not restart engines
+        (production-stack#1016), so the operational answer stands instead:
+        verify the instance registry before a run and do not restart engines
         mid-run. `kvaware` has the same hole and routes purely on that credit.
         """
         url_to_instance = {url: iid for iid, url in self.instance_id_to_ip.items()}
@@ -644,9 +613,9 @@ class LoadAwareRouter(KvawareRouter):
         `self.instance_id_to_ip` bridges them, so it must be populated for
         *every* endpoint before this runs (`refresh_instance_map`).
 
-        Ties are broken by lexicographic URL so that a run is reproducible
-        (reproducibility is 30% of the grade); returns None if there is nothing
-        to route to, which the caller turns into the upstream fallback.
+        Ties are broken by lexicographic URL so that a run is reproducible;
+        returns None if there is nothing to route to, which the caller turns
+        into the upstream fallback.
         """
         matched_by_url = self.matched_tokens_by_url(layout_info)
         relative = self.relative_loads(request_stats, endpoints)
@@ -679,8 +648,7 @@ class LoadAwareRouter(KvawareRouter):
           process registers under a fresh id while the old one lingers here.
 
         Miss the second and placement silently degenerates to least-loaded for
-        the life of the router, with nothing in the logs to say so — an
-        invalidated evaluation run rather than a visible failure.
+        the life of the router, with nothing in the logs to say so.
         """
         mapped_urls = set(self.instance_id_to_ip.values())
         if any(endpoint.url not in mapped_urls for endpoint in endpoints):
@@ -937,10 +905,9 @@ def initialize_routing_logic(
         router.start_kv_manager()
         return router
     elif routing_logic == RoutingLogic.LOADAWARE:
-        # LOADAWARE PATCH: mirrors the KVAWARE branch (construct, then start the
-        # kv manager). beta is passed through when present; absent, the router
-        # falls back to LOADAWARE_BETA in the environment and then to the
-        # documented default - note `kwargs.get(...)` yields None, so the
+        # LOADAWARE PATCH: beta is passed through when present; absent, the
+        # router falls back to LOADAWARE_BETA in the environment and then to
+        # the documented default - note `kwargs.get(...)` yields None, so the
         # default must live in the callee, not in the signature.
         logger.info("Initializing loadaware routing logic")
         router = LoadAwareRouter(

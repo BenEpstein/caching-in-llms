@@ -1,6 +1,6 @@
 # Plain single-pod Prometheus (no operator, no CRDs) for the cache-llm namespace.
-# Why not kube-prometheus-stack's Prometheus: the cluster carries an older
-# prometheus-operator CRD owned by another install; our CR fails server-side apply.
+# Why the kube-prometheus-stack subchart's Prometheus is disabled instead:
+# deploy/values-baseline-kvaware.yaml, under `kube-prometheus-stack`.
 # Storage is an emptyDir — experiment truth lives in exported CSVs, not TSDB history.
 #
 # Scrapes:

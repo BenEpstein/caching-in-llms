@@ -51,10 +51,8 @@ def test_prefixes_are_distinct_and_reused():
     pool = build_prefix_pool(cfg)
     assert len(set(pool)) == cfg.prefix_pool_size
     reqs = list(generate(cfg))
-    # every request's prompt starts with its assigned pool prefix
     for r in reqs:
         assert r.prompt.startswith(pool[r.prefix_id])
-    # all suffixes unique
     assert len({r.prompt for r in reqs}) == len(reqs)
 
 

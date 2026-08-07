@@ -103,7 +103,6 @@ def test_all_holders_are_reported_not_just_the_first():
         "instance-a": (LOCAL, 16),
         "instance-b": (LOCAL, 16),
     }
-    # ...whereas the stock implementation reports only the first holder
     assert upstream_lookup(c, TOKENS) == {"instance-a": (LOCAL, 16)}
 
 

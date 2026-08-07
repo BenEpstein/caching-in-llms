@@ -2,9 +2,6 @@
 # The measured replay, running INSIDE the cluster (#27). Baked into the bench image;
 # benchmarks/bench_job.sh is what wraps it in a Job and collects the result.
 #
-# Only the replay moved. helm, cold start, warm-up gate, Prometheus dump and run.json all
-# still run on the laptop and are unaffected.
-#
 # CONTRACT WITH collect_job.py - stdout is the only channel out of this pod:
 #
 #   NODE <node-name>
@@ -18,15 +15,15 @@
 #
 # Three deliberate choices in that format:
 #
-#   1. The window markers come from THIS pod's clock, not the laptop's. There is an image
-#      pull plus dataset verification between the laptop's warm-up and the first request; a
-#      laptop-clock window would drag warm-up traffic into the Prometheus dump and
-#      contaminate the imbalance co-primary.
-#   2. Blob emission happens AFTER CELL_END, so ~15 s of gzip does not widen the window.
+#   1. The window markers come from THIS pod's clock, not the laptop's - a laptop-clock
+#      window would drag warm-up traffic into the Prometheus dump and contaminate the
+#      imbalance co-primary (benchmarks/README.md, "The measured replay runs in-cluster").
+#   2. Blob emission happens AFTER CELL_END, so the gzip work does not widen the window.
 #   3. Per-seed frames with a checksum, not one blob for the cell: truncation is then
 #      detectable per seed instead of silently costing the whole cell. Default base64
-#      wrapping is also deliberate - a single 119 KB line gets split into partial-line
-#      records by the CRI log format, and reassembly is not worth depending on.
+#      wrapping is also deliberate - an unwrapped single-line blob gets split into
+#      partial-line records by the CRI log format, and reassembly is not worth
+#      depending on.
 set -euo pipefail
 
 : "${TARGET_URL:?}" "${MODEL:?}" "${RATE:?}" "${MAX_TOKENS:?}" "${SEEDS:?}"
@@ -35,8 +32,8 @@ WORKLOADS=/tmp/workloads
 OUT=/tmp/out
 mkdir -p "$OUT"
 
-# Regenerate + verify against the committed SHA-256s. A drift exits non-zero here, which
-# with backoffLimit: 0 fails the Job loudly rather than measuring on the wrong dataset.
+# Drift exits non-zero here; with backoffLimit: 0 that fails the Job loudly rather than
+# measuring on the wrong dataset (validity rule 4).
 /app/verify_dataset.sh "$WORKLOADS"
 
 echo "NODE ${NODE_NAME:-unknown}"
@@ -44,8 +41,6 @@ echo "CELL_START $(date +%s)"
 
 for seed in $SEEDS; do
   echo "==> seed $seed"
-  # No --insecure and no route: this is plain HTTP to the ClusterIP, the same target
-  # Prometheus already scrapes.
   python3 /app/load_driver.py \
     --base-url "$TARGET_URL" --model "$MODEL" \
     --workload "$WORKLOADS/seed-$seed.jsonl" \

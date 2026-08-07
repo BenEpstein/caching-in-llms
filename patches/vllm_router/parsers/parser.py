@@ -209,11 +209,9 @@ def parse_args():
             "kvaware",
             "prefixaware",
             "disaggregated_prefill",
-            # LOADAWARE PATCH: the choices are hard-coded literals rather than
-            # derived from `RoutingLogic`, so adding the enum value in
-            # routing_logic.py is not enough — argparse rejects
-            # `--routing-logic loadaware` and the router exits before the
-            # factory is ever reached.
+            # LOADAWARE PATCH: these choices are hard-coded literals rather
+            # than derived from `RoutingLogic`, so a new enum member is not
+            # reachable until it is listed here too.
             "loadaware",
         ],
         help="The routing logic to use",

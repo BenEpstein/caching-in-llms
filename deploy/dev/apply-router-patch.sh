@@ -21,8 +21,7 @@
 #   oc exec -n cache-llm deploy/stack-deployment-router -- cat $SP/<path> > patches/<path>
 #
 # Only files whose basename matches a branch of `patch_target()` can be applied — the
-# mount path must be the file's real location inside the image. (It is a `case`, not an
-# associative array: macOS ships bash 3.2, which has no `declare -A`.)
+# mount path must be the file's real location inside the image.
 set -euo pipefail
 
 NS="${NS:-cache-llm}"

@@ -4,12 +4,10 @@ The point of this file is one detail, and it is worth stating before the code:
 
 **Token chunks carry `"usage": null`.**
 
-That is what vLLM emits under `stream_options={"include_usage": True}`, and it is what broke
-this project on 2026-08-04: the driver classified chunks with `'"usage"' in data`, which
-matched *every* chunk, so it `continue`d past all of them and recorded **zero TTFT across 500
-requests** — while the final chunk still populated the token counts, so every CSV looked
-plausible. A stub that omitted the key would let that bug pass, which would make this fixture
-worse than nothing: a test that reassures without testing.
+That is what vLLM emits under `stream_options={"include_usage": True}`, and it is what a
+`'"usage"' in data` classifier gets wrong: the test matches *every* chunk, so the driver
+skips all of them and records no TTFT while the final chunk still populates token counts - every CSV plausible. A stub that omitted the key would let that bug pass, which would make
+this fixture worse than nothing: a test that reassures without testing.
 
 So the contract below is not "close enough to vLLM". It is specifically the shape that
 produced the failure, plus the delays needed to make TTFT and ITL *known values* rather than
@@ -91,8 +89,8 @@ class _Handler(BaseHTTPRequestHandler):
             # "usage": null on EVERY token chunk - see the module docstring.
             self._sse({"choices": [{"text": f" t{i}", "index": 0}], "usage": None})
 
-        # The usage-only chunk: no token, empty choices. Its arrival must count as neither
-        # TTFT nor an inter-token gap.
+        # The usage-only chunk: empty choices, so the driver must count it as
+        # neither a TTFT nor an ITL.
         self._sse({
             "choices": [],
             "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": max_tokens},
