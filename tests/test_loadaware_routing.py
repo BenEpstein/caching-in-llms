@@ -2,8 +2,9 @@
 
 Change 2 of the project: the router must place a request by
 ``cache_hit_benefit - beta * relative_load`` over *every* instance, instead of
-kvaware's "first instance reported to hold the prefix". See CONTEXT.md
-("Placement Policy"), README.md ("What we changed upstream"), and issue #5.
+kvaware's "first instance reported to hold the prefix". See
+docs/report/report.md, section "Change 2", README.md ("What we changed
+upstream"), and issue #5.
 
 Both terms are dimensionless - a fraction of this prompt, and a fraction of
 this fleet's mean load - so ``beta`` carries no unit from the deployment. The

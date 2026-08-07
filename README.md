@@ -99,7 +99,7 @@ pip install -r requirements.txt
 pytest benchmarks/ tests/ -q
 ```
 
-196 tests, all offline. `.github/workflows/ci.yml` runs the same suite on every push, plus a
+190 tests, all offline. `.github/workflows/ci.yml` runs the same suite on every push, plus a
 timed micro-benchmark of the router's placement path.
 
 The cluster sweep is deliberately **not** in CI: it needs two A10 GPUs, an OpenShift namespace,
@@ -170,5 +170,3 @@ is a development convenience and is never benchmarked.
 | `docs/baseline-justification.md` | Why this baseline (§2): features, default eviction policy, fit |
 | `docs/report/report.md` | The §6 report; CI builds it to PDF on every push |
 | `benchmarks/README.md` | The §3 operator's manual |
-| `CHANGELOG.md` | Session-by-session record; decisions carry their evidence |
-| `CONTEXT.md` | Ubiquitous language - what each term means here, exactly |

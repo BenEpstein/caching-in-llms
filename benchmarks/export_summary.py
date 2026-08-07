@@ -46,8 +46,8 @@ FIELDS = [
     # These are not comparable. The same label is a different policy, and the
     # numeric values do not convert by a constant - the relative form
     # self-adjusts per request while the absolute one does not (the conversion
-    # beta_rel = beta_abs * mean_load holds only at the mean, and empirically
-    # mispredicted by ~2x, see CHANGELOG 2026-08-05). Never pool or compare
+    # beta_rel = beta_abs * mean_load holds only at the mean, and mispredicted
+    # the observed values by ~2x when checked). Never pool or compare
     # across that boundary without saying which side each cell is on.
     #
     # Absolute-era beta values seen: 0.034, 0.068, 0.1, 0.5, 1.0
