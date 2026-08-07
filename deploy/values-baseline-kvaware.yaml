@@ -2,7 +2,8 @@
 # Cluster: gapu-2 (OpenShift), 2x NVIDIA A10 23GB.
 # Derived from production-stack tutorials/assets/values-17-kv-aware.yaml.
 #
-# NOTE: model + hf_token secret are set at install time; see deploy/README.md.
+# NOTE: model + hf_token secret are set at install time; see "Deploying the stack"
+# in benchmarks/README.md.
 
 servingEngineSpec:
   runtimeClassName: ""

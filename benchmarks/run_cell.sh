@@ -16,7 +16,7 @@
 #          inside the router), so the grid is fixed, not probe-calibrated.
 #   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, ~75% of the knee)
 #
-# Environment overrides (defaults match deploy/README.md on gapu-2):
+# Environment overrides (defaults match the gapu-2 deployment in benchmarks/README.md):
 #   NS, RELEASE, CHART, CHART_VERSION, BASE_URL, MODEL, ROUTER_DEPLOY,
 #   ENGINE_DEPLOY, LOADAWARE_TAG (REQUIRED for loadaware cells: git short SHA
 #   of the CI image)
@@ -36,7 +36,7 @@ RESULTS_ROOT="${3:-results}"
 # after ~8 minutes of helm upgrade, cold start and warm-up.
 : "${BENCH_TAG:?every cell needs BENCH_TAG=<git short SHA of the CI-built bench image>}"
 
-# Which frozen seeds this cell replays. EVERY cell runs the full 20 (run_sweep.sh:85),
+# Which frozen seeds this cell replays. EVERY cell runs the full 20 (run_sweep.sh SEEDS_FULL),
 # including the curve arms - n=6 cannot survive a single reversal (the pilot proved it) and
 # n=10 then returned p=0.0527. The earlier 3-seed subset for beta-sweep cells is retired;
 # all cells replay the same frozen files, so there is still exactly one dataset.
@@ -155,7 +155,7 @@ else
     HF_HOME=/tmp/hf LOADAWARE_BETA-
 fi
 
-# ---- 2. router Service controller ports (deploy/README.md gotcha #0) --------
+# ---- 2. router Service controller ports (upstream chart bug; README gotcha) --
 if ! oc get svc "$RELEASE-router-service" -n "$NS" -o jsonpath='{.spec.ports[*].name}' \
     | grep -q lmcache-reply; then
   oc patch svc "$RELEASE-router-service" -n "$NS" --type=json -p '[

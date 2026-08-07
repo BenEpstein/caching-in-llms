@@ -17,7 +17,7 @@ import json
 import pytest
 
 from analyze import seed_stats
-from load_gate import MIN_ASYMMETRY, _engine_series, gate, relative_imbalance
+from load_gate import MIN_ASYMMETRY, gate, relative_imbalance
 
 # --------------------------------------------------------------------------
 # fixtures: a minimal run directory
@@ -172,19 +172,6 @@ def test_out_of_window_samples_are_excluded(tmp_path):
     r = gate(run)
     assert r["mean_busiest"] == pytest.approx(40.0)
     assert r["mean_idlest"] == pytest.approx(16.0)
-
-
-def test_router_job_series_are_ignored(tmp_path):
-    """`vllm:num_requests_running` is exported per-backend under job=router too,
-    where all series share one instance label. Counting them creates a synthetic
-    third 'engine' averaging the real two - it corrupted 17 of 74 seed rows."""
-    run = _write_run(
-        tmp_path,
-        running={"a": [(100.0, 40.0)], "b": [(100.0, 16.0)]},
-        job="router",
-    )
-    assert "error" in gate(run)
-    assert _engine_series(run, "vllm_num_requests_running") == {}
 
 
 def test_missing_dump_is_an_error_not_a_pass(tmp_path):

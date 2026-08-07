@@ -38,8 +38,10 @@ Usage:
 
 `ttft_slo_miss` is a secondary metric, reported alongside the two co-primaries.
 It is computed from the same committed driver CSVs as every other statistic
-here, and its objective is swept rather than fixed. See TTFT_SLO_S below and
-docs/sweep-2026-08-06-findings.md Part 3.
+here, and its objective is swept rather than fixed. See TTFT_SLO_S below; the
+ruling that goodput reports the whole SLO curve rather than one point is in
+docs/report/report.md ("An instrument problem, not a result") and landed in
+a137f5a (#31).
 """
 
 from __future__ import annotations
