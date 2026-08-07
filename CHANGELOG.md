@@ -8,56 +8,44 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
-## 2026-08-07 (docs consolidation) - seven docs deleted, the submission surface is five files
+## 2026-08-07 (docs consolidation) - seven docs deleted, five graded documents survive
 
 ### Decided
-- **The submission surface is five documents** (Ben, 2026-08-07, issue #59): `README.md`,
-  `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3),
-  `docs/report/report.md` (§6), `CHANGELOG.md`. Applied submap #30's file-justification test:
-  a doc survives only if the README, the report or CI cites it. Seven failed and were deleted -
-  `docs/requirements-audit.md`, `docs/project-brief.md`, `docs/feasibility-verification.md`,
-  `docs/upstream-findings.md`, `docs/decisions/second-optimization.md`, `patches/README.md`,
-  `deploy/dev/README.md`. CLAUDE.md now carries "do not add a sixth" so the surface does not
-  regrow.
-- **`docs/baseline-justification.md` stays as a standalone file** (Ben, 2026-08-07). It was
-  first slated to fold into the README; keeping it means §2 has one addressable artifact a
-  grader can open, and it is now the only place the upstream code claims are pinned to
-  commits - `docs/feasibility-verification.md` held that role and is gone.
-- **`docs/decisions/` is gone, not merely closed.** The standing rule already sent decisions
-  to issues + CHANGELOG; the directory's last file is archived verbatim on issue #1, which
-  was the only thing citing it.
+- **The graded surface is five documents** (Ben, 2026-08-07, issue #59): `README.md`,
+  `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3), `docs/report/report.md`
+  (§6), `CHANGELOG.md`, with `CONTEXT.md` as their shared glossary. Rule now lives in CLAUDE.md
+  so the surface does not regrow; the survival test and the per-file verdicts are on #59.
+- **`docs/baseline-justification.md` stays standalone** (Ben, 2026-08-07), reversing the
+  in-session plan to fold §2 into the README: §2 gets one artifact a grader can open.
+- **`docs/decisions/` is deleted, not merely closed.** The standing rule already sent decisions
+  to issues + CHANGELOG, and its last file's only citation was map #1's Out-of-scope entry.
 
 ### Added
-- **README § "What we changed upstream"** - the three-file diff table lifted from
-  `patches/README.md`, plus the in-image path mirroring. The rest of that file (β formula,
-  "there is no α", apply-script invocations) already existed in README or `benchmarks/README.md`.
+- **README § "What we changed upstream"** - the three-file diff table, the only place the
+  `parser.py` change is written down.
+
+### Removed
+- Seven docs: `requirements-audit`, `project-brief`, `feasibility-verification`,
+  `upstream-findings`, `decisions/second-optimization`, `patches/README`, `deploy/dev/README`.
+  Each one's still-live content is archived verbatim on the ticket that consumes it -
+  `upstream-findings` and `patches/README` on #10, `second-optimization` on #1 - and the
+  overlay's apply rules moved into `deploy/dev/apply-router-patch.sh`'s own header.
 
 ### Changed
-- **Report Appendix A** drops the `requirements-audit.md` row and gains one pointing at the
-  README's upstream-diff table. Prose untouched - #8 still owns it.
-- **`docs/baseline-justification.md`'s status header** no longer defers its evidence to the
-  deleted `feasibility-verification.md`; the pinned commits are stated on the file itself.
-- **`CONTEXT.md`, `CLAUDE.md`, `tests/test_loadaware_routing.py`** re-pointed off deleted files.
-
-### Known gap
-- **§2 is 641 words, roughly 1.3 pages against the spec's "≤1 page".** Left as-is: the trim is
-  a report-time call and belongs with #8, which regenerates the deliverable.
+- **Report Appendix A** drops the `requirements-audit.md` row. Prose untouched - #8 owns it.
+- **`CONTEXT.md`, `CLAUDE.md`, `tests/test_loadaware_routing.py`, `registry-probe.sh`**
+  re-pointed off deleted files.
 
 ### Fixed
-- **Content that outlived its file has a named destination, not "it's in git history":**
-  `docs/upstream-findings.md` is archived verbatim on #10 (its actual consumer - Findings 4
-  and 5 had already landed in the report's Discussion), and
-  `docs/decisions/second-optimization.md` on #1.
+- **README claimed 168 tests; the suite is 196.** Also corrected: `deploy/dev/` was described
+  as dev-only, but `registry-probe.sh` and `revert-router-patch.sh` are called by
+  `rate_pilot.sh`, `run_cell.sh` and `scarcity_gate.sh`, so they are reproduce-path files.
 
 ### Deferred
-- **`deploy/README.md`, `deploy/nocache-arm.md`, `docs/sweep-2026-08-06-findings.md` moved to
-  #55.** All three can only be deleted by editing files under `benchmarks/` (`run_cell.sh`
-  comments, `README.md:96`, `analyze.py:42`, `test_analyze.py:414`), and #30 holds
-  `benchmarks/` edits until the in-flight runs land.
-- Note for #55: `deploy/dev/` is mislabelled as dev-only. `registry-probe.sh` and
-  `revert-router-patch.sh` are invoked by `rate_pilot.sh`, `run_cell.sh` and
-  `scarcity_gate.sh` - they are on the reproduce path and must not be deleted with the rest
-  of the dev loop.
+- **`deploy/README.md`, `deploy/nocache-arm.md`, `docs/sweep-2026-08-06-findings.md` → #55**,
+  which carries the edit sites. Decision made; only the edit waits, since all three need
+  `benchmarks/` changes that #30 holds until the in-flight runs land.
+- **§2 is 641 words against the spec's "≤1 page" → #8**, which regenerates the deliverable.
 
 ## 2026-08-06 (goodput promoted) - `ttft_slo_miss` is a reported secondary, not exploratory
 

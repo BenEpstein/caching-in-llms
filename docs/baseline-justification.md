@@ -1,8 +1,10 @@
 # §2 Baseline Justification — vLLM Production Stack + LMCache
 
-> status: live · 2026-08-07 · the §2 deliverable, and the only place the code claims below are
-> pinned. Every file/line reference was verified against `vllm-project/production-stack` @
-> `1e973a3` and `LMCache/LMCache` @ `bf20f51`; re-verify before citing against a newer upstream.
+> status: live · 2026-08-07 · the §2 deliverable. Verified against
+> `vllm-project/production-stack` @ `1e973a3` and `LMCache/LMCache` @ `bf20f51`; re-verify
+> before citing against a newer upstream. Claims here carry a locator only where one fits the
+> page budget - the full file/line evidence was `docs/feasibility-verification.md`, deleted in
+> #59 and recoverable from git history at `a137f5a`.
 
 ## Choice
 

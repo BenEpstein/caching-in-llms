@@ -1,7 +1,8 @@
 # CONTEXT.md - ubiquitous language
 
-> status: live · 2026-08-05 · the vocabulary the code, report and tickets all use; definitions
-> verified against `patches/vllm_router/routers/routing_logic.py` on 2026-08-05 (issue #29)
+> status: live · 2026-08-07 · the vocabulary the code, report and tickets all use; definitions
+> verified against `patches/vllm_router/routers/routing_logic.py` on 2026-08-05 (issue #29);
+> doc pointers re-verified 2026-08-07 (issue #59)
 
 Glossary of project terms. Code, docs, the report, and conversations should use these
 words with exactly these meanings. Implementation details live elsewhere.

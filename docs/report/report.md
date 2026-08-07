@@ -432,7 +432,6 @@ and no GPU.
 | Figure generation | `benchmarks/plot_results.py` |
 | Per-seed derived table | `results/summary-per-seed.csv` |
 | Baseline justification (guidelines §2) | `docs/baseline-justification.md` |
-| Upstream diff (three files) | `README.md`, "What we changed upstream" |
 
 ## Run provenance
 
