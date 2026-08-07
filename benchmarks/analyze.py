@@ -68,8 +68,10 @@ from typing import Dict, List, Sequence, Tuple
 # rule 1 exists to prevent bias - so a flat floor is reported, not fatal. What
 # voids a comparison is errors DIFFERING between the arms: ratio >
 # ERROR_BIAS_RATIO AND absolute gap > ERROR_BIAS_ABS. A single seed above
-# HARD_ERROR_RATE still voids on its own. Probe evidence behind the amendment:
-# CHANGELOG, 2026-08-04 (#3).
+# HARD_ERROR_RATE still voids on its own. The gate probe that motivated it saw
+# the same floor on every arm INCLUDING roundrobin, which cannot be a placement
+# effect - the errors are aiohttp ServerDisconnectedError raised AFTER the
+# routing decision. Probe evidence: issue #3.
 #
 # ALPHA is the pre-registered threshold (#31 rev 2), Bonferroni over the two co-primaries
 # (TTFT p95 and imbalance). It is a constant so the verdict line and this file's

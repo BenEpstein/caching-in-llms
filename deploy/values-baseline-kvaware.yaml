@@ -50,7 +50,7 @@ servingEngineSpec:
         # justify it.
         # Predicted pool at 0.45: ~99k tokens (29,123 tok/GiB). Validity rule 5
         # compares the engine log's "GPU KV cache size" against this.
-        # Full derivation: CHANGELOG, 2026-08-03 entry.
+        # Full derivation: issue #3.
         gpuMemoryUtilization: "0.45"
 
       serviceMonitor:

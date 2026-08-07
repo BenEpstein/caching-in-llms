@@ -2,7 +2,7 @@
 
 Change 1 of the project: `KVController.lookup()` must report how much of a
 request's prefix *every* Instance holds, not just the first holder of each
-chunk. See CONTEXT.md ("Lookup Extension", "Cache-Hit Benefit") and issue #4.
+chunk. See docs/report/report.md, section "Change 1", and issue #4.
 
 No cluster, no GPU, no lmcache install — conftest.py loads the tracked patch
 file with the lmcache import surface stubbed out.

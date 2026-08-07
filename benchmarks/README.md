@@ -156,8 +156,8 @@ measured imbalance 2.257 against a same-hour kvaware control of
 `loadaware-b0.5` and `loadaware-b1.0` appear under **both**. The same cell name is a
 different policy, and the values do not convert by a constant: the relative form
 self-adjusts per request while the absolute one does not, so `beta_rel = beta_abs ×
-mean_load` holds only at the mean and mispredicted by ~2× in practice (CHANGELOG
-2026-08-05). Never pool or compare across the boundary without saying which side each cell
+mean_load` holds only at the mean and mispredicted the observed values by ~2× when
+checked (#22). Never pool or compare across the boundary without saying which side each cell
 is on.
 
 - Absolute-era values seen: 0, 0.034, 0.068, 0.1, 0.5, 1.0
@@ -531,7 +531,7 @@ them.
    between the arms** (`analyze.py compare`: ratio > 2× **and** absolute gap > 1 pp). A
    single seed above **10%** is catastrophic and voids unilaterally (`analyze.py validate`).
    Rule of record: the block above `ALPHA` in `benchmarks/analyze.py`. Probe evidence
-   behind the amendment: CHANGELOG, 2026-08-04 (#3).
+   behind the amendment: issue #3.
 2. Wrong image/config state (unexpected router image, patch overlay mounted, β not as
    labeled) = **discard the run, never "correct" it**. `run.json` records image + imageID
    for the audit.

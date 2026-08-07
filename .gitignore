@@ -10,13 +10,26 @@ results/**/*.jsonl
 # base64 per cell that decodes to the driver-seed*.csv already tracked beside it. Kept on
 # disk for debugging, out of git.
 results/**/job.log
-# Session handoffs are working notes, not submission artifacts: per CLAUDE.md, rationale
-# lives in GitHub issues + CHANGELOG.md and docs/ holds artifacts only. Six tracked handoffs
-# were removed 2026-08-05 (issue #29); they survive in git history.
+# Session handoffs are working notes, not submission artifacts: rationale lives in GitHub
+# issues and docs/ holds artifacts only. Six tracked handoffs were removed 2026-08-05
+# (issue #29); they survive in git history.
 docs/handoffs/
 docs/handoff-*.md
 .DS_Store
+# Agent scaffolding (#61): documentation of how the project was built, not of the project.
+# Anchored to the repo root so an upstream file of the same name under patches/ stays
+# trackable. Recover the last tracked state of one, whatever the merge strategy was:
+#   git show "$(git rev-list -1 HEAD -- CHANGELOG.md)^:CHANGELOG.md"
+/CLAUDE.md
+/CONTEXT.md
+/CHANGELOG.md
 CLAUDE.local.md
+# Agent session worktrees are nested git checkouts, hundreds of MB. Already invisible to a
+# clone (nothing here is tracked), but only THIS clone ignores them, via .git/info/exclude -
+# which never travels. Without this line a second collaborator's `git add -A` tries to commit
+# them. Deliberately narrow: `.claude/` itself stays trackable in case shared project config
+# ever lands there.
+.claude/worktrees/
 __pycache__/
 .hypothesis/
 .pytest_cache/
