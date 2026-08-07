@@ -75,10 +75,11 @@ MIN_ASYMMETRY = 1.5
 #: rate differs. 1.25 = "at least 25% worse than an idle system".
 MIN_DEGRADATION = 1.25
 
-#: Unloaded reference: the same driver and workload at a rate low enough that
-#: nothing queues. A cell at the target rate is compared against these; the
-#: sweep is only worth running if concentration has pushed latency materially
-#: above an idle system's. Provenance: benchmarks/README.md.
+#: Unloaded reference, measured on this cluster at rate 4 with the fixed driver:
+#: the same driver and workload at a rate low enough that nothing queues. A cell
+#: at the target rate is compared against these; the sweep is only worth running
+#: if concentration has pushed latency materially above an idle system's.
+#: Re-measure with rate_pilot.sh if the cluster or the driver changes.
 BASELINE_TTFT_P95 = 0.161
 BASELINE_ITL_P95 = 0.0313
 

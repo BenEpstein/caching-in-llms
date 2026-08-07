@@ -443,7 +443,7 @@ class LoadAwareRouter(KvawareRouter):
 
     and routes to the argmax, so a warm-but-saturated instance can lose to a
     cold-but-idle one. It subclasses `KvawareRouter` and overrides only the
-    selection step; `KvawareRouter` itself stays **byte-identical**, so
+    selection step; `KvawareRouter` itself must stay **byte-identical**, so
     `kvaware` behaviour is unchanged by this patch.
 
     Four deliberate departures from `kvaware`:
@@ -555,14 +555,15 @@ class LoadAwareRouter(KvawareRouter):
         the per-endpoint reading in the module-level default is the one that
         generalizes.
 
-        `matched_tokens` can come back LARGER than `prompt_tokens`, because
-        `layout_info` rounds a match up to LMCache's 256-token chunk boundary.
-        That is what the `min()` guard is for - without it `benefit` would
-        exceed 1.0 and outrank a genuine full hit.
+        `matched_tokens` can come back LARGER than `prompt_tokens` - a match has
+        been observed longer than the prompt, consistent with `layout_info`
+        rounding up to LMCache's 256-token chunk boundary, though that has not
+        been confirmed. That is what the `min()` guard is for - without it
+        `benefit` would exceed 1.0 and outrank a genuine full hit.
 
         `matched_tokens` is not exported as a metric; it surfaces only in
         `select_url`'s debug log, so the realized range of benefit is not
-        observable at INFO log level.
+        observable at INFO log level. Do not quote a realized ceiling.
         """
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
         return benefit - self.beta * relative_load

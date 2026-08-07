@@ -68,10 +68,10 @@ from typing import Dict, List, Sequence, Tuple
 # rule 1 exists to prevent bias - so a flat floor is reported, not fatal. What
 # voids a comparison is errors DIFFERING between the arms: ratio >
 # ERROR_BIAS_RATIO AND absolute gap > ERROR_BIAS_ABS. A single seed above
-# HARD_ERROR_RATE still voids on its own. The evidence behind the amendment is
-# in benchmarks/README.md ("Validity rules").
+# HARD_ERROR_RATE still voids on its own. Probe evidence behind the amendment:
+# CHANGELOG, 2026-08-04 (#3).
 #
-# ALPHA is the pre-registered threshold, Bonferroni over the two co-primaries
+# ALPHA is the pre-registered threshold (#31 rev 2), Bonferroni over the two co-primaries
 # (TTFT p95 and imbalance). It is a constant so the verdict line and this file's
 # docstring can never disagree: a p between ALPHA and 0.05 is null under the
 # pre-registration and must never print "significant".
@@ -183,7 +183,7 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
     for name, xs in (("ttft", ttft), ("e2e", e2e), ("itl", itl)):
         s[f"{name}_mean"] = sum(xs) / len(xs) if xs else float("nan")
         # p90 as well as p95 - which percentile carries the effect, and why, is
-        # in docs/report/report.md.
+        # in plot_results.fig_percentiles.
         for p in (50, 90, 95, 99):
             s[f"{name}_p{p}"] = percentile(xs, p)
     return s

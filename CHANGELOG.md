@@ -24,13 +24,13 @@ with a pointer to the evidence — those matter as much as code.
 
 ### Changed
 - **Comment sweep applied across `benchmarks/`, `patches/`, `deploy/`, `tests/`,
-  `scripts/`** (~30 files, ≈240 lines of commentary removed net). Every diff
+  `scripts/`** (31 files, ≈290 lines of commentary removed net). Every diff
   comment/docstring-only, machine-verified (AST / stripped-diff identity vs HEAD); proposed
   and adversarially reviewed by a second agent per file before landing (per-file verdicts
   on #56).
 - **`benchmarks/README.md` grew the evidence the code comments used to carry**: "Why the
-  operating point is rate 16 / OSL 64" (pilot evidence incl. the β=0.25 exclusion - the
-  pilot run dirs were never committed, so this table is the record), "Two eras of `beta`"
+  operating point is rate 16 / OSL 64" (pilot evidence incl. the β=0.25 exclusion, backed by
+  the committed `results/osl-pilot/` dirs), "Two eras of `beta`"
   (the `7e2dffb` boundary; never pool across it), "Picking the rate (step 0)",
   "Reproducing the reported numbers", and the missing `HF_HOME` gotcha bullet (#21).
 
@@ -45,6 +45,12 @@ with a pointer to the evidence — those matter as much as code.
   `driver-seed{1..6}.csv`, two α references colliding with CONTEXT.md's reservation of
   "alpha" (#29), dead pointers (`CELL_SEEDS`, `deploy/README.md`, a `docs/` post-mortem
   that never existed, "Ben's open item 3").
+- **Rescued from a comment before it was deleted**: on the 2026-08-06 confirmatory sweep the
+  prefix-cache hit rate falls **91.2% → 86.1% monotonically in β**, and that decline is the
+  mechanism behind the β=2.0 latency reversal. It existed only in a `plot_results.py`
+  comment. Recording it here because it **contradicts a live report caption** -
+  `docs/report/report.md` fig7 still reads "the hit rate is flat across this range". The
+  report is #8's to correct; flagged there and on #31, not silently changed here.
 
 ## 2026-08-07 (#55) - dead code, parse consolidation, deploy README folded
 

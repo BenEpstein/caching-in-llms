@@ -43,11 +43,14 @@ servingEngineSpec:
         # engine, so there is no placement decision for cache-aware routing to
         # get right. 0.45 keeps headroom over peak in-flight KV so preemption
         # does not become the thing we are measuring.
-        # NOTE: the sizing was derived against the retired workload; the value
-        # stands. Kept deliberately - re-derive before changing it, do not
-        # re-derive to justify it. Verify the realised pool from the engine
-        # startup log (validity rule 5, benchmarks/README.md).
-        # Numbers: docs/report/report.md and CHANGELOG.
+        # NOTE: the sizing was derived against the retired 64-prefix s=1.2
+        # workload; the frozen dataset is now 128 prefixes at s=0.9, so the
+        # hot-set arithmetic no longer describes it. The value stands: kept
+        # deliberately - re-derive before changing it, do not re-derive to
+        # justify it.
+        # Predicted pool at 0.45: ~99k tokens (29,123 tok/GiB). Validity rule 5
+        # compares the engine log's "GPU KV cache size" against this.
+        # Full derivation: CHANGELOG, 2026-08-03 entry.
         gpuMemoryUtilization: "0.45"
 
       serviceMonitor:

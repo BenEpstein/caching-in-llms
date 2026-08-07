@@ -11,8 +11,9 @@
 set -euo pipefail
 
 OUT="${1:?usage: verify_dataset.sh <out-dir>}"
-# `novel` is the no-reuse cache-overhead profile (§3); see benchmarks/README.md.
-# default stays zipfian - three callers rely on it (run_cell.sh, bench_job.sh)
+# `novel` is the no-reuse cache-overhead profile (§3); see benchmarks/README.md,
+# "The second profile: novel prompts". Callers rely on the zipfian default
+# (run_cell.sh, bench_job.sh).
 WORKLOAD_PROFILE="${WORKLOAD_PROFILE:-zipfian}"
 case "$WORKLOAD_PROFILE" in
   zipfian) DEFAULT_MANIFEST=/app/workloads/manifest.json ;;

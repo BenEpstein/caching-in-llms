@@ -13,7 +13,7 @@ NS="${NS:-cache-llm}"
 BENCH_REPO="${BENCH_REPO:-quay.io/rhl193000/bench-driver}"
 BENCH_IMAGE="$BENCH_REPO:$BENCH_TAG"
 # The in-cluster Service, not the edge route: no TLS, no route, no WAN - which is the
-# entire point of this file (README, "The measured replay runs in-cluster").
+# entire point of this file (benchmarks/README.md, "The measured replay runs in-cluster").
 TARGET_URL="${TARGET_URL:-http://stack-router-service.$NS.svc.cluster.local:80}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -34,7 +34,7 @@ echo "==> $JOB: image $BENCH_IMAGE, target $TARGET_URL, seeds [$SEEDS]"
 # limit behind our back and reintroduce the throttling artifact.
 #
 # The control for co-location is the engine-side TTFT cross-check, not a scheduling rule
-# (README, "The measured replay runs in-cluster"): in-cluster engine-side TTFT matching the
+# (benchmarks/README.md, "The measured replay runs in-cluster"): in-cluster engine-side TTFT matching the
 # WAN cells means the driver is not perturbing the engines. The node is recorded.
 oc apply -n "$NS" -f - <<YAML
 apiVersion: batch/v1

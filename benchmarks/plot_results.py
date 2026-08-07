@@ -453,7 +453,7 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     labels, lows, highs = [], [], []
     for c in ordered:
-        # job=vllm-engines only - utilization.read_series owns the filter and why.
+        # job=vllm-engines only - utilization.ENGINE_JOB documents the router trap.
         per_pod = utilization.read_series(
             c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
         means = sorted(sum(y for _, y in v) / len(v) for v in per_pod.values() if v)

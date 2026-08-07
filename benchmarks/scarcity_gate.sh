@@ -2,7 +2,9 @@
 # Scarcity gate (methodology amendment, issue #3, 2026-08-03).
 #
 # ⚠️  HISTORICAL / ONE-SHOT. Kept deliberately (#30), not on the sweep path.
-# The procedure described below is the original 2026-08-03 one-shot; the code now warms with a single pass and reads a counter delta (see the NOT-the-cumulative-field comment below).
+# The procedure described below is the original one-shot. The code now warms with a
+# SINGLE pass and reads a counter delta, not the cumulative field - see the
+# NOT-the-cumulative-field comment further down.
 #
 # This script did its job once: run against the 64-prefix s=1.2 pool it FALSIFIED that
 # sizing (hit rate 0.889 against the pilot's ~0.95) and produced the amendment to 128
@@ -48,8 +50,8 @@ ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
 
-# The saturation level the gate compares against: the bar is "clearly below", not
-# "any drop at all".
+# Reference only - printed beside the result, never compared. The gate's bar is
+# THRESHOLD: "clearly below", not "any drop at all".
 PILOT_SATURATION=0.95
 THRESHOLD="${THRESHOLD:-0.80}"
 

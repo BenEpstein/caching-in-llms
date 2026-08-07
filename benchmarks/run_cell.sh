@@ -10,7 +10,7 @@
 #          e.g. loadaware-b0 loadaware-b0.5 loadaware-b1.0 loadaware-b2.0
 #          beta is dimensionless (load is normalized against the fleet mean
 #          inside the router), so the grid is fixed, not probe-calibrated.
-#   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, ~75% of the knee)
+#   rate = fixed open-loop Poisson req/s (from rate_pilot.sh, at or just under the knee)
 #
 # Environment overrides (defaults match the gapu-2 deployment in benchmarks/README.md):
 #   NS, RELEASE, CHART, CHART_VERSION, BASE_URL, MODEL, ROUTER_DEPLOY,
