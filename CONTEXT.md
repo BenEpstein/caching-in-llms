@@ -46,8 +46,8 @@ words with exactly these meanings. Implementation details live elsewhere.
   copy → source worker pushes KV to the destination's CPU tier). Exists upstream; gated
   on P2P/NIXL; nothing invokes it today.
 - **Replication Policy** — the (nonexistent upstream) logic deciding *which* entries earn
-  replication and *when*. Candidate second optimization; parked - see
-  `docs/decisions/second-optimization.md` (frozen; handoff doc removed 2026-08-01, in git history).
+  replication and *when*. Candidate second optimization; parked - rationale archived on
+  [issue #1](https://github.com/BenEpstein/caching-in-llms/issues/1#issuecomment-5218375689).
 - **Hot Prefix** — a shared prompt prefix popular enough that its placement materially
   skews load; produced deliberately by the Zipfian workload.
 - **TTFT SLO** - a service-level objective on time-to-first-token, in seconds. The

@@ -8,6 +8,57 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-07 (docs consolidation) - eight docs deleted, `docs/` is the report and nothing else
+
+### Decided
+- **The submission surface is four documents** (Ben, 2026-08-07, issue #59): `README.md`,
+  `benchmarks/README.md`, `docs/report/report.md`, `CHANGELOG.md`. Applied submap #30's
+  file-justification test: a doc survives only if the README, the report or CI cites it.
+  Eight failed and were deleted - `docs/requirements-audit.md`, `docs/project-brief.md`,
+  `docs/baseline-justification.md`, `docs/feasibility-verification.md`,
+  `docs/upstream-findings.md`, `docs/decisions/second-optimization.md`, `patches/README.md`,
+  `deploy/dev/README.md`. CLAUDE.md now carries "do not add a doc under `docs/`" so the
+  surface does not regrow.
+- **§2's one-pager is owed by the report ticket (#8), not carried as a separate file.** The
+  spec calls for a ≤1-page baseline justification; `docs/baseline-justification.md` was 641
+  words and read as ~1.3 pages. Its substance is now README § "Why this baseline"; #8
+  regenerates the standalone one-pager at report time from that text. This is a deliberate
+  handoff - noted on #8 - not a dropped deliverable.
+- **`docs/decisions/` is gone, not merely closed.** The standing rule already sent decisions
+  to issues + CHANGELOG; the directory's last file is archived verbatim on issue #1, which
+  was the only thing citing it.
+
+### Added
+- **README § "Why this baseline"** - the §2 argument: LMCache + Production Stack, LRU default
+  via `POLICY_MAPPING`, the first-match `registry.find_kv()` TODO, the ignored `EngineStats`
+  load signal, and the rejected alternatives. Verified against `production-stack@1e973a3` /
+  `LMCache@bf20f51`.
+- **README § "What we changed upstream"** - the three-file diff table lifted from
+  `patches/README.md`, plus the in-image path mirroring. The rest of that file (β formula,
+  "there is no α", apply-script invocations) already existed in README or `benchmarks/README.md`.
+
+### Changed
+- **Report Appendix A** points at the README's two new sections instead of the deleted
+  `baseline-justification.md` / `requirements-audit.md`; the "Related work" citation of the
+  former dropped. Prose untouched - #8 still owns it.
+- **`CONTEXT.md`, `CLAUDE.md`, `tests/test_loadaware_routing.py`** re-pointed off deleted files.
+
+### Fixed
+- **Content that outlived its file has a named destination, not "it's in git history":**
+  `docs/upstream-findings.md` is archived verbatim on #10 (its actual consumer - Findings 4
+  and 5 had already landed in the report's Discussion), and
+  `docs/decisions/second-optimization.md` on #1.
+
+### Deferred
+- **`deploy/README.md`, `deploy/nocache-arm.md`, `docs/sweep-2026-08-06-findings.md` moved to
+  #55.** All three can only be deleted by editing files under `benchmarks/` (`run_cell.sh`
+  comments, `README.md:96`, `analyze.py:42`, `test_analyze.py:414`), and #30 holds
+  `benchmarks/` edits until the in-flight runs land.
+- Note for #55: `deploy/dev/` is mislabelled as dev-only. `registry-probe.sh` and
+  `revert-router-patch.sh` are invoked by `rate_pilot.sh`, `run_cell.sh` and
+  `scarcity_gate.sh` - they are on the reproduce path and must not be deleted with the rest
+  of the dev loop.
+
 ## 2026-08-06 (goodput promoted) - `ttft_slo_miss` is a reported secondary, not exploratory
 
 ### Decided

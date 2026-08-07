@@ -49,9 +49,9 @@ Baseline = **vLLM Production Stack + LMCache** (KV-cache layer + its router). Th
 extend LMCache's controller lookup to per-instance match info, add a `loadaware` routing
 strategy scoring cache-hit benefit vs. live instance load. Hot-prefix KV replication was
 considered as a second optimization and is **parked** - see `CONTEXT.md` ("Replication Policy")
-and `docs/decisions/second-optimization.md` (frozen). Full design: `docs/project-brief.md`. Code-level feasibility evidence with
-file/line references: `docs/feasibility-verification.md` (also the raw material for the
-§2 justification deliverable). Deployment configs for the 2×A10 OpenShift cluster: `deploy/`.
+and the archived rationale on [issue #1](https://github.com/BenEpstein/caching-in-llms/issues/1#issuecomment-5218375689).
+Design, upstream diff, and the §2 baseline argument all live in `README.md`; the measured story
+is `docs/report/report.md`. Deployment configs for the 2×A10 OpenShift cluster: `deploy/`.
 
 ## Tooling
 
@@ -77,11 +77,15 @@ to catch up on what the other collaborator did.
 
 ## Docs discipline
 
-Decisions live in **GitHub issues + CHANGELOG only**; `docs/` holds artifacts (briefs,
-deliverable drafts, findings), never rationale. `docs/decisions/` is closed - no new entries.
-Every doc carries a status header (`> status: live | frozen · date · one-line trust note`).
-`frozen` means historical record: verify against tickets/CHANGELOG before relying on it,
-never base new decisions on it.
+Decisions live in **GitHub issues + CHANGELOG only**; `docs/` holds artifacts, never rationale.
+`docs/decisions/` is gone (#59) - its last file was archived onto issue #1.
+
+The submission surface is deliberately four documents: `README.md` (front door, §2 baseline
+argument, upstream diff), `benchmarks/README.md` (§3 operator manual), `docs/report/report.md`
+(§6), and `CHANGELOG.md`. **Do not add a doc under `docs/`** - fold it into one of those or
+put it on the ticket. Every doc carries a status header
+(`> status: live | frozen · date · one-line trust note`); `frozen` means historical record:
+verify against tickets/CHANGELOG before relying on it, never base new decisions on it.
 
 ## Reference material
 
