@@ -80,10 +80,10 @@ to catch up on what the other collaborator did.
 Decisions live in **GitHub issues + CHANGELOG only**; `docs/` holds artifacts, never rationale.
 `docs/decisions/` is gone (#59) - its last file was archived onto issue #1.
 
-The submission surface is deliberately four documents: `README.md` (front door, §2 baseline
-argument, upstream diff), `benchmarks/README.md` (§3 operator manual), `docs/report/report.md`
-(§6), and `CHANGELOG.md`. **Do not add a doc under `docs/`** - fold it into one of those or
-put it on the ticket. Every doc carries a status header
+The submission surface is deliberately five documents: `README.md` (front door + the upstream
+diff), `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3 operator manual),
+`docs/report/report.md` (§6), and `CHANGELOG.md`. **Do not add a sixth** - fold it into one of
+those or put it on the ticket. Every doc carries a status header
 (`> status: live | frozen · date · one-line trust note`); `frozen` means historical record:
 verify against tickets/CHANGELOG before relying on it, never base new decisions on it.
 

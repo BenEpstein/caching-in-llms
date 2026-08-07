@@ -72,7 +72,7 @@ from the load term specifically, not from having rewritten the router.
 
 LMCache is vLLM's KV-cache backend, supplying chunked prefix storage across GPU, CPU and disk
 tiers, a controller that tracks chunk residency per instance, and cross-instance KV movement.
-Its default eviction policy is LRU, pluggable through `POLICY_MAPPING`. The Production Stack contributes the router, whose existing
+Its default eviction policy is LRU, pluggable through `POLICY_MAPPING` (see `docs/baseline-justification.md`). The Production Stack contributes the router, whose existing
 strategies are `roundrobin`, `session`, `kvaware`, and `prefixaware`.
 
 NVIDIA's Dynamo KV-router solves the same tension with a deduplicated-block load accounting
@@ -431,7 +431,7 @@ and no GPU.
 | Statistics (Wilcoxon + bootstrap) | `benchmarks/analyze.py` |
 | Figure generation | `benchmarks/plot_results.py` |
 | Per-seed derived table | `results/summary-per-seed.csv` |
-| Baseline justification (guidelines §2) | `README.md`, "Why this baseline" |
+| Baseline justification (guidelines §2) | `docs/baseline-justification.md` |
 | Upstream diff (three files) | `README.md`, "What we changed upstream" |
 
 ## Run provenance

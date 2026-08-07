@@ -8,40 +8,40 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
-## 2026-08-07 (docs consolidation) - eight docs deleted, `docs/` is the report and nothing else
+## 2026-08-07 (docs consolidation) - seven docs deleted, the submission surface is five files
 
 ### Decided
-- **The submission surface is four documents** (Ben, 2026-08-07, issue #59): `README.md`,
-  `benchmarks/README.md`, `docs/report/report.md`, `CHANGELOG.md`. Applied submap #30's
-  file-justification test: a doc survives only if the README, the report or CI cites it.
-  Eight failed and were deleted - `docs/requirements-audit.md`, `docs/project-brief.md`,
-  `docs/baseline-justification.md`, `docs/feasibility-verification.md`,
+- **The submission surface is five documents** (Ben, 2026-08-07, issue #59): `README.md`,
+  `docs/baseline-justification.md` (§2), `benchmarks/README.md` (§3),
+  `docs/report/report.md` (§6), `CHANGELOG.md`. Applied submap #30's file-justification test:
+  a doc survives only if the README, the report or CI cites it. Seven failed and were deleted -
+  `docs/requirements-audit.md`, `docs/project-brief.md`, `docs/feasibility-verification.md`,
   `docs/upstream-findings.md`, `docs/decisions/second-optimization.md`, `patches/README.md`,
-  `deploy/dev/README.md`. CLAUDE.md now carries "do not add a doc under `docs/`" so the
-  surface does not regrow.
-- **§2's one-pager is owed by the report ticket (#8), not carried as a separate file.** The
-  spec calls for a ≤1-page baseline justification; `docs/baseline-justification.md` was 641
-  words and read as ~1.3 pages. Its substance is now README § "Why this baseline"; #8
-  regenerates the standalone one-pager at report time from that text. This is a deliberate
-  handoff - noted on #8 - not a dropped deliverable.
+  `deploy/dev/README.md`. CLAUDE.md now carries "do not add a sixth" so the surface does not
+  regrow.
+- **`docs/baseline-justification.md` stays as a standalone file** (Ben, 2026-08-07). It was
+  first slated to fold into the README; keeping it means §2 has one addressable artifact a
+  grader can open, and it is now the only place the upstream code claims are pinned to
+  commits - `docs/feasibility-verification.md` held that role and is gone.
 - **`docs/decisions/` is gone, not merely closed.** The standing rule already sent decisions
   to issues + CHANGELOG; the directory's last file is archived verbatim on issue #1, which
   was the only thing citing it.
 
 ### Added
-- **README § "Why this baseline"** - the §2 argument: LMCache + Production Stack, LRU default
-  via `POLICY_MAPPING`, the first-match `registry.find_kv()` TODO, the ignored `EngineStats`
-  load signal, and the rejected alternatives. Verified against `production-stack@1e973a3` /
-  `LMCache@bf20f51`.
 - **README § "What we changed upstream"** - the three-file diff table lifted from
   `patches/README.md`, plus the in-image path mirroring. The rest of that file (β formula,
   "there is no α", apply-script invocations) already existed in README or `benchmarks/README.md`.
 
 ### Changed
-- **Report Appendix A** points at the README's two new sections instead of the deleted
-  `baseline-justification.md` / `requirements-audit.md`; the "Related work" citation of the
-  former dropped. Prose untouched - #8 still owns it.
+- **Report Appendix A** drops the `requirements-audit.md` row and gains one pointing at the
+  README's upstream-diff table. Prose untouched - #8 still owns it.
+- **`docs/baseline-justification.md`'s status header** no longer defers its evidence to the
+  deleted `feasibility-verification.md`; the pinned commits are stated on the file itself.
 - **`CONTEXT.md`, `CLAUDE.md`, `tests/test_loadaware_routing.py`** re-pointed off deleted files.
+
+### Known gap
+- **§2 is 641 words, roughly 1.3 pages against the spec's "≤1 page".** Left as-is: the trim is
+  a report-time call and belongs with #8, which regenerates the deliverable.
 
 ### Fixed
 - **Content that outlived its file has a named destination, not "it's in git history":**
