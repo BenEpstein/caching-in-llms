@@ -173,10 +173,8 @@ def fig_hit_rate(cells: List[Dict], out: str) -> None:
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.bar(labels, values, color="tab:blue", alpha=0.8)
     ax.set_ylabel("engine-local LMCache lookup hit rate (window mean)")
-    # Third caption in this file to be derived rather than asserted, for the same
-    # reason as fig1's seed count and fig7's subtitle: "saturated, does not
-    # discriminate" was measured on a 20-prefix pool and is a claim about the
-    # data, so it has to be recomputed from the data it is printed beside.
+    # Derived, not asserted: "saturated, does not discriminate" is a claim about
+    # the data and has to be recomputed from the data it is printed beside.
     spread = (max(values) - min(values)) * 100
     verdict = (f"saturated ({spread:.1f} pt spread), does not\ndiscriminate routing policy"
                if spread < 5.0 else
@@ -280,10 +278,9 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     ax2.plot(betas, p95, "s--", color="tab:red", lw=2, label="TTFT p95")
     ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
     ax2.tick_params(axis="y", labelcolor="tab:red")
-    # Derived, not asserted - see the docstring for the two captions this
-    # replaces. The sign picks the verb: gating on abs() but always saying
-    # "falls" would print "hit rate falls -3.1 pts" on a rising grid, which is
-    # the same defect one branch further down.
+    # Derived, not asserted (see the docstring). The sign picks the verb: gating
+    # on abs() but always saying "falls" would print "hit rate falls -3.1 pts"
+    # on a rising grid.
     drop_pts = (hit[0] - hit[-1]) * 100
     if abs(drop_pts) < 2.0:
         note = "hit rate is flat over this range - diverting costs no locality here"
@@ -328,8 +325,7 @@ def fig_paired(cells: List[Dict], out: str, cand: str, base: str = "kvaware") ->
         )
     cs, bs = ttft_p95s(c), ttft_p95s(b)
     # Label with the carried seed number, never with enumerate() position - see
-    # analyze.seed_stats. The two diverged, so this figure named the wrong seed
-    # on every point but the first, and a mislabelled figure ships into the report.
+    # analyze.seed_stats. A mislabelled figure ships into the report.
     seeds = [s["seed"] for s in c["seeds"]]
     if seeds != [s["seed"] for s in b["seeds"]]:
         raise SystemExit(
@@ -465,11 +461,7 @@ def fig_imbalance(cells: List[Dict], out: str) -> None:
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     labels, lows, highs = [], [], []
     for c in ordered:
-        # job=vllm-engines only. The router exports the same metric per backend
-        # under a single shared `instance`, so including it merges both engines
-        # into one synthetic series - see analyze.per_seed_imbalance.
-        # The parse lives in utilization.read_series; this was the third verbatim
-        # copy of it in the repo.
+        # job=vllm-engines only - utilization.read_series owns the filter and why.
         per_pod = utilization.read_series(
             c["dir"], "vllm_num_requests_running", utilization.ENGINE_JOB)
         means = sorted(sum(y for _, y in v) / len(v) for v in per_pod.values() if v)

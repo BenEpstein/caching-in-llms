@@ -2,11 +2,8 @@
 # Laptop side of the in-cluster measured replay (#27): emit the Job, apply it, wait it out,
 # pull the results back out of the pod log.
 #
-# Called by run_cell.sh step 8 with NS / MODEL / RATE / MAX_TOKENS / SEEDS / CELL / OUT in
-# the environment. Everything else about the cell still runs on the laptop.
-#
-# Requires BENCH_TAG - the git short SHA of the CI-built bench image, exactly like
-# LOADAWARE_TAG for the router image.
+# Called by run_cell.sh with NS / MODEL / RATE / MAX_TOKENS / SEEDS / CELL / OUT in the
+# environment. Everything else about the cell still runs on the laptop.
 set -euo pipefail
 
 : "${OUT:?}" "${CELL:?}" "${MODEL:?}" "${RATE:?}" "${MAX_TOKENS:?}" "${SEEDS:?}"
@@ -15,9 +12,8 @@ set -euo pipefail
 NS="${NS:-cache-llm}"
 BENCH_REPO="${BENCH_REPO:-quay.io/rhl193000/bench-driver}"
 BENCH_IMAGE="$BENCH_REPO:$BENCH_TAG"
-# The in-cluster service, not the edge route: same target Prometheus already scrapes, and
-# `oc get svc stack-router-service` confirms router-sport 80 -> 8000. No TLS, no route,
-# no WAN - which is the entire point of this file.
+# The in-cluster Service, not the edge route: no TLS, no route, no WAN - which is the
+# entire point of this file (README, "The measured replay runs in-cluster").
 TARGET_URL="${TARGET_URL:-http://stack-router-service.$NS.svc.cluster.local:80}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -29,20 +25,13 @@ echo "==> $JOB: image $BENCH_IMAGE, target $TARGET_URL, seeds [$SEEDS]"
 
 # ---- the Job ----------------------------------------------------------------
 #
-# NO podAntiAffinity, deliberately. gapu-2 has exactly two schedulable nodes (all three
-# control planes carry NoSchedule) and an engine runs on EACH of them, so an anti-affinity
-# against the engines can never be satisfied - required would leave the pod Pending forever
-# and preferred is theatre. Worse, worker0 sits at 93% CPU / 99% memory requested, so the
-# driver lands on worker1 essentially deterministically, next to the router and the second
-# engine. The control for that is not a scheduling rule, it is the engine-side TTFT
-# cross-check in the definition of done: if in-cluster engine-side TTFT matches the existing
-# WAN cells, the driver pod is not perturbing the engines. The node is recorded either way.
-#
-# No CPU limit, also deliberately: CFS throttling on the driver would inflate client-side
-# TTFT exactly the way the WAN did, which is the artifact this whole change removes. The
-# 1-CPU request maps to cpu.shares, so under contention the driver gets a proportional share
-# rather than starving the router. (Verified 2026-08-05: no LimitRange in the namespace, so
-# nothing injects a default limit behind our back.)
+# Deliberately NO podAntiAffinity and deliberately NO CPU limit - do not add either. Both
+# schedulable nodes run an engine, so an anti-affinity against the engines can never be
+# satisfied; and CFS throttling on the driver would inflate client-side TTFT exactly the way
+# the WAN did, which is the artifact this whole change removes. The 1-CPU request maps to
+# cpu.shares, so under contention the driver gets a proportional share rather than starving
+# the router. The control for co-location is the engine-side TTFT cross-check, not a
+# scheduling rule (README, "The measured replay runs in-cluster"); the node is recorded.
 oc apply -n "$NS" -f - <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -104,20 +93,18 @@ spec:
 YAML
 
 # ---- progress ---------------------------------------------------------------
-# Wait for the pod to EXIST and to have left Pending before following it. Two failure modes
-# were hit on 2026-08-05, both silent because this tail is deliberately non-fatal:
+# Wait for the pod to EXIST and to have left Pending before following it. Both alternatives
+# fail silently, because this tail is non-fatal by design:
 #
 #   1. `oc logs -f job/<name>` straight after `oc apply` - the Job exists but its pod does
 #      not yet, so kubectl's selector matches nothing and it exits non-zero.
 #   2. `oc logs -f pod/<name>` while that pod is still ContainerCreating, which happens
 #      whenever the node has not cached the tag - "BadRequest: container is waiting to
-#      start". Fixing (1) walked straight into (2): the disconnect test only passed because
-#      the image happened to be cached from the previous cell.
+#      start".
 #
 # `--pod-running-timeout` fixes neither - it governs waiting when a SELECTOR resolves pods,
-# not a pod named directly, so it was doing nothing here. Poll the phase instead.
-# Succeeded/Failed are fine to follow: `oc logs -f` on a finished pod prints its whole log
-# and exits, which is what a short cell should show anyway.
+# not a pod named directly. Poll the phase instead. Succeeded/Failed are fine to follow:
+# `oc logs -f` on a finished pod prints its whole log and exits.
 POD="" PHASE=""
 for _ in $(seq 300); do   # up to 10 min - covers a cold image pull on a busy node
   POD=$(oc get pods -n "$NS" -l "job-name=$JOB" \
@@ -141,9 +128,8 @@ else
 fi
 
 # ---- wait -------------------------------------------------------------------
-# The tail above may have exited early (VPN, pod restart, anything), so completion is waited
-# on properly. Each `oc wait` is capped at 60 s so a dropped connection costs one iteration
-# instead of the cell.
+# The tail above may have exited early (VPN, pod restart), so completion is waited on here.
+# Each `oc wait` is capped at 60 s so a dropped connection costs one iteration, not the cell.
 while true; do
   if oc wait --for=condition=complete "job/$JOB" -n "$NS" --timeout=60s >/dev/null 2>&1; then
     break

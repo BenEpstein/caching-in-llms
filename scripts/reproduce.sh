@@ -12,11 +12,9 @@
 #   ./scripts/reproduce.sh          # verify: regenerate and diff, non-zero on any drift
 #   ./scripts/reproduce.sh --update # accept current output as the new expected baseline
 #
-# Figures are deliberately NOT byte-compared. Matplotlib output moves with font
-# availability, version and embedded metadata, so a PNG diff would go red on a fresh runner
-# for reasons that have nothing to do with our data - and a check that cries wolf gets muted,
-# which is worse than no check. `plot_results.py --dump-data` writes the series behind every
-# figure as JSON and that is what gets diffed: the numbers, not the pixels.
+# Figures are deliberately NOT byte-compared: `plot_results.py --dump-data` writes the series
+# behind every figure as JSON and that is what gets diffed - the numbers, not the pixels.
+# Rationale at `plot_results.dump_data`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,8 +26,8 @@ trap 'rm -rf "$WORK"' EXIT
 UPDATE=0
 [ "${1:-}" = "--update" ] && UPDATE=1
 
-# Accumulate failures rather than exiting on the first: a check script that stops at problem
-# one hides problems two through five, and the person running it then fixes in serial.
+# Accumulate failures rather than exiting on the first: stopping at problem one hides
+# problems two through five, and they then get fixed in serial.
 FAILURES=()
 fail() { echo "  FAIL $*" >&2; FAILURES+=("$*"); }
 die()  { echo "FATAL: $*" >&2; exit 2; }
@@ -40,8 +38,7 @@ ok()   { echo "  ok   $*"; }
 #   verify_against  - the target is COMMITTED DATA (results/summary-per-seed.csv). Never
 #                     written to. --update must not touch it: the generated file can be a
 #                     strict subset when a run directory is missing, so "updating" it would
-#                     silently delete real rows. That is not a hypothetical - the first run
-#                     of this script found 5 such runs.
+#                     silently delete real rows.
 #   check           - the target is a derived BASELINE under results/expected/, which exists
 #                     only to be compared against and is safe to refresh.
 verify_against() {  # verify_against <generated> <committed-data> <label>
@@ -70,9 +67,9 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 }
 
 echo "==> 1/5 every run referenced by the summary has committed raw data"
-# This is the check that catches the worst failure mode: a reported number whose evidence is
-# not in the repository. It cannot be caught by regenerating, because a missing directory
-# simply contributes no rows - the output shrinks and still looks well-formed.
+# Catches the worst failure mode: a reported number whose evidence is not in the repository.
+# Regenerating cannot catch it - a missing directory contributes no rows, so the output
+# shrinks and still looks well-formed.
 missing=0
 while read -r run; do
   [ -d "$ROOT/results/$run" ] || { echo "  MISSING results/$run" >&2; missing=$((missing+1)); }
@@ -100,8 +97,7 @@ else
 fi
 
 echo "==> 3/5 summary-per-seed.csv regenerates"
-# No `mapfile`: macOS ships bash 3.2, and this repo has already been bitten once by a
-# bash-4 builtin (`declare -A` in apply-router-patch.sh). Portable read loop instead.
+# No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
 RUNS=()
 while read -r run; do
   [ -d "$ROOT/results/$run" ] && RUNS+=("$ROOT/results/$run")
@@ -111,11 +107,9 @@ verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary
 
 echo "==> 4/5 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
-# and §6 report. These defaults used to name the 2026-08-05 early-hours sweep while
-# docs/figures had already been regenerated from the confirmatory one (a37cae5), so this
-# script regenerated a superseded experiment and still passed: it diffed old-against-old and
-# never touched the figures actually committed. A check that verifies the wrong run reads
-# exactly like a check that passes.
+# and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
+# check that verifies the wrong run reads exactly like a check that passes.
+# See benchmarks/README.md, "Reproducing the reported numbers".
 : "${HEADLINE:=results/20260805-232541-loadaware-b0.5}"
 : "${BASELINE:=results/20260805-230541-kvaware}"
 : "${ABLATION:=results/20260806-002645-loadaware-b0}"
@@ -130,10 +124,10 @@ echo "==> 4/5 the reported statistics regenerate"
   python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric imbalance | grep -E "Wilcoxon|median relative"
   echo "# ablation: $(basename "$ABLATION") vs $(basename "$BASELINE")"
   python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" | grep -E "Wilcoxon|median relative"
-  # The "SLO <n> ms" line is in the grep alternation on purpose. analyze.py prints the
-  # objective beside the p-value precisely so it cannot be separated from the number; a
-  # grep that kept only the Wilcoxon line would strip it back off and leave two bare
-  # verdicts in a committed baseline file with no record of which objective produced them.
+  # The "SLO <n> ms" line is in the grep alternation on purpose: analyze.py prints the
+  # objective beside the p-value so the two cannot be separated, and a grep that kept only
+  # the Wilcoxon line would leave two bare verdicts in a committed baseline file with no
+  # record of which objective produced them.
   echo "# goodput: --metric ttft_slo_miss (secondary; objective swept in fig12)"
   python3 "$BENCH/analyze.py" compare "$ROOT/$HEADLINE" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "SLO [0-9]+ ms|Wilcoxon|median relative"
   python3 "$BENCH/analyze.py" compare "$ROOT/$ABLATION" "$ROOT/$BASELINE" --metric ttft_slo_miss --slo "$SLO" | grep -E "SLO [0-9]+ ms|Wilcoxon|median relative"

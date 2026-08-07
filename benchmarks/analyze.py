@@ -58,12 +58,11 @@ from typing import Dict, List, Sequence, Tuple
 
 # NOTE: `utilization` is imported INSIDE per_seed_imbalance, not here, and must
 # stay that way. load_driver.py does `from analyze import percentile` and runs
-# inside the bench image, whose Dockerfile.bench COPY line ships six files and
-# does NOT include utilization.py. A module-level import here therefore breaks
-# `import load_driver` in the image - which is the measurement path, so it breaks
-# every future sweep. It did: it shipped on main and the bench-image workflow
-# went red. test_analyze.py::test_analyze_module_level_imports_survive_the_bench_image
-# guards it now, because that workflow triggers on push and cannot run on a PR.
+# inside the bench image, whose Dockerfile.bench COPY line does NOT include
+# utilization.py. A module-level import here therefore breaks `import
+# load_driver` in the image - which is the measurement path, so it breaks every
+# future sweep. Guarded by
+# test_analyze.py::test_analyze_module_level_imports_survive_the_bench_image.
 
 # Validity rule 1, AMENDED 2026-08-04 (pre-registered on #3 before the run).
 #
@@ -82,10 +81,9 @@ from typing import Dict, List, Sequence, Tuple
 # So: a flat floor is reported, not fatal. What voids a comparison is errors
 # DIFFERING between the arms, which is the thing that could actually distort it.
 # The pre-registered threshold (#31 rev 2): 0.025, Bonferroni over the two
-# co-primaries (TTFT p95 and imbalance). The verdict line used to hardcode 0.05
-# while this file's own docstring said 0.025, so a p between the two printed
-# "significant" for a result the pre-registration calls null. No result to date
-# fell in that gap; the constant exists so none ever can.
+# co-primaries (TTFT p95 and imbalance). It is a constant so the verdict line
+# and this file's docstring can never disagree: a p between 0.025 and 0.05 is
+# null under the pre-registration and must never print "significant".
 ALPHA = 0.025
 
 MAX_ERROR_RATE = 0.01       # reporting threshold - flags a seed, does not void
@@ -96,12 +94,11 @@ ERROR_BIAS_ABS = 0.01       # ...or by more than 1 percentage point absolute
 # The default TTFT service-level objective behind `ttft_slo_miss`, in SECONDS.
 #
 # A DEFAULT, NOT A FIXED THRESHOLD. This is the tunable parameter of the metric
-# (§4) and it is overridable per invocation with `compare --slo`. The reported
-# result does not rest on it: fig12 sweeps 50-400 ms and the arms separate across
-# that whole range, so no single value is load-bearing. 0.150 is the midpoint of
-# the separation, not a service requirement - the effect on the 2026-08-06 data
-# is 7.4 points at 150 ms and 8.2 at 124 ms. A report quoting one number must
-# quote the sweep beside it.
+# (§4), overridable per invocation with `compare --slo`. The reported result
+# does not rest on it: fig12 sweeps 50-400 ms and the arms separate across that
+# whole range, so no single value is load-bearing. 0.150 is the midpoint of the
+# separation, not a service requirement. A report quoting one objective must
+# quote the sweep beside it - see benchmarks/README.md ("Goodput").
 #
 # Deliberately absent from export_summary.py's committed per-seed table: that CSV
 # is the evidence a reader checks the report against, and baking one objective
@@ -166,11 +163,9 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
     ttft = _ok_ttfts(rows)
     e2e = [float(r["e2e_s"]) for r in ok if r["e2e_s"]]
     # Pooled over every inter-token gap in the seed, not over per-request
-    # summaries: "ITL p99" means the 99th percentile of gaps. Absent on CSVs
-    # written before the driver recorded it, hence the .get.
-    #
-    # /1000 converts ms -> SECONDS, so every itl_* field below is seconds while
-    # the source column is `itls_ms`. See the UNITS note in the module docstring.
+    # summaries: "ITL p99" means the 99th percentile of gaps. The .get covers
+    # CSVs written before the driver recorded the column.
+    # /1000 converts ms -> SECONDS: see the UNITS note in the module docstring.
     itl = [
         float(x) / 1000
         for r in ok
@@ -183,12 +178,7 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
     comp_tokens = sum(int(r["completion_tokens"] or 0) for r in ok)
     s = {
         "file": os.path.basename(csv_path),
-        # The seed number is carried, never inferred from list position. It used
-        # to be: read_run sorted the glob LEXICOGRAPHICALLY (seed10 before seed2)
-        # while callers labelled rows with enumerate(), so every printed and
-        # plotted "seed N" above N=1 named the wrong seed. Pairing was unaffected
-        # - both arms were mis-ordered identically - so the statistics were right
-        # and only the labels lied, which is the hard kind of bug to notice.
+        # The seed number is carried, never inferred from list position.
         "seed": seed_id(csv_path),
         "n": len(rows),
         "ok": len(ok),
@@ -197,14 +187,11 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
         "wall_s": wall,
         "throughput_req_s": len(ok) / wall if wall and wall > 0 else float("nan"),
         "throughput_tok_s": comp_tokens / wall if wall and wall > 0 else float("nan"),
-        # The MISS rate, not goodput, because every paired test in this module is
-        # one-sided H1 "candidate is LOWER" and every effect size is a relative
-        # REDUCTION. Goodput is higher-is-better, so testing it directly would
-        # need an inverted test and an inverted CI - two new code paths carrying
-        # the headline number. 1 - goodput needs neither: `compare --metric
-        # ttft_slo_miss` runs the same committed Wilcoxon as ttft_p95 and reports
-        # "median relative reduction in missed requests". Figures plot the
-        # complement, which reads better on an axis.
+        # The MISS rate, not goodput: every paired test here is one-sided H1
+        # "candidate is LOWER" and every effect size is a relative REDUCTION.
+        # Goodput is higher-is-better, so testing it directly would need an
+        # inverted test and an inverted CI - two new code paths carrying the
+        # headline number. 1 - goodput needs neither. Figures plot the complement.
         "ttft_slo_miss": 1.0 - goodput(ttft, len(rows), slo),
         "ttft_slo_s": slo,
     }
@@ -212,7 +199,7 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
         s[f"{name}_mean"] = sum(xs) / len(xs) if xs else float("nan")
         # p90 as well as p95: the policy shifts the whole TTFT body, while p95
         # over 500 samples is dominated by bursty engine stalls that have
-        # nothing to do with routing (see docs/, the 2026-08-03 post-mortem).
+        # nothing to do with routing.
         for p in (50, 90, 95, 99):
             s[f"{name}_p{p}"] = percentile(xs, p)
     return s
@@ -256,19 +243,13 @@ def read_run(run_dir: str, slo: float = TTFT_SLO_S) -> List[Dict]:
 def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     """busiest/idlest engine mean in-flight, per seed window. {} if no dump.
 
-    Lives here, not in export_summary.py where it was written, because it is a
-    CO-PRIMARY: `compare --metric imbalance` needs it. While it sat in the
-    exporter there was no code path anywhere that ran the pre-registered test on
-    it - the metric was computable and untestable at the same time, and
-    run_sweep.sh told the operator to test it with a command that could only
-    raise KeyError.
+    Lives here, not in export_summary.py, because it is a CO-PRIMARY: `compare
+    --metric imbalance` needs it.
 
     The parse lives in utilization.read_series, which also drops the router's
     re-export of this metric: the router publishes one series per backend under a
     shared `instance`, which merges both engines into a synthetic third series
-    and corrupts the max/min. This function used to carry its own copy of that
-    filter, making it the third in the repo, and the copy lacked read_series's
-    worker_id disambiguation.
+    and corrupts the max/min.
     """
     # Deliberately function-level: see the NOTE beside this module's imports.
     # utilization.py is not in the bench image, and analyze.py is.
@@ -281,9 +262,8 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     out = {}
     for p in glob.glob(os.path.join(run_dir, "driver-seed*.csv")):
         # seed_id, not an inlined digit-scrape: this dict is one half of a PAIRED
-        # test whose other half is read_run, so both halves number seeds by one
-        # shared function. It also skips a name with no digits rather than
-        # raising on int("").
+        # test whose other half is read_run, so both halves must number seeds by
+        # one shared function.
         seed = seed_id(p)
         if seed is None:
             continue
@@ -357,7 +337,6 @@ def wilcoxon_exact_one_sided(diffs: Sequence[float]) -> Dict:
     n = len(d)
     if n == 0:
         return {"n": 0, "w_plus": float("nan"), "p": 1.0}
-    # midranks over |d|
     order = sorted(range(n), key=lambda i: abs(d[i]))
     ranks = [0.0] * n
     i = 0
@@ -497,9 +476,8 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO
         b = [base_imb[s] for s in cand_seeds]
     else:
         # Named up front rather than through a KeyError from the comprehension
-        # below. `--metric imbalance` raised exactly that for the whole life of
-        # the co-primary, and a traceback deep in a list comprehension reads as a
-        # broken run rather than as a metric this command cannot test.
+        # below: a traceback deep in a comprehension reads as a broken run
+        # rather than as a metric this command cannot test.
         if metric not in cand[0]:
             raise SystemExit(
                 f"unknown metric {metric!r} - available: "
@@ -512,7 +490,7 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO
     # effect size below divides by it. ttft_p95 and imbalance are never zero, so
     # this could not fire until ttft_slo_miss arrived: an objective loose enough
     # that the baseline misses nothing on some seed produces a ZeroDivisionError
-    # from inside the bootstrap, ~80 lines from the cause.
+    # from inside the bootstrap.
     #
     # Refusing is the right answer rather than dropping those pairs. A seed the
     # baseline already passes perfectly cannot show an improvement, so an SLO

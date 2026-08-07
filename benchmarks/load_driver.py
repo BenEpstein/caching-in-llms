@@ -3,9 +3,7 @@
 Measures per request: TTFT (streaming), end-to-end latency, token counts.
 Arrival model: open loop, Poisson at --rate req/s. Open loop is tail-latency honest -
 queueing delay shows up in the latency it causes instead of throttling the send rate,
-which is the whole point when the metric under test is TTFT p95. A closed-loop mode
-existed and was never used by any caller; it was removed in #30 rather than left as
-an untested second path through the driver.
+which is the whole point when the metric under test is TTFT p95.
 
 Output: one CSV row per request. Analysis/plots live elsewhere; this only records.
 

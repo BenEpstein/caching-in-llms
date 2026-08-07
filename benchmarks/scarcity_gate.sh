@@ -20,8 +20,7 @@
 # Deploys ONE arm (roundrobin - routing is irrelevant here, we are measuring the
 # engines), restarts the engines cold, verifies the realised KV pool from the
 # engine's own startup log (validity rule 5), then makes two warm-up passes over
-# the prefix pool (64 at the time this was written; 128 today) and reads vLLM's OWN
-# `Prefix cache hit rate`.
+# the prefix pool and reads vLLM's OWN prefix-cache hit rate.
 #
 # Why vLLM's metric and not LMCache's: the LMCache figure is each engine's hit
 # rate against its own CPU tier, which saturated at ~0.95 on every arm in the
@@ -71,7 +70,6 @@ echo "==> cold, stale-free start"
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   EXPECT_REGISTRATIONS=0 "$BENCH_DIR/cold_start.sh"
 
-# ---- validity rule 5: realised KV pool, from the engine's own log -----------
 echo "==> realised KV pool (validity rule 5)"
 POOL_OK=0
 for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do

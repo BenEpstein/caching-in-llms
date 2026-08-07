@@ -259,8 +259,8 @@ def coverage(run_dir: str) -> Dict[str, float]:
         # An ABSENT dump file means the metric was not in that run's scrape list
         # (the lmcache gauges post-date most cells on disk), which is not this
         # cell failing. A file that EXISTS but yields nothing is a collector that
-        # ran and came back empty - scored 0.0, never omitted, because a missing
-        # key in run.json is indistinguishable from a healthy cell.
+        # ran and came back empty - scored 0.0, never omitted (module docstring,
+        # "total loss").
         if not os.path.exists(os.path.join(run_dir, "prom", f"{metric}.json")):
             continue
         series = read_series(run_dir, metric, job)
@@ -380,9 +380,6 @@ def cmd_report(run_dirs: Sequence[str]) -> int:
                   f"{MIN_COVERAGE:.0%}: " + ", ".join(f"{k} {v:.0%}" for k, v in sorted(low.items())))
         if not u["gpu"]:
             print("  note: no dcgm.csv - GPU utilization (SM%, power) unavailable for this cell")
-        # The limitation is printed, not merely held in the dict: §3 asks for
-        # CPU utilization and a reader running this needs to see which part of
-        # it this deployment cannot supply.
         print("  not available:          " + ", ".join(u["unavailable"])
               + " (vLLM registers no process collector)")
     return 0

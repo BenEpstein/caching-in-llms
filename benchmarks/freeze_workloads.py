@@ -35,24 +35,19 @@ from workload_gen import (NovelWorkloadConfig, WorkloadConfig, dump_jsonl,
 
 # Amended methodology (#3, 2026-08-03, revised after the scarcity gate).
 #
-# The first amendment (64 prefixes, s=1.2) was FALSIFIED by the gate: measured
-# prefix-cache hit rate under load was 0.889 against the pilot's ~0.95. Pool
-# size alone cannot fix that - at s=1.2 the distribution is so concentrated that
-# the top ~20 prefixes stay resident however long the tail is (simulated 0.69
-# even at 256 prefixes). The binding parameter is the EXPONENT.
-#
-# 128 prefixes at s=0.9 predicts ~0.60 under normal load and ~0.52 under
-# kvaware's concentration: enough reuse that routing to the holder is worth
-# something, little enough that placement is a real decision. It also puts the
-# LMCache CPU tier (114k tok = 56 prefixes) and HBM (~50 prefixes) at comparable
-# capacity, so the registry tracks HBM reality instead of drifting from it.
+# The EXPONENT is the binding parameter, not the pool size: at s=1.2 the top
+# ~20 prefixes stay resident however long the tail is (simulated 0.69 even at
+# 256 prefixes). 128 prefixes at s=0.9 predicts ~0.60 under normal load and
+# ~0.52 under kvaware's concentration: enough reuse that routing to the holder
+# is worth something, little enough that placement is a real decision. It also
+# puts the LMCache CPU tier (114k tok = 56 prefixes) and HBM (~50 prefixes) at
+# comparable capacity, so the registry tracks HBM reality instead of drifting.
 #
 # 20 seeds (raised from 10, 2026-08-04 pre-registration). n=10 returned
 # p=0.0527 on the headline: underpowered, and one reversal is expensive at that
 # size. A seed replay costs ~50 s against ~8 min of fixed setup per CELL, so
 # power here is close to free - cells are the only thing worth cutting to
-# shorten a run (see run_sweep.sh). Seeds 1-10 regenerate bit-identically; this
-# is purely additive, which the manifest diff shows.
+# shorten a run (see run_sweep.sh).
 #
 # The beta-sweep cells replay a 3-seed subset of the SAME files, so there is
 # still exactly one frozen dataset.

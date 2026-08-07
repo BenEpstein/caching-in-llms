@@ -6,11 +6,6 @@ cluster. This writes the derived per-seed table - a few KB - which is committed
 alongside each cell's `run.json`. Between them a reader can reproduce every
 figure, every percentile, and both co-primary tests without the raw data.
 
-Per-seed load imbalance USED to be computed here. It moved to analyze.py, which
-is where the paired test that consumes it lives: as long as it sat in the
-exporter, `compare --metric imbalance` raised KeyError and the co-primary had no
-code path at all.
-
 Latency columns (`ttft_*`, `e2e_*`, `itl_*`) are all in SECONDS - including the
 itl ones, whose source column is named `itls_ms`. See the UNITS note in
 analyze.py.
@@ -33,27 +28,12 @@ FIELDS = [
     # cell name appears in the 7.5 req/s pilot and the 10.5 req/s amended sweep,
     # and grouping by it silently merges two different experiments.
     # "alpha" is retained for the runs recorded before it was removed from the
-    # policy (it was 1.0 in every one of them, and only the ratio to beta was
-    # ever a free parameter). Cells run since write it empty.
+    # policy (it was 1.0 in every one of them). Cells run since write it empty.
     #
-    # *** BETA MEANS TWO DIFFERENT THINGS IN THIS FILE - CHECK git_commit ***
-    #
-    # `loadaware-b0.5` and `loadaware-b1.0` each appear under BOTH policies:
-    #
-    #   git_commit BEFORE 7e2dffb : beta * ABSOLUTE in-flight count
-    #   git_commit 7e2dffb ONWARD : beta * (load - fleet_mean) / max(1, mean)
-    #
-    # These are not comparable. The same label is a different policy, and the
-    # numeric values do not convert by a constant - the relative form
-    # self-adjusts per request while the absolute one does not (the conversion
-    # beta_rel = beta_abs * mean_load holds only at the mean, and empirically
-    # mispredicted by ~2x, see CHANGELOG 2026-08-05). Never pool or compare
-    # across that boundary without saying which side each cell is on.
-    #
-    # Absolute-era beta values seen: 0.034, 0.068, 0.1, 0.5, 1.0
-    # Relative-era beta values seen: 0, 0.5, 1.0, 2.0
-    # beta=0 is the ONE value that means the same thing in both (the load term
-    # vanishes), which is why the ablation cells are poolable and the rest are not.
+    # *** `beta` MEANS TWO DIFFERENT THINGS IN THIS TABLE - CHECK git_commit ***
+    # Absolute vs fleet-relative load term, not comparable and not convertible;
+    # only beta=0 means the same thing on both sides. Which cells fall where,
+    # and why: benchmarks/README.md, "Two eras of `beta`".
     "run", "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",

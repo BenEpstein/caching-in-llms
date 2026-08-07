@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Per-cell choreography for the benchmark sweep (methodology, issue #3):
-#
-#   helm upgrade → service-port patch → ENGINE restart (#13: cold, identical
-#   initial state) → wait for worker registration → registry probe (#13 gate)
-#   → warm-up passes gated on non-empty layout_info → replay the 6 frozen
-#   seeds back-to-back at the fixed rate → Prometheus dump + DCGM CSV +
-#   run.json manifest → validity check.
+# Per-cell choreography for the benchmark sweep (methodology, issue #3).
+# The step order and why each gate exists: benchmarks/README.md, "Per-cell
+# choreography" - the numbered sections below follow it.
 #
 # Usage:
 #   ./run_cell.sh <cell> <rate> [results-root]
@@ -20,26 +16,19 @@
 #   NS, RELEASE, CHART, CHART_VERSION, BASE_URL, MODEL, ROUTER_DEPLOY,
 #   ENGINE_DEPLOY, LOADAWARE_TAG (REQUIRED for loadaware cells: git short SHA
 #   of the CI image)
-#
-# Verified live on gapu-2 2026-08-01: chart 0.1.11 ignores `routerSpec.env`
-# (hardcoded env list), so α/β travel via `oc set env` after the upgrade; the
-# router exposes NO registered-workers gauge in this build, so registration is
-# gated on the router's "Registered instance-worker" log lines instead.
 set -euo pipefail
 
 CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RATE="${2:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RESULTS_ROOT="${3:-results}"
 
-# Both arms need it now: the measured replay runs in-cluster from the bench image (#27).
 # Checked here rather than in bench_job.sh so the cell fails in the first second instead of
 # after ~8 minutes of helm upgrade, cold start and warm-up.
 : "${BENCH_TAG:?every cell needs BENCH_TAG=<git short SHA of the CI-built bench image>}"
 
 # Which frozen seeds this cell replays. EVERY cell runs the full 20 (run_sweep.sh SEEDS_FULL),
-# including the curve arms - n=6 cannot survive a single reversal (the pilot proved it) and
-# n=10 then returned p=0.0527. The earlier 3-seed subset for beta-sweep cells is retired;
-# all cells replay the same frozen files, so there is still exactly one dataset.
+# curve arms included: n=6 cannot survive a single reversal and n=10 returned p=0.0527.
+# All cells replay the same frozen files, so there is exactly one dataset.
 SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,10 +52,7 @@ PROM_PORT="${PROM_PORT:-19090}"
 DCGM_PORT="${DCGM_PORT:-19400}"
 
 # OSL - output sequence length, pinned per request with `ignore_eos` so it is
-# exact rather than a cap. It was never passed before, so every cell up to
-# 2026-08-04 silently used the driver default of 64 AND recorded no trace of it
-# in run.json - a first-order experimental parameter that was invisible in the
-# provenance record. It is a runtime flag, not part of the frozen workload, so
+# exact rather than a cap. A runtime flag, not part of the frozen workload:
 # changing it costs no dataset regeneration and the manifest stays valid.
 #
 # OSL is the main lever on per-request work: it sets decode time, hence in-flight
@@ -112,10 +98,9 @@ cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done;
 trap cleanup EXIT
 
 # ---- 0. frozen workloads verified ------------------------------------------
-# WORKLOAD_PROFILE picks the dataset this cell replays. Default is the Zipfian shared-prefix
-# dataset - the placement experiment. `novel` is the no-reuse profile that measures what the
-# cache COSTS when it can never hit (guidelines §3, ticket #25). Two profiles, two manifests:
-# adding the second cannot perturb the first's checksums.
+# `zipfian` is the shared-prefix placement experiment; `novel` is the no-reuse profile that
+# measures what the cache COSTS when it can never hit (guidelines §3, ticket #25).
+# Two profiles, two manifests: adding the second cannot perturb the first's checksums.
 WORKLOAD_PROFILE="${WORKLOAD_PROFILE:-zipfian}"
 case "$WORKLOAD_PROFILE" in
   zipfian|novel) ;;
@@ -134,19 +119,14 @@ if oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
   NS="$NS" "$REPO_ROOT/deploy/dev/revert-router-patch.sh"
 fi
 
-# α/β travel by env var; chart 0.1.11 has no routerSpec.env passthrough. Set
-# them explicitly on loadaware cells and REMOVE them on baselines - the
-# three-way merge preserves out-of-band env across upgrades, so a stale β
-# would otherwise leak between cells.
-# HF_HOME rides along on BOTH arms (#21). The router image has no writable HF
-# cache (arbitrary uid under the restricted SCC, HF_HOME unset, no /.cache), so
-# `AutoTokenizer.from_pretrained` fails on every request - and because the
-# except path never assigns self.tokenizer, it is retried per request at
-# ~245 ms a time, reaching huggingface.co before it fails. That alone is ~0.25 s
-# of event-loop blocking per request, i.e. a ~4 req/s ceiling and the liveness
-# SIGKILL. /tmp is the only writable path: chart 0.1.11 gives the router neither
-# a `routerSpec.env` passthrough nor any volume hook, so this cannot live in
-# values. Set on baselines too - the fix must be arm-neutral or it flatters us.
+# β travels by env var; chart 0.1.11 has no routerSpec.env passthrough. Set it
+# explicitly on loadaware cells and REMOVE it on baselines - the three-way merge
+# preserves out-of-band env across upgrades, so a stale β would otherwise leak
+# between cells.
+# HF_HOME=/tmp/hf must be set on BOTH arms (#21): without it the router blocks
+# its event loop ~0.25 s per request and the comparison is void if only one arm
+# gets it. Mechanism and why it cannot live in values: benchmarks/README.md,
+# "Cluster gotchas".
 if [ "$ARM" = "loadaware" ]; then
   oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
     HF_HOME=/tmp/hf "LOADAWARE_BETA=$BETA"
@@ -163,7 +143,7 @@ if ! oc get svc "$RELEASE-router-service" -n "$NS" -o jsonpath='{.spec.ports[*].
     {"op":"add","path":"/spec/ports/-","value":{"name":"lmcache-heartbeat","port":9002,"targetPort":9002,"protocol":"TCP"}}]'
 fi
 
-# ---- 3. cold start: restart engines so every cell begins with empty caches --
+# ---- 3. router settled, image asserted (the cold start itself is step 4) ----
 oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 
 # validity rule 2: wrong image = discard, never correct. Assert the deployed
@@ -180,13 +160,12 @@ else
   esac
 fi
 
-# Drain-then-restart, NOT `rollout restart`: the old engine pods would otherwise
-# still be alive while the new router comes up, register, and leave dead
-# instance_ids in kv_pool - which the stock kvaware router turns into
-# KeyError -> HTTP 500 on any lookup that returns one. See cold_start.sh.
 # ---- 4. cold, stale-free start (drain -> router -> engines -> registration) --
-# cold_start.sh owns the registration wait and the stale-id assertion; on
-# roundrobin there is no LMCache controller, so neither applies.
+# Drain-then-restart, NOT `rollout restart` - a still-live old engine registers
+# instance_ids that outlive it and the stock kvaware router 500s on them.
+# cold_start.sh owns that ordering, the registration wait and the stale-id
+# assertion (and its header owns the why); on roundrobin there is no LMCache
+# controller, so none of it applies.
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   EXPECT_REGISTRATIONS="$USES_LOOKUP" "$BENCH_DIR/cold_start.sh"
 
@@ -213,21 +192,18 @@ fi
 
 # ---- 7. collectors ----------------------------------------------------------
 # NOTE: no Prometheus port-forward here. prom_dump uses query_range over a past
-# window, so it only needs Prometheus reachable at DUMP time - holding a
-# forward open across the whole cell just gives it ~10 min to die. It did
-# (2026-08-03: `Connection refused` after the b0 seeds, which under `set -e`
-# killed the cell AND the remaining three cells of the sweep). Established in
-# step 9 instead, with retries. DCGM genuinely needs a live forward because it
-# polls continuously.
+# window, so it only needs Prometheus reachable at DUMP time; a forward held
+# open across the whole cell has ~10 min to die, and under `set -e` it takes the
+# cell and the rest of the sweep with it. Established in step 9 instead, with
+# retries. DCGM genuinely needs a live forward because it polls continuously.
 # DCGM is a DaemonSet: forward each pod on its own port, or one node's GPU is lost
 #
-# Each forward runs under a supervisor that restarts it (#35). A bare
+# Each forward runs under a supervisor that restarts it (#35): a bare
 # `oc port-forward` dies for good the moment the VPN drops, and dcgm_poll keeps
-# running against a dead local port - which is how the #27 pilot lost the last
-# 171 s of a 712 s cell as a clean tail truncation with nobody noticing. The
+# polling a dead local port, truncating the tail with nobody noticing. The
 # supervisor cannot make this WAN-immune (nothing laptop-side can); it only
-# recovers once the link returns, which is the whole ask. The residual risk is
-# covered by the coverage gate in step 11.
+# recovers once the link returns. The residual risk is covered by the coverage
+# gate in step 11.
 DCGM_URLS=()
 port="$DCGM_PORT"
 for pod in $(oc get pods -n nvidia-gpu-operator -l app=nvidia-dcgm-exporter \
@@ -252,17 +228,12 @@ python3 "$BENCH_DIR/collectors/dcgm_poll.py" \
 PIDS+=($!)
 
 # ---- 8. measured replay: the cell's frozen seeds back-to-back ---------------
-# The replay runs INSIDE the cluster (#27). It used to run here, on a laptop reaching gapu-2
-# over a WAN: RTT avg 44.4 ms, 45-59% of every recorded TTFT never touched the model, and the
-# non-engine component swung 121 -> 195 ms between two cells an hour apart - a per-cell
-# systematic offset larger than the 10-60 ms effect under study, so more seeds could not fix
-# it. That is the complete explanation for TTFT being a null in every sweep while load
-# imbalance (server-side, from Prometheus, and therefore immune) reached p<0.0001.
-#
-# The metric is unchanged. Only the instrument moved: a Job runs the SAME load_driver.py
-# against the router's ClusterIP - no route, no TLS, no WAN. Everything else in this script
-# still runs on the laptop and is untouched. Secondary benefit: a Job keeps running when the
-# laptop disconnects, which has already destroyed two sweeps.
+# The replay runs INSIDE the cluster (#27): a Job runs the SAME load_driver.py against the
+# router's ClusterIP - no route, no TLS, no WAN - so the metric is unchanged and only the
+# instrument moved. Everything else in this script still runs on the laptop. Why the WAN
+# instrument was unusable, and what that means for pre-#27 results:
+# benchmarks/README.md, "The measured replay runs in-cluster" and "Which latency source is
+# trustworthy".
 NS="$NS" MODEL="$MODEL" RATE="$RATE" MAX_TOKENS="$MAX_TOKENS" SEEDS="$SEEDS" \
   CELL="$CELL" OUT="$OUT" TARGET_URL="$TARGET_URL" "$BENCH_DIR/bench_job.sh"
 
@@ -340,8 +311,8 @@ PY
 # Every utilization series checked against [CELL_START, CELL_END] and the covered
 # fraction recorded in run.json (#35). WARN-ONLY, and deliberately so: the driver
 # CSVs are the primary measurement and a cell with good latency data must not be
-# discarded over utilization sampling. What this prevents is the silent version -
-# dcgm.csv once stopped 171 s before a 712 s window closed and nothing noticed.
+# discarded over utilization sampling. What it buys is that a truncated series is
+# recorded rather than silent.
 python3 "$BENCH_DIR/utilization.py" coverage "$OUT" --update-run-json || \
   echo "WARNING: utilization coverage step failed for $OUT (non-fatal)" >&2
 

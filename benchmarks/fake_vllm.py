@@ -91,8 +91,7 @@ class _Handler(BaseHTTPRequestHandler):
             # "usage": null on EVERY token chunk - see the module docstring.
             self._sse({"choices": [{"text": f" t{i}", "index": 0}], "usage": None})
 
-        # The usage-only chunk: no token, empty choices. Its arrival must count as neither
-        # TTFT nor an inter-token gap.
+        # The usage-only chunk: empty choices, so it is neither a TTFT nor an ITL.
         self._sse({
             "choices": [],
             "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": max_tokens},

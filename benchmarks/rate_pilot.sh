@@ -2,23 +2,19 @@
 # Step 0 of the methodology (issue #3): find the TTFT-p95 knee on kvaware,
 # then freeze the fixed open-loop rate for EVERY sweep cell.
 #
-# Deploys kvaware itself (the gate leaves roundrobin behind, and the knee is
-# arm-specific), restarts the engines cold, warms up, then ramps the rates below
-# with a 200-request pilot workload (seed 999 - same frozen pool, so it does not
-# poison measurement prefixes) and prints one summary per rate.
+# Deploys kvaware itself: the scarcity gate leaves roundrobin behind and the knee
+# is arm-specific. The pilot workload is 200 requests on seed 999 - the same
+# frozen pool, so it does not poison measurement prefixes.
 #
-# READ THE ACHIEVED req/s, NOT ONLY THE LATENCIES. The default range must
-# bracket the knee on BOTH sides or there is nothing to take a fraction of: the
-# 2026-08-03 run defaulted to 2..10, saw a dead-flat TTFT p95 (0.212 / 0.259 /
-# 0.251 / 0.249 s from 4 to 10 req/s), and froze 10.5 as "75% of a knee" that
-# the pilot had never reached. The knee is at 14-16 (achieved req/s stops
-# tracking offered: 20 offered yields 14.9), so the sweep ran in the flat region
-# where `vllm:num_requests_waiting` was 0.00 on every engine and there was no
-# load for a load-aware router to be aware of.
+# READ THE ACHIEVED req/s, NOT ONLY THE LATENCIES. The rate range must bracket
+# the knee on BOTH sides or there is nothing to take a fraction of: a dead-flat
+# TTFT p95 across the whole range means the pilot never reached the knee, not
+# that there is no knee, and a rate frozen from inside the flat region leaves
+# `vllm:num_requests_waiting` at 0.00 on every engine - no load for a load-aware
+# router to be aware of. On this cluster the knee is at 14-16 req/s (20 offered
+# yields 14.9 achieved).
 #
 # Pick the rate where achieved req/s stops tracking offered and TTFT p95 elbows.
-# A load-balancing policy can only pay off at or above that point; below it, the
-# sweep measures cache locality alone.
 #
 # Usage:  ./rate_pilot.sh [rate ...]        (default: 4 8 12 14 16 18 20)
 set -euo pipefail

@@ -1,9 +1,8 @@
 # Overlay: run the router from OUR built image instead of the stock upstream one.
 #
-# This is the §6 reproducibility path. The dev loop (deploy/dev/apply-router-patch.sh)
-# mounts patched files onto a live pod out-of-band from Helm and is NOT reproducible by a
-# third party — it is a development convenience only. Numbers that go in the report should
-# come from an image a reader can rebuild from the repo's Dockerfile.
+# The §6 reproducibility path: report numbers come from an image a reader can rebuild
+# from the repo's Dockerfile. Built images only - the dev-loop overlay
+# (deploy/dev/apply-router-patch.sh) is never measured; see benchmarks/README.md.
 #
 # Usage — layer it on top of the baseline values:
 #
@@ -31,7 +30,7 @@ routerSpec:
   # free parameter. β is dimensionless - the router normalizes load against the
   # live fleet mean - so 1.0 is a real default and not a per-cluster tuning.
   # Chart 0.1.11 IGNORES `routerSpec.env` (hardcoded env list in
-  # deployment-router.yaml, verified 2026-08-01) - set it after the upgrade:
+  # deployment-router.yaml) - set it after the upgrade:
   #   oc set env deploy/stack-deployment-router LOADAWARE_BETA=1.0
   # benchmarks/run_cell.sh does this per sweep cell (and removes it on
   # baseline cells so a stale β cannot leak through the three-way merge).
@@ -40,6 +39,6 @@ routerSpec:
   # Without it the router has no writable HF cache, so from_pretrained fails and
   # is retried on EVERY request at ~245 ms - ~0.25 s/request of event-loop block,
   # a ~4 req/s ceiling, and the liveness SIGKILL. /tmp is the only writable path:
-  # this chart gives the router no volume hook either (verified 2026-08-03).
+  # this chart gives the router no volume hook either.
   # run_cell.sh sets it on BOTH arms - an arm-only fix would flatter loadaware.
   routingLogic: "loadaware"

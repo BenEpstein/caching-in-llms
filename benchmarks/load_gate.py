@@ -113,9 +113,7 @@ def gate(run_dir: str) -> Dict:
         return {"run": run_dir, "error": "no driver CSVs"}
     lo, hi = win
 
-    # utilization.read_series owns the job=vllm-engines filter (the router
-    # re-exports these metrics per backend under one shared instance, which
-    # corrupted 17 of 74 committed seed rows before it was caught).
+    # utilization.read_series owns the job=vllm-engines filter and why it matters.
     running = utilization.read_series(run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
     waiting = utilization.read_series(run_dir, "vllm_num_requests_waiting", utilization.ENGINE_JOB)
     preempt = utilization.read_series(run_dir, "vllm_num_preemptions_total", utilization.ENGINE_JOB)
@@ -136,7 +134,6 @@ def gate(run_dir: str) -> Dict:
     asym = means[busiest] / means[idlest] if means[idlest] > 0 else float("inf")
     delta_load = means[busiest] - means[idlest]
 
-    # waiting: p95 over the busiest engine's samples in-window
     wait_p95 = 0.0
     if busiest in waiting:
         xs = _in_window(waiting[busiest], lo, hi)
@@ -151,8 +148,7 @@ def gate(run_dir: str) -> Dict:
 
     # The consequence test: is client-observed latency materially worse than on
     # an idle system? Needs a driver that records TTFT - a cell measured with the
-    # pre-2026-08-04 driver reports NaN here and cannot be gated on (that bug
-    # silently produced 500 rows with no TTFT at all).
+    # pre-2026-08-04 driver reports NaN here and cannot be gated on.
     seeds = read_run(run_dir)
     ttft_p95 = _median([s["ttft_p95"] for s in seeds])
     itl_p95 = _median([s.get("itl_p95", float("nan")) for s in seeds])

@@ -39,25 +39,20 @@ servingEngineSpec:
       vllmConfig:
         enablePrefixCaching: true
         maxModelLen: 16384
-        # Amended methodology (#3, 2026-08-03). At 0.90 the KV pool is 393,744
-        # tokens (13.52 GiB, verified in the engine startup log) and the whole
-        # prefix pool fits on EVERY engine, so there is no placement decision
-        # for cache-aware routing to get right - engine-local hit rate saturated
-        # at ~0.95 on every arm including roundrobin.
-        # 0.45 -> ~99k tokens. NOTE: the sizing argument below was derived against the
-        # RETIRED 64-prefix s=1.2 workload (hot set 31 prefixes = 63k tok). The frozen
-        # dataset is now 128 prefixes at s=0.9, so the hot-set arithmetic no longer
-        # describes it - but the VALUE is still the right one and is kept deliberately:
-        # it leaves ~1.8x headroom over kvaware's measured peak in-flight KV (56k tok),
-        # so preemption does not become the thing we are measuring. Re-derive before
-        # changing it, do not re-derive to justify it.
+        # Amended methodology (#3). At 0.90 the KV pool is 393,744 tokens
+        # (13.52 GiB) and the whole prefix pool fits on EVERY engine, so there is
+        # no placement decision for cache-aware routing to get right - engine-local
+        # hit rate saturated at ~0.95 on every arm including roundrobin.
+        # 0.45 -> ~99k tokens: ~1.8x headroom over kvaware's measured peak in-flight
+        # KV (56k tok), so preemption does not become the thing we are measuring.
+        # Kept deliberately - re-derive before changing it, do not re-derive to
+        # justify it.
         # Calibration: 22.49 GiB total, 6.72 GiB non-KV overhead, 29,123 tokens
         # per GiB of KV. VERIFY the realised pool from the engine log - this
         # arithmetic is a prediction, and validity rule 5 discards a cell whose
         # pool does not match.
         gpuMemoryUtilization: "0.45"
 
-      # Prometheus scraping of engine /metrics (vllm:num_requests_running etc.)
       serviceMonitor:
         enabled: true
         additionalLabels:
