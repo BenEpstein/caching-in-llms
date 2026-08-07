@@ -25,15 +25,18 @@ from analyze import per_seed_imbalance, read_run
 
 FIELDS = [
     # `run` FIRST and part of the sort key: `cell` alone is ambiguous - the same
-    # cell name appears in the 7.5 req/s pilot and the 10.5 req/s amended sweep,
-    # and grouping by it silently merges two different experiments.
+    # cell name recurs across experiments run at different rates, and grouping by
+    # it silently merges them.
     # "alpha" is retained for the runs recorded before it was removed from the
-    # policy (it was 1.0 in every one of them). Cells run since write it empty.
+    # policy. Cells run since write it empty.
     #
     # *** `beta` MEANS TWO DIFFERENT THINGS IN THIS TABLE - CHECK git_commit ***
-    # Absolute vs fleet-relative load term, not comparable and not convertible;
-    # only beta=0 means the same thing on both sides. Which cells fall where,
-    # and why: benchmarks/README.md, "Two eras of `beta`".
+    #   before 7e2dffb: beta * absolute in-flight count
+    #   7e2dffb onward: beta * (load - fleet_mean)/max(1, mean)
+    # Not comparable and not convertible; only beta=0 means the same thing on
+    # both sides. Never pool or compare across that boundary without saying which
+    # side each cell is on. Which cells fall where: benchmarks/README.md, "Two
+    # eras of `beta`".
     "run", "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",

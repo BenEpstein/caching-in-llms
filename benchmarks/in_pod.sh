@@ -18,11 +18,12 @@
 #   1. The window markers come from THIS pod's clock, not the laptop's - a laptop-clock
 #      window would drag warm-up traffic into the Prometheus dump and contaminate the
 #      imbalance co-primary (benchmarks/README.md, "The measured replay runs in-cluster").
-#   2. Blob emission happens AFTER CELL_END, so ~15 s of gzip does not widen the window.
+#   2. Blob emission happens AFTER CELL_END, so the gzip work does not widen the window.
 #   3. Per-seed frames with a checksum, not one blob for the cell: truncation is then
 #      detectable per seed instead of silently costing the whole cell. Default base64
-#      wrapping is also deliberate - a single 119 KB line gets split into partial-line
-#      records by the CRI log format, and reassembly is not worth depending on.
+#      wrapping is also deliberate - an unwrapped single-line blob gets split into
+#      partial-line records by the CRI log format, and reassembly is not worth
+#      depending on.
 set -euo pipefail
 
 : "${TARGET_URL:?}" "${MODEL:?}" "${RATE:?}" "${MAX_TOKENS:?}" "${SEEDS:?}"

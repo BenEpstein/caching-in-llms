@@ -8,7 +8,43 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
-## 2026-08-07 (#55) - dead code, parse consolidation, deploy README folded
+## 2026-08-07 (#56) - inline-comment bar set and applied repo-wide
+
+### Decided
+- **The comment bar** (#56, Ben): a comment survives only to state a constraint, invariant,
+  or guardrail the code cannot state, or why the code exists. Deleted on sight: what-restating,
+  history narration, run results/measured numbers, dates, line-number cross-references,
+  duplicate explanations (one canonical location, pointers elsewhere). **Run evidence lives
+  in docs (README/report/CHANGELOG), never in code.** Hard rule: comments containing
+  `deliberate` / `do not` / `pre-registered` / `validity rule` / `NOTE` / an issue number
+  are never deleted or reworded silently. Tests keep defect-naming docstrings. `patches/`
+  is held to upstream conventions (no repo-internal anchors or results).
+- **Canonical router-trap location is `utilization.ENGINE_JOB`** - all other sites carry
+  pointers; the circular utilization↔analyze pointers are resolved in that direction.
+
+### Changed
+- **Comment sweep applied across `benchmarks/`, `patches/`, `deploy/`, `tests/`,
+  `scripts/`** (~30 files, ≈240 lines of commentary removed net). Every diff
+  comment/docstring-only, machine-verified (AST / stripped-diff identity vs HEAD); proposed
+  and adversarially reviewed by a second agent per file before landing (per-file verdicts
+  on #56).
+- **`benchmarks/README.md` grew the evidence the code comments used to carry**: "Why the
+  operating point is rate 16 / OSL 64" (pilot evidence incl. the β=0.25 exclusion - the
+  pilot run dirs were never committed, so this table is the record), "Two eras of `beta`"
+  (the `7e2dffb` boundary; never pool across it), "Picking the rate (step 0)",
+  "Reproducing the reported numbers", and the missing `HF_HOME` gotcha bullet (#21).
+
+### Fixed
+- **Validity rules in README matched the code again**: rule 1 was stale (still said >1%
+  errors voids a run; the pre-registered #3 amendment made it report-not-fatal with a 10%
+  hard gate and a between-arms test), and rules 5 (realised KV pool) + 6 (preemption
+  recorded, never voids; absent dumps on 2026-08-03 cells read as 0) existed in code but
+  not in the list.
+- Stale text swept in passing: `run_sweep.sh` called b1.0 "the headline" (it is the shipped
+  default; b0.5 is the configuration of record), README's "freeze ~75% of the knee" and
+  `driver-seed{1..6}.csv`, two α references colliding with CONTEXT.md's reservation of
+  "alpha" (#29), dead pointers (`CELL_SEEDS`, `deploy/README.md`, a `docs/` post-mortem
+  that never existed, "Ben's open item 3").
 
 ### Changed
 - **The Prometheus `query_range` parse is now ONE implementation**:

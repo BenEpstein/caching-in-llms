@@ -5,51 +5,44 @@ throughput. Most of what this module reads was already being collected per cell
 and read by nothing; the LMCache memory gauges were added alongside it (#35),
 so they exist only on cells run from that commit onward.
 
-Where each number comes from, and why (decided on #35, 2026-08-05):
+Where each number comes from, and why (decided on #35):
 
   GPU utilization   DCGM_FI_DEV_GPU_UTIL / _POWER_USAGE / _MEM_COPY_UTIL, per GPU
-                    vLLM's /metrics exposes 113 metric names and NONE of them is
-                    SM% or power, so there is no Prometheus substitute for this
-                    half of the requirement. DCGM stays the source of record and
-                    is polled through port-forwards - promoting it into
-                    Prometheus would need a RoleBinding in `nvidia-gpu-operator`,
-                    which costs the property that `oc apply -f deploy/` works in
-                    any namespace without cluster-admin.
+                    vLLM's /metrics exposes neither SM% nor power, so there is no
+                    Prometheus substitute for this half of the requirement. DCGM
+                    stays the source of record and is polled through
+                    port-forwards - promoting it into Prometheus would need a
+                    RoleBinding in `nvidia-gpu-operator`, which costs the property
+                    that `oc apply -f deploy/` works in any namespace without
+                    cluster-admin.
 
   GPU memory        vllm:kv_cache_usage_perc, per engine.
                     Scraped in-cluster and therefore immune to the WAN that
                     truncates dcgm.csv. It is also the resource the policy
-                    contends for, so it is the utilization series that actually
-                    discriminates the arms (kvaware spreads 1.70x across the two
-                    engines, loadaware b0.5 spreads 1.18x).
+                    contends for.
 
-  Memory            lmcache:local_cache_usage, per engine (host RAM held by the
-                    LMCache CPU backend, ~3.8 GB) + process_resident_memory_bytes
+  Memory            lmcache:local_cache_usage, per engine (the host RAM the
+                    LMCache CPU backend holds) + process_resident_memory_bytes
                     and router_memory_usage_percent for the router.
 
   CPU               router_cpu_usage_percent and process_cpu_seconds_total, router
                     only. The engines export no process_* metrics at all - verified
                     at the endpoint, not inferred from absence - so engine host-CPU
-                    is UNAVAILABLE and is reported as such rather than faked. It is
-                    also the uninteresting number: both arms run the identical model
-                    at the identical offered rate and the engines are GPU-bound,
-                    while the router is the only component the extension changes.
+                    is UNAVAILABLE and is reported as such rather than faked.
 
 Coverage: every series is checked against the cell's measured window and the
 covered fraction recorded in run.json. A utilization source that comes back
-short must not do so silently - dcgm.csv once stopped 171 s before a 712 s
-window closed (24% of the cell, as a clean tail truncation) and nothing noticed.
-The gate WARNS and never fails: the driver CSVs are the primary measurement and
-a cell with good latency data must not be discarded over utilization sampling.
+short must not do so silently. The gate WARNS and never fails: the driver CSVs
+are the primary measurement and a cell with good latency data must not be
+discarded over utilization sampling.
 
 Three ways a source can come back short, and all three are counted:
 
   tail truncation   the collector dies partway and never returns
   internal gap      the collector drops and RECONNECTS, leaving a hole in the
-                    middle. This is the case the DCGM port-forward supervisors
-                    created: they turned truncations into gaps, so a span-only
-                    measure would have scored a cell missing 42% of its samples
-                    at 99.8%. Coverage is therefore gap-aware, not a span.
+                    middle - the shape the DCGM port-forward supervisors create,
+                    and the one a span-only measure scores as near-perfect.
+                    Coverage is therefore gap-aware, not a span.
   total loss        the collector produced a file with nothing in it. Scored 0.0
                     rather than omitted, because a missing KEY is indistinguishable
                     from a healthy cell once it reaches run.json - and total loss
@@ -122,8 +115,8 @@ def read_series(run_dir: str, metric: str, job: str) -> Dict[str, Samples]:
         key = s["metric"].get("pod") or s["metric"].get("instance") or "?"
         # One pod can export the same metric under several label sets - the
         # lmcache gauges carry worker_id. Without it those series concatenate
-        # under one key and average into a number that is neither: a pod holding
-        # 4 GB on worker 0 and 0 GB on worker 1 reads as a flat 2 GB.
+        # under one key and average into a per-pod number that describes no
+        # worker.
         if "worker_id" in s["metric"]:
             key = f"{key}/w{s['metric']['worker_id']}"
         pts = [
@@ -170,10 +163,8 @@ def counter_rate(pts: Samples) -> float:
     difference matters: the router is scraped through its Service
     (deploy/prometheus.yaml), so there is no `pod` label and a restart does not
     change the series key - endpoint differencing would silently report a router
-    that restarted mid-cell as cheaper. On a synthetic restart at t=300 in a
-    700 s window it reported 0.114 against a true 0.2, and nothing flagged it.
-    That number is the evidence behind "router CPU is flat across arms", so it
-    has to survive a restart rather than assume one cannot happen.
+    that restarted mid-cell as cheaper. This rate is the router-CPU number §3
+    reports, so it has to survive a restart rather than assume one cannot happen.
 
     A reset still loses the counts accumulated between the last sample before it
     and the reset itself - at most one sampling interval's worth.
@@ -218,16 +209,15 @@ def _covered_fraction(pts: Samples, start: float, end: float,
     intervals; anything longer counts only that much, so a hole is charged
     against coverage whether it sits in the middle of the window or at either
     end. That is the whole point: a span measure (max - min) scores an internal
-    gap as perfect, and the DCGM supervisors added in this same change turn
-    dropped forwards into exactly that shape. Measured on a real cell, dropping
-    42% of the samples as one mid-window hole scored 99.8% under a span.
+    gap as perfect, and the DCGM supervisors turn dropped forwards into exactly
+    that shape.
 
     The sampling interval is inferred from the data (median inter-sample gap)
     rather than assumed, so a collector on a different cadence is judged against
     its own. The tolerance also gives the first and last sample a step of credit
     each, which is what keeps a healthy short cell off the warning list: samples
-    land up to one interval inside the window at each end, so on a 150 s window
-    at a 5 s step a perfect series would otherwise cap at 96.7%.
+    land up to one interval inside the window at each end, so without that credit
+    a perfect series could not reach 100%.
     """
     inside = sorted(t for t, _ in pts if start <= t <= end)
     window_s = end - start
@@ -380,6 +370,7 @@ def cmd_report(run_dirs: Sequence[str]) -> int:
                   f"{MIN_COVERAGE:.0%}: " + ", ".join(f"{k} {v:.0%}" for k, v in sorted(low.items())))
         if not u["gpu"]:
             print("  note: no dcgm.csv - GPU utilization (SM%, power) unavailable for this cell")
+        # Printed, not just held in the dict - see cell_utilization["unavailable"].
         print("  not available:          " + ", ".join(u["unavailable"])
               + " (vLLM registers no process collector)")
     return 0

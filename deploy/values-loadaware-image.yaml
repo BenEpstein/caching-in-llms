@@ -35,10 +35,7 @@ routerSpec:
   # benchmarks/run_cell.sh does this per sweep cell (and removes it on
   # baseline cells so a stale β cannot leak through the three-way merge).
   #
-  # HF_HOME=/tmp/hf travels the same way, and for the same chart reason (#21).
-  # Without it the router has no writable HF cache, so from_pretrained fails and
-  # is retried on EVERY request at ~245 ms - ~0.25 s/request of event-loop block,
-  # a ~4 req/s ceiling, and the liveness SIGKILL. /tmp is the only writable path:
-  # this chart gives the router no volume hook either.
-  # run_cell.sh sets it on BOTH arms - an arm-only fix would flatter loadaware.
+  # HF_HOME=/tmp/hf is set per cell by run_cell.sh, on BOTH arms (#21) - it
+  # cannot live here (chart 0.1.11 has no routerSpec.env). See
+  # benchmarks/README.md, "Cluster gotchas".
   routingLogic: "loadaware"

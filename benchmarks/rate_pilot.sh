@@ -10,11 +10,13 @@
 # the knee on BOTH sides or there is nothing to take a fraction of: a dead-flat
 # TTFT p95 across the whole range means the pilot never reached the knee, not
 # that there is no knee, and a rate frozen from inside the flat region leaves
-# `vllm:num_requests_waiting` at 0.00 on every engine - no load for a load-aware
-# router to be aware of. On this cluster the knee is at 14-16 req/s (20 offered
-# yields 14.9 achieved).
+# `vllm:num_requests_waiting` at zero on every engine - no load for a load-aware
+# router to be aware of. Where this cluster's knee landed:
+# benchmarks/README.md, "Picking the rate (step 0)".
 #
 # Pick the rate where achieved req/s stops tracking offered and TTFT p95 elbows.
+# A load-balancing policy can only pay off at or above the knee; below it the
+# sweep measures cache locality alone.
 #
 # Usage:  ./rate_pilot.sh [rate ...]        (default: 4 8 12 14 16 18 20)
 set -euo pipefail

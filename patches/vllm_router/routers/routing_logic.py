@@ -456,10 +456,11 @@ class LoadAwareRouter(KvawareRouter):
        what lets a single beta ship. An absolute in-flight count has no bounded
        scale: it depends on request rate, prompt length and GPU, so the same
        beta is a different policy on every deployment. Concretely: a beta
-       tuned where the busiest engine ran ~47 in-flight yields, on a fleet
-       running 400, a load penalty far past the benefit term's cap of 1.0, so
-       the cache stops mattering entirely and placement silently collapses to
-       least-loaded - a failure with nothing in the logs to announce it. The
+       tuned on a fleet whose busiest engine runs a handful of in-flight
+       requests yields, on a fleet running hundreds, a load penalty far past
+       the benefit term's cap of 1.0, so the cache stops mattering entirely and
+       placement silently collapses to least-loaded - a failure with nothing in
+       the logs to announce it. The
        denominator is clamped at 1 so that a fleet which is essentially idle
        reports no imbalance to act on: at mean load 0.2 a single in-flight
        request is not a 400%-overloaded engine.
@@ -554,11 +555,14 @@ class LoadAwareRouter(KvawareRouter):
         the per-endpoint reading in the module-level default is the one that
         generalizes.
 
-        `matched_tokens` can come back LARGER than `prompt_tokens`: a
-        ~2000-token prompt has been observed matching 2048 tokens, consistent
-        with `layout_info` rounding a match up to LMCache's 256-token chunk
-        boundary. That is what the `min()` guard is for - without it `benefit`
-        would exceed 1.0 and outrank a genuine full hit.
+        `matched_tokens` can come back LARGER than `prompt_tokens`, because
+        `layout_info` rounds a match up to LMCache's 256-token chunk boundary.
+        That is what the `min()` guard is for - without it `benefit` would
+        exceed 1.0 and outrank a genuine full hit.
+
+        `matched_tokens` is not exported as a metric; it surfaces only in
+        `select_url`'s debug log, so the realized range of benefit is not
+        observable at INFO log level.
         """
         benefit = min(matched_tokens, prompt_tokens) / max(prompt_tokens, 1)
         return benefit - self.beta * relative_load

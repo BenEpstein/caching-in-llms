@@ -24,7 +24,7 @@ workload at fixed load.
 | `collectors/dcgm_poll.py` | GPU util/power/mem-copy CSV via the DCGM exporter |
 | `run_cell.sh` | Per-cell choreography (deploy → gates → warm-up → 20 seeds → collect); `WORKLOAD_PROFILE` picks the dataset |
 | `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
-| `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze ~75% of it |
+| `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze at or just under it (see "Picking the rate") |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
 | `export_summary.py` | Derives `results/summary-per-seed.csv` — the table every figure and test reads |
 | `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
@@ -117,6 +117,46 @@ calibration, before the load term was normalized against the fleet mean.
 Built images only - the dev-loop ConfigMap overlay (`deploy/dev/`) is **never** measured.
 No mock or simulation anywhere: every reported number comes from the real cluster.
 
+### Why the operating point is rate 16 / OSL 64
+
+OSL 64 (`run_cell.sh` `MAX_TOKENS`) is a bound, not a default. Piloted 2026-08-05:
+
+| OSL | outcome |
+|---|---|
+| **64** | achieved tracks offered; imbalance 2.99× |
+| 128 | fleet saturates (65% of offered achieved); imbalance 3.98× |
+| 256 | breaches the 1% error ceiling (11.4%), KV pegged at 1.000, 231 preemptions; imbalance 1.89× |
+
+Imbalance is **non-monotonic in load**: once both engines pin at capacity there is nowhere
+better to send anything, so the window in which load-aware routing can help closes at
+**both** ends - too little load and there is no queue to route around, too much and both
+engines are equally saturated. On this 2×A10 fleet, rate 16 / OSL 64 sits inside that
+window; moving either knob moves the experiment out of it. Excluded from the grid for the
+same reason: β=0.25, which measured imbalance 2.257 against a same-hour kvaware control of
+2.113 - no effect.
+
+### Two eras of `beta`
+
+`beta` names two different policies, and `results/` contains both. The split is
+`git_commit` in each `run.json` (and in `summary-per-seed.csv`):
+
+| `git_commit` | Load term |
+|---|---|
+| before `7e2dffb` | `beta ×` **absolute** in-flight count |
+| `7e2dffb` onward | `beta × (load − fleet_mean) / max(1, mean)` |
+
+`loadaware-b0.5` and `loadaware-b1.0` appear under **both**. The same cell name is a
+different policy, and the values do not convert by a constant: the relative form
+self-adjusts per request while the absolute one does not, so `beta_rel = beta_abs ×
+mean_load` holds only at the mean and mispredicted by ~2× in practice (CHANGELOG
+2026-08-05). Never pool or compare across the boundary without saying which side each cell
+is on.
+
+- Absolute-era values seen: 0.034, 0.068, 0.1, 0.5, 1.0
+- Relative-era values seen: 0, 0.5, 1.0, 2.0
+- `beta=0` is the one value that means the same thing on both sides (the load term
+  vanishes), which is why the ablation cells are poolable and the rest are not.
+
 ## Deploying the stack (OpenShift, cluster `gapu-2`)
 
 Target topology: 1 CPU router pod → 2 vLLM+LMCache replicas, one per A10 GPU.
@@ -159,6 +199,15 @@ on the same pod (router logs, `grep -i routing`).
   images are digest-pinned to the same lmcache minor - see `Dockerfile` and the image pins
   in `deploy/values-baseline-kvaware.yaml`. Check live:
   `oc exec <pod> - /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`.
+- **The router image has no writable HF cache, so the tokenizer load fails on every
+  request** (#21): arbitrary uid under the restricted SCC, `HF_HOME` unset, no `/.cache`.
+  `AutoTokenizer.from_pretrained` raises, and because the except path never assigns
+  `self.tokenizer` it is retried *per request* (reaching huggingface.co before failing) - sustained event-loop blocking, a hard throughput ceiling, and eventually the liveness
+  SIGKILL. `/tmp` is the only writable path, and chart 0.1.11 gives the router neither a
+  `routerSpec.env` passthrough nor a volume hook, so the fix cannot live in the values
+  files: `run_cell.sh` (also `rate_pilot.sh`, `scarcity_gate.sh`) sets `HF_HOME=/tmp/hf`
+  via `oc set env` on **both arms**. `KvawareRouter.route_request` carries the identical
+  try/except, so an arm-only fix would flatter loadaware and void the comparison.
 - **A router restart re-registers workers only because `workerHeartbeatTime` is set**, and
   the KV registry stays blind ~40 s afterwards (#13) - admits in that window are lost for
   the life of the engine process. Measurements gate on `deploy/dev/registry-probe.sh`;
@@ -199,6 +248,39 @@ python3 benchmarks/plot_results.py results/<...> --cand loadaware-b0.5 --out doc
 # 5. §3 utilization: GPU, GPU memory, CPU, host memory
 python3 benchmarks/utilization.py report results/*
 ```
+
+### Picking the rate (step 0)
+
+`rate_pilot.sh` prints offered vs **achieved** req/s per rate; the knee is where they
+diverge and TTFT p95 elbows, and the frozen sweep rate is at or just under it. **Read the
+achieved column, not only the latencies.** The rate range must bracket the knee on both
+sides: a dead-flat TTFT p95 across the whole range means the pilot never reached the knee,
+not that there is no knee. A rate frozen from inside the flat region leaves
+`vllm:num_requests_waiting` at 0.00 on every engine - there is no load for a load-aware
+router to be aware of, and the sweep measures cache locality alone. On gapu-2 the knee is
+**14–16 req/s** (20 offered yields 14.9 achieved); the committed sweeps run at 16.
+
+### Reproducing the reported numbers
+
+`scripts/reproduce.sh` regenerates every number in §5/§6 from committed data - no cluster,
+no GPU, no network - and exits non-zero on drift (#28). CI runs it on every push.
+
+```bash
+./scripts/reproduce.sh            # verify
+./scripts/reproduce.sh --update   # accept current output as the new results/expected/ baseline
+```
+
+`--update` refreshes `results/expected/` only. It never writes
+`results/summary-per-seed.csv`: that file is committed evidence, and the regenerated table
+is a strict subset whenever a run directory is missing, so "updating" it would silently
+delete real rows.
+
+**If you regenerate `docs/figures/` from a new sweep, repoint the script's cell defaults in
+the same commit** (`HEADLINE`, `BASELINE`, `ABLATION`, `BETA1`, `BETA2`, `COMPARATOR` - all
+env-overridable). They currently name the confirmatory sweep (#31). Leave them behind and
+the script diffs a superseded experiment against its own superseded baseline and passes
+while the committed figures go unchecked - a check that verifies the wrong run reads
+exactly like a check that passes.
 
 ### Utilization (§3): where each number comes from
 
@@ -290,7 +372,7 @@ cluster:                                     Job pod: verify dataset
 
 ```
 results/<ts>-<cell>/
-  driver-seed{1..6}.csv     client-observed per-request TTFT/E2E/tokens (percentile source of
+  driver-seed{1..20}.csv    client-observed per-request TTFT/E2E/tokens (percentile source of
                             truth; send_ts is wall-clock epoch, so per-seed windows derive from it)
   prom/*.json               vllm:num_requests_running/waiting, request_queue_time, kv_cache_usage,
                             lmcache hit metrics, process + router CPU/mem - per engine, 5 s resolution
@@ -415,8 +497,14 @@ them.
 
 ## Validity rules (pre-registered - no post-hoc exceptions)
 
-1. Error requests are **excluded from latency stats but counted**; a seed with **> 1%
-   errors invalidates the run** (`analyze.py validate` enforces this).
+1. Error requests are **excluded from latency stats but counted**. **Amended (#3,
+   pre-registered before the run)**: a seed above 1% errors is **reported, not fatal** - the
+   observed error floor is arm-independent (`aiohttp ServerDisconnectedError` raised *after*
+   the routing decision, present in every arm including `roundrobin`), and a floor that hits
+   both arms equally is noise, not bias. What voids a comparison is errors **differing
+   between the arms** (`analyze.py compare`: ratio > 2× **and** absolute gap > 1 pp). A
+   single seed above **10%** is catastrophic and voids unilaterally (`analyze.py validate`).
+   Rationale of record: the block above `ALPHA` in `benchmarks/analyze.py`.
 2. Wrong image/config state (unexpected router image, patch overlay mounted, β not as
    labeled) = **discard the run, never "correct" it**. `run.json` records image + imageID
    for the audit.
@@ -425,3 +513,13 @@ them.
    for the wrong reason).
 4. The workload manifest check must pass before every cell - a drifted dataset is not the
    frozen dataset.
+5. The **realised KV pool** (read from the engine's own startup log - `scarcity_gate.sh`,
+   and pinned in `deploy/values-baseline-kvaware.yaml`) must match the configured
+   `gpuMemoryUtilization` prediction; a cell whose realised pool does not match is
+   discarded.
+6. **Preemption is recorded and reported per arm, never used to void a run** (#3
+   amendment): under concentration it is a genuine consequence of the baseline's placement,
+   so gating on it would discard the baseline arm systematically. Caveat: the
+   `vllm:num_preemptions_total` dump postdates the 2026-08-03 cells - for those run dirs
+   the file is absent and `load_gate` reports 0 preemptions because there is no data, not
+   because there were none.

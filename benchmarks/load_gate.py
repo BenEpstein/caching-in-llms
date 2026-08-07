@@ -1,9 +1,8 @@
 """The LOAD gate: is there load for a load-aware router to be aware of?
 
-The direct analogue of `scarcity_gate.sh`, and it exists for the same reason.
-The 2026-08-03 amended sweep passed every validity rule and still could not test
-the hypothesis: `vllm:num_requests_waiting` was 0.00 at every scrape on every
-engine, so `loadaware`'s beta term had nothing to act on and the arms differed
+The direct analogue of `scarcity_gate.sh`, and it exists for the same reason: a
+sweep can pass every validity rule and still not test the hypothesis. Below the
+engines' knee `loadaware`'s beta term has nothing to act on and the arms differ
 only by residual cache locality. A run below the knee is not a measurement of a
 load-aware policy - it is a measurement of cache locality wearing its name.
 
@@ -16,21 +15,15 @@ questions the driver CSVs cannot:
 Both are needed. Symmetric saturation is not an opportunity: if both engines are
 equally underwater there is nowhere better to send the request.
 
-### Why saturation is NOT tested with `waiting` or preemption (2026-08-04)
+### Why saturation is NOT tested with `waiting` or preemption
 
 The first version of this gate required `num_preemptions_total > 0` or
 `waiting p95 > 0`. **That criterion is unsatisfiable on this workload, not
-strict**, and the probe proved it: at offered 16 and 18 the busiest engine ran
-59 and 100 mean concurrent requests with `waiting` == 0.00, 0 preemptions, and
-queue time 0.0 ms/req at every rate including 10.5.
-
-The cause is prefix caching. Concurrent requests sharing a prefix share its KV
-blocks, so a request costs ~530 tokens of KV against a 1578-token prompt.
-Against a 104,624-token pool, KV usage tops out near 0.70 even at 100 concurrent
-- it never exhausts, so nothing is ever preempted or queued. **This system
-saturates on COMPUTE, not memory.** vLLM expresses compute saturation by packing
-larger decode batches, and every token in a larger batch is slower - so the
-symptom is inter-token latency, never a queue counter.
+strict.** Concurrent requests sharing a prefix share its KV blocks, so KV never
+exhausts and nothing is ever preempted or queued. **This system saturates on
+COMPUTE, not memory.** vLLM expresses compute saturation by packing larger
+decode batches, and every token in a larger batch is slower - so the symptom is
+inter-token latency, never a queue counter.
 
 So the gate tests the CONSEQUENCE instead of a proxy for it: does concentration
 actually cost latency? That is **stricter** than "a counter is nonzero" - a
@@ -41,7 +34,7 @@ The per-seed windowing is deliberately the same code path as
 include warm-up and engine-restart time, diluting mean in-flight toward zero,
 which biases both the reported imbalance and the degradation ratios.
 
-### This gate no longer sets beta (2026-08-04)
+### This gate no longer sets beta
 
 It used to: `beta_from()` solved for beta from one probe's absolute in-flight
 count, and the sweep took the number it printed. That is gone, because beta is
@@ -82,10 +75,10 @@ MIN_ASYMMETRY = 1.5
 #: rate differs. 1.25 = "at least 25% worse than an idle system".
 MIN_DEGRADATION = 1.25
 
-#: Unloaded reference, measured on this cluster at rate 4 with the fixed driver
-#: (2026-08-04): TTFT p95 0.161 s, ITL p95 31.3 ms. A cell at the target rate is
-#: compared against these; the sweep is only worth running if concentration has
-#: pushed latency materially above an idle system's.
+#: Unloaded reference: the same driver and workload at a rate low enough that
+#: nothing queues. A cell at the target rate is compared against these; the
+#: sweep is only worth running if concentration has pushed latency materially
+#: above an idle system's. Provenance: benchmarks/README.md.
 BASELINE_TTFT_P95 = 0.161
 BASELINE_ITL_P95 = 0.0313
 
@@ -113,7 +106,7 @@ def gate(run_dir: str) -> Dict:
         return {"run": run_dir, "error": "no driver CSVs"}
     lo, hi = win
 
-    # utilization.read_series owns the job=vllm-engines filter and why it matters.
+    # The router trap; utilization.ENGINE_JOB documents it.
     running = utilization.read_series(run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
     waiting = utilization.read_series(run_dir, "vllm_num_requests_waiting", utilization.ENGINE_JOB)
     preempt = utilization.read_series(run_dir, "vllm_num_preemptions_total", utilization.ENGINE_JOB)
@@ -147,8 +140,8 @@ def gate(run_dir: str) -> Dict:
             preempt_delta += max(xs) - min(xs)
 
     # The consequence test: is client-observed latency materially worse than on
-    # an idle system? Needs a driver that records TTFT - a cell measured with the
-    # pre-2026-08-04 driver reports NaN here and cannot be gated on.
+    # an idle system? Needs a driver that records TTFT - a cell measured before
+    # load_driver.classify_chunk was fixed reports NaN here and cannot be gated on.
     seeds = read_run(run_dir)
     ttft_p95 = _median([s["ttft_p95"] for s in seeds])
     itl_p95 = _median([s.get("itl_p95", float("nan")) for s in seeds])
@@ -205,15 +198,13 @@ def relative_imbalance(mean_busiest: float, mean_fleet: float) -> float:
     in-flight count - so beta could not be carried to another rate, another
     workload or another cluster, and the router shipped a number that was only
     ever true on the machine that measured it. Two probes at the same offered
-    rate demonstrated the failure directly: delta_load 39.46 and 14.69, i.e.
-    beta 0.013 and 0.034, a 2.6x disagreement about the same system.
+    rate disagreed about beta by more than a factor of two.
 
     `loadaware` now normalizes load against the fleet mean inside the router,
     so beta is dimensionless and needs no calibration at all - the default 1.0
     means "100% above fleet-average load costs one full cache hit". What is
     left to REPORT, not to calibrate, is the imbalance the policy is acting on,
-    which is this quantity. Measured over the four untreated rate-16 cells it
-    spans 0.353-0.500 where delta_load spans 14.69-39.46.
+    which is this quantity.
     """
     if mean_fleet <= 0:
         return 0.0

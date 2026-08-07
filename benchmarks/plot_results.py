@@ -65,9 +65,9 @@ def median(xs: List[float]) -> float:
 def seed_range(cells: List[Dict]) -> str:
     """"20" or "3-20": the seed counts behind a set of cells. Never hardcoded.
 
-    One helper because this figure derived it twice, 18 lines apart, in two
-    incompatible formats - and before that carried a literal "6" that survived
-    into a 20-seed sweep and contradicted the title on the same image.
+    One helper because this figure derived it twice, in two incompatible
+    formats - and before that carried a literal that survived into a sweep with
+    a different seed count and contradicted the title on the same image.
     """
     ns = sorted({len(c["seeds"]) for c in cells})
     return f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}-{ns[-1]}"
@@ -137,7 +137,7 @@ def fig_ecdf(cells: List[Dict], out: str) -> None:
     ax.set_xlabel("TTFT (s)")
     ax.set_ylabel("fraction of requests")
     ax.set_xlim(0, 1.0)
-    ax.set_ylim(0.5, 1.0)  # the tail is the story; p50 is flat across arms
+    ax.set_ylim(0.5, 1.0)  # the tail is the story - see the docstring
     ax.set_title("Client-observed TTFT distribution (upper half)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
@@ -149,14 +149,12 @@ def fig_ecdf(cells: List[Dict], out: str) -> None:
 def fig_hit_rate(cells: List[Dict], out: str) -> None:
     """LMCache lookup hit rate per arm, averaged over engines and the window.
 
-    NOTE (verified 2026-08-03): `lmcache:lookup_hit_rate` is scraped from the
-    ENGINES (job=vllm-engines), not the router - it is each engine's hit rate
-    against its OWN local cache, not "did the router pick the instance holding
-    the KV". With a 20-prefix pool both engines see every prefix repeatedly, so
-    it saturates near 0.95 on every arm INCLUDING roundrobin. This figure
-    therefore documents that hit rate does not discriminate the policies at this
-    workload; TTFT is the discriminating metric. Do not read it as evidence
-    either way about routing quality.
+    NOTE: `lmcache:lookup_hit_rate` is scraped from the ENGINES
+    (job=vllm-engines), not the router - it is each engine's hit rate against its
+    OWN local cache, not "did the router pick the instance holding the KV". Both
+    engines see every prefix repeatedly, so it saturates on every arm INCLUDING
+    roundrobin. Do not read this figure as evidence either way about routing
+    quality; the title it prints is derived from the data below.
     """
     labels, values = [], []
     for c in sorted(cells, key=lambda c: (c["arm"], c["beta"] or 0)):
@@ -211,9 +209,8 @@ def fig_inflight_vs_time(cells: List[Dict], out: str, cand: str) -> None:
     hotter" from "they alternate and average out". The gap between the two traces
     IS the imbalance the co-primary measures.
 
-    Read alongside the run log's queueing finding: the kvaware traces separate
-    widely here while num_requests_waiting stayed at zero throughout, which is
-    what "imbalance with no contention behind it" looks like.
+    Read alongside load_gate.py's docstring: this workload saturates on compute,
+    so separated traces here can coexist with an empty queue counter.
     """
     want = [c for c in cells if c["arm"] == "kvaware" or c["cell"].endswith(cand)]
     want = sorted(want, key=lambda c: c["arm"] != "kvaware")
@@ -248,14 +245,9 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     destroy), right axis = TTFT p95 (the putative consequence).
 
     The subtitle is DERIVED from the data on every render, because it has twice
-    been a hardcoded conclusion that a later grid falsified. It first asserted
-    "hit rate falls, latency follows" (true of the 10.5 req/s sweep, 0.918 ->
-    0.787 -> 0.735); that was replaced by "hit rate is flat over this range"
-    (true of the narrow beta 0 -> 0.068 grid); and that in turn is false on the
-    2026-08-06 confirmatory sweep, where hit rate falls 91.2% -> 86.1%
-    monotonically in beta and the decline is precisely the mechanism behind the
-    beta=2.0 latency reversal. Two wrong captions in a row is the argument for
-    computing it rather than writing it down.
+    been a hardcoded conclusion that a later grid falsified - once in each
+    direction. Two wrong captions in a row is the argument for computing it
+    rather than writing it down.
     """
     la = sorted([c for c in cells if c["arm"] == "loadaware"], key=lambda c: c["beta"])
     la = [c for c in la
@@ -279,8 +271,8 @@ def fig_beta_tradeoff(cells: List[Dict], out: str) -> None:
     ax2.set_ylabel("TTFT p95 (s), median of seeds", color="tab:red")
     ax2.tick_params(axis="y", labelcolor="tab:red")
     # Derived, not asserted (see the docstring). The sign picks the verb: gating
-    # on abs() but always saying "falls" would print "hit rate falls -3.1 pts"
-    # on a rising grid.
+    # on abs() but always saying "falls" would print a negative fall on a rising
+    # grid.
     drop_pts = (hit[0] - hit[-1]) * 100
     if abs(drop_pts) < 2.0:
         note = "hit rate is flat over this range - diverting costs no locality here"
@@ -376,9 +368,9 @@ def _panel_grid(cells: List[Dict], out: str, metrics, scale: float,
     ITL and throughput figures so all three read identically.
 
     Each bar is labelled with its OWN seed count. The axis caption used to read
-    "median of {max n} seeds", which on a mixed-n figure claimed the 3-seed
-    descriptive cells (beta=0.068, roundrobin) carried the 20 seeds of the
-    inferential ones - overstating exactly the bars a reader should trust least.
+    "median of {max n} seeds", which on a mixed-n figure claimed the descriptive
+    cells carried the seed count of the inferential ones - overstating exactly
+    the bars a reader should trust least.
     """
     ordered = sorted(cells, key=lambda c: (c["arm"] != "loadaware", c["beta"] or 0, c["cell"]))
     fig, axes = plt.subplots(1, len(metrics), figsize=(4 * len(metrics), 4), sharey=True)
@@ -405,9 +397,9 @@ def _panel_grid(cells: List[Dict], out: str, metrics, scale: float,
 def fig_percentiles(cells: List[Dict], out: str) -> None:
     """p50 / p90 / p95 / p99 side by side: where each arm's cost actually sits.
 
-    p90 is on this figure because the 2026-08-03 sweep showed the policy shifts
-    the whole TTFT body (~7% at p50 and p90) while p95/p99 are dominated by
-    bursty engine stalls - reading only p95/p99 hides the effect in noise.
+    p90 is on this figure because the policy shifts the whole TTFT body while
+    p95/p99 are dominated by bursty engine stalls - reading only p95/p99 hides
+    the effect in noise.
     """
     _panel_grid(
         cells, out,
@@ -419,7 +411,7 @@ def fig_percentiles(cells: List[Dict], out: str) -> None:
 
 
 def fig_itl(cells: List[Dict], out: str) -> None:
-    """Inter-token latency percentiles - the 92% of E2E that TTFT does not cover.
+    """Inter-token latency percentiles - the decode side TTFT does not cover.
 
     Pooled over every inter-token gap in the cell. ITL is where engine-side
     load actually lands: a router that overfills one engine grows its decode
@@ -500,15 +492,13 @@ def fig_utilization(cells: List[Dict], out: str) -> None:
     different scales; forcing them onto shared axes would make three of them
     unreadable to flatter the fourth.
 
-    The GPU-memory panel is the load-bearing one. KV cache occupancy is the
-    resource the policy contends for, and it separates the arms monotonically in
-    beta: kvaware spreads 1.70x across the two engines, b0.5 1.18x, b2.0 1.11x.
+    The GPU-memory panel is the load-bearing one: KV cache occupancy is the
+    resource the policy contends for.
 
     SM% is the weaker read and is here because §3 asks for GPU utilization.
     Both arms serve the identical model at the identical offered rate, so the
     GPUs are near-saturated in every cell and SM% mostly cannot discriminate -
-    though it is not perfectly flat either (b2.0 came back 72% vs 93%), so the
-    panel is drawn without a claim attached to it.
+    the panel is drawn without a claim attached to it.
 
     Router CPU and memory are the extension's overhead, measured: the router is
     the only component the policy changes.
@@ -627,19 +617,18 @@ def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str,
     `comparator` is an already-loaded cell passed in from outside, NOT a name
     looked up in `cells`, and that is load-bearing. roundrobin is a descriptive
     framing cell rather than part of the beta grid (benchmarks/README.md, "Sweep
-    design"). Putting it in `cells` puts it in EVERY figure, and its 11 s p95
-    then compresses the y-axis of fig1 - the centerpiece - until the whole beta
-    curve is a flat line on the floor. Measured, not hypothetical: that is what
-    the first attempt at this produced. It reaches exactly one figure by
-    construction, and a sweep with no roundrobin cell still plots.
+    design"). Putting it in `cells` puts it in EVERY figure, and its tail then
+    compresses the y-axis of fig1 - the centerpiece - until the whole beta curve
+    is a flat line on the floor. It reaches exactly one figure by construction,
+    and a sweep with no roundrobin cell still plots.
 
     Including a SATURATED arm here is deliberate and is sound only because
-    goodput's denominator is requests SENT. roundrobin delivers 10.31 of 16
-    offered req/s, so a p95 contrast against it compares arms carrying different
+    goodput's denominator is requests SENT. roundrobin does not keep up with the
+    offered rate, so a p95 contrast against it compares arms carrying different
     load and flatters it by conditioning on the requests that finished. Goodput
-    does not condition: every arm was offered the identical 500-request frozen
-    workload at the same Poisson rate, and falling behind simply counts as
-    missed. This is the one figure where the saturated arm belongs.
+    does not condition: every arm was offered the identical frozen workload at
+    the same Poisson rate, and falling behind simply counts as missed. This is
+    the one figure where the saturated arm belongs.
     """
     curves = {}
     for role, name in (("baseline", base), ("candidate", cand), ("ablation", ablation)):
@@ -669,10 +658,10 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
                 comparator: Optional[Dict] = None) -> Dict:
     """Goodput against the TTFT objective: baseline, headline arm, ablation.
 
-    Three cells and no more. Every arm on one axes turns a 7-point gap on a
-    0-100 scale into five near-coincident lines, and the argument this figure
-    carries has exactly three terms: what the baseline serves, what the load
-    term adds, and that the addition disappears when the load term is off.
+    Three cells and no more. Every arm on one axes turns the gap on a 0-100
+    scale into five near-coincident lines, and the argument this figure carries
+    has exactly three terms: what the baseline serves, what the load term adds,
+    and that the addition disappears when the load term is off.
 
     A fourth line is drawn when a `roundrobin` cell is present. It is the floor
     the two cache-aware policies are standing on, and it belongs on THIS figure
@@ -683,9 +672,9 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     is legible only where the curves are steep; with it the effect is a shape a
     reader can see at a glance, which is the whole reason the figure exists.
 
-    NOT A CLAIM. Goodput was first computed after the pre-registered ttft_p95
-    test returned null on this data, so the caption says so - a figure that
-    travels into a talk without its doc has to carry its own provenance.
+    NOT A CLAIM. Goodput is a secondary, post-hoc metric (see analyze.TTFT_SLO_S),
+    and the caption says so - a figure that travels into a talk without its doc
+    has to carry its own provenance.
 
     Returns the curves it drew, for dump_data to record. Handing them over beats
     letting dump_data recompute them from its own copy of these three cell
@@ -698,9 +687,9 @@ def fig_goodput(cells: List[Dict], out: str, cand: str, base: str = "kvaware",
     gain = [c - b for b, c in zip(curves["baseline"], curves["candidate"])]
     drop = [a - b for b, a in zip(curves["baseline"], curves["ablation"])]
     # Annotated at the DOCUMENTED objective, never at argmax(gain). Pointing the
-    # figure's largest text at the best-looking point on a 176-point sweep is the
-    # same post-hoc scan analyze.TTFT_SLO_S warns about, drawn at 11 pt bold - and
-    # a figure travels into a talk without the caveat its docstring carries.
+    # figure's largest text at the best-looking point of the sweep is the same
+    # post-hoc scan analyze.TTFT_SLO_S warns about, drawn at 11 pt bold - and a
+    # figure travels into a talk without the caveat its docstring carries.
     mark = min(range(len(x)), key=lambda i: abs(x[i] - TTFT_SLO_S * 1000))
 
     fig, (top, bot) = plt.subplots(
@@ -790,8 +779,8 @@ def dump_data(cells: List[Dict], out: str, goodput_series: Dict) -> None:
             ],
         })
     # fig12's curve is a per-SLO sweep, not a per-seed stat, so it is invisible to
-    # the per-cell payload above. Without this the committed figure had nothing
-    # checking the 176 points it actually draws.
+    # the per-cell payload above. Without this the committed figure has nothing
+    # checking the points it actually draws.
     out_obj = {
         "cells": payload,
         "goodput_curves": {

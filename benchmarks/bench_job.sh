@@ -30,8 +30,12 @@ echo "==> $JOB: image $BENCH_IMAGE, target $TARGET_URL, seeds [$SEEDS]"
 # satisfied; and CFS throttling on the driver would inflate client-side TTFT exactly the way
 # the WAN did, which is the artifact this whole change removes. The 1-CPU request maps to
 # cpu.shares, so under contention the driver gets a proportional share rather than starving
-# the router. The control for co-location is the engine-side TTFT cross-check, not a
-# scheduling rule (README, "The measured replay runs in-cluster"); the node is recorded.
+# the router. No LimitRange in this namespace - one appearing would inject a default CPU
+# limit behind our back and reintroduce the throttling artifact.
+#
+# The control for co-location is the engine-side TTFT cross-check, not a scheduling rule
+# (README, "The measured replay runs in-cluster"): in-cluster engine-side TTFT matching the
+# WAN cells means the driver is not perturbing the engines. The node is recorded.
 oc apply -n "$NS" -f - <<YAML
 apiVersion: batch/v1
 kind: Job
@@ -85,8 +89,8 @@ spec:
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
       volumes:
-        # 126 MB of regenerated JSONL (measured) plus ~5 MB of CSV. Sized explicitly so the
-        # pod is not an eviction candidate on a node already under pressure.
+        # Sized so the pod is not an eviction candidate under the cell's regenerated output,
+        # on a node already under pressure.
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi

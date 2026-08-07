@@ -255,7 +255,7 @@ def _prom(run_dir, engines, router=None, lo=1000.0, hi=1003.0):
         for pod, v in engines.items()
     ]
     if router is not None:
-        # The router trap; utilization.read_series documents it.
+        # The router trap; utilization.ENGINE_JOB documents it.
         result.append(
             {"metric": {"job": "router", "instance": "stack-router-service:80",
                         "server": "engine-1"},

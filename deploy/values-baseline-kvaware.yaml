@@ -39,18 +39,15 @@ servingEngineSpec:
       vllmConfig:
         enablePrefixCaching: true
         maxModelLen: 16384
-        # Amended methodology (#3). At 0.90 the KV pool is 393,744 tokens
-        # (13.52 GiB) and the whole prefix pool fits on EVERY engine, so there is
-        # no placement decision for cache-aware routing to get right - engine-local
-        # hit rate saturated at ~0.95 on every arm including roundrobin.
-        # 0.45 -> ~99k tokens: ~1.8x headroom over kvaware's measured peak in-flight
-        # KV (56k tok), so preemption does not become the thing we are measuring.
-        # Kept deliberately - re-derive before changing it, do not re-derive to
-        # justify it.
-        # Calibration: 22.49 GiB total, 6.72 GiB non-KV overhead, 29,123 tokens
-        # per GiB of KV. VERIFY the realised pool from the engine log - this
-        # arithmetic is a prediction, and validity rule 5 discards a cell whose
-        # pool does not match.
+        # Amended methodology (#3). At 0.90 the whole prefix pool fits on EVERY
+        # engine, so there is no placement decision for cache-aware routing to
+        # get right. 0.45 keeps headroom over peak in-flight KV so preemption
+        # does not become the thing we are measuring.
+        # NOTE: the sizing was derived against the retired workload; the value
+        # stands. Kept deliberately - re-derive before changing it, do not
+        # re-derive to justify it. Verify the realised pool from the engine
+        # startup log (validity rule 5, benchmarks/README.md).
+        # Numbers: docs/report/report.md and CHANGELOG.
         gpuMemoryUtilization: "0.45"
 
       serviceMonitor:
@@ -103,12 +100,10 @@ routerSpec:
   sessionKey: "x-user-id"
   engineScrapeInterval: 5
 
-  # The baseline needs HF_HOME=/tmp/hf exactly as the loadaware arm does (#21):
-  # KvawareRouter.route_request carries the identical from_pretrained try/except,
-  # so the stock image pays the same ~245 ms per request when the HF cache is
-  # unwritable. Chart 0.1.11 has no routerSpec.env passthrough and no volume
-  # hook, so it cannot live here - benchmarks/run_cell.sh sets it on every cell,
-  # both arms. Applying it to only one arm would invalidate the comparison.
+  # HF_HOME=/tmp/hf is set per cell by run_cell.sh, on BOTH arms (#21) -
+  # KvawareRouter carries the identical try/except, so this is not an
+  # arm-specific fix. It cannot live here (chart 0.1.11 has no routerSpec.env).
+  # See benchmarks/README.md, "Cluster gotchas".
 
   # kvaware router init (LMCache controller + transformers imports) takes ~20s;
   # the default startup probe (5s delay, 3x5s failures) kills it mid-boot.

@@ -7,11 +7,12 @@
 # reconstructible from source" is a tested claim rather than an asserted one.
 #
 # Lives in the image, not on the laptop path: run_cell.sh still calls freeze_workloads.py
-# directly at step 0 as a fast pre-flight before the ~8 min of setup.
+# directly at step 0 as a fast pre-flight before the cell's setup.
 set -euo pipefail
 
 OUT="${1:?usage: verify_dataset.sh <out-dir>}"
 # `novel` is the no-reuse cache-overhead profile (§3); see benchmarks/README.md.
+# default stays zipfian - three callers rely on it (run_cell.sh, bench_job.sh)
 WORKLOAD_PROFILE="${WORKLOAD_PROFILE:-zipfian}"
 case "$WORKLOAD_PROFILE" in
   zipfian) DEFAULT_MANIFEST=/app/workloads/manifest.json ;;

@@ -37,6 +37,9 @@ METRICS = [
     # arm, never used to void a run - under concentration it is a genuine
     # consequence of the baseline's placement, so gating on it would discard the
     # baseline arm systematically and yield no result.
+    # Not collected for the pre-amendment cells (the dump postdates them):
+    # load_gate reports 0 preemptions there because the file is absent, not
+    # because there were none.
     "vllm:num_preemptions_total",
     # vLLM's own HBM prefix-cache counters - the pair the scarcity gate reads.
     # The lmcache:* hit metrics below are ENGINE-LOCAL (job=vllm-engines) and
@@ -55,15 +58,17 @@ METRICS = [
     "vllm:request_prefill_time_seconds_count",
     "lmcache:num_hit_tokens_total",
     "lmcache:lookup_hit_rate",
-    # request_cache_hit_rate is a HISTOGRAM in this lmcache build (verified on
-    # gapu-2 2026-08-01) - there is no plain gauge under the bare name
+    # request_cache_hit_rate is a HISTOGRAM in this lmcache build - there is no
+    # plain gauge under the bare name
     "lmcache:request_cache_hit_rate_sum",
     "lmcache:request_cache_hit_rate_count",
     # §3 utilization (#35). Every series from here down is READ by
     # utilization.py, whose docstring owns which number comes from where (the
     # process_* pair only ever returns the router). Deliberately not a wider
-    # net: #35 exists because six series were collected for weeks and read by
-    # nothing, and adding more unread ones reproduces the thing it fixed.
+    # net: #35 exists because series were collected and read by nothing, and
+    # adding more unread ones reproduces the thing it fixed.
+    # Rejected candidates: local_storage_usage / remote_cache_usage (flat zero in
+    # this config); cache_config_info (no bytes-per-block figure).
     "lmcache:local_cache_usage",
     "lmcache:active_memory_objs_count",
     "process_cpu_seconds_total",

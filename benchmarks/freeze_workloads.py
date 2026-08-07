@@ -5,16 +5,15 @@ pool_seed=42), replayed as up to 20 seeds x 500 requests (cells replay
 a prefix of that seed list - see run_sweep.sh).
 
 `prefix_tokens=2048` below is the generator's REQUEST, not the result: `_filler`
-emits `approx_tokens * 0.75` words, so the shared prefix is **1544 tokens** and
-the full prompt (ISL) is **1578**, verified against the engine's /tokenize
-endpoint and against `usage.prompt_tokens` on every recorded request. The knob
-keeps its name so the frozen manifest's checksums stay valid; report 1544/1578.
+emits `approx_tokens * 0.75` words, so the tokenized prefix and prompt are both
+shorter than the knob says. The knob keeps its name so the frozen manifest's
+checksums stay valid; the tokenized lengths to quote are in docs/report/report.md.
 
-The JSONL files are
-~6 MB each, so they are NOT committed; what is committed is `workloads/manifest.json`
-holding the exact config + a SHA-256 per seed file. Generation is deterministic,
-so regenerate-and-verify gives bit-identical frozen workloads on any machine - the runner (`run_cell.sh`) calls this before every cell and refuses to measure
-on a mismatch.
+The JSONL files are large, so they are NOT committed; what is committed is
+`workloads/manifest.json` holding the exact config + a SHA-256 per seed file.
+Generation is deterministic, so regenerate-and-verify gives bit-identical frozen
+workloads on any machine - the runner (`run_cell.sh`) calls this before every
+cell and refuses to measure on a mismatch.
 
 Usage:
   python3 freeze_workloads.py                    # generate into workloads/, verify vs manifest
@@ -33,21 +32,19 @@ import sys
 from workload_gen import (NovelWorkloadConfig, WorkloadConfig, dump_jsonl,
                           dump_novel_jsonl, generate_novel, reuse_factor)
 
-# Amended methodology (#3, 2026-08-03, revised after the scarcity gate).
+# Amended methodology (#3), revised after the scarcity gate.
 #
-# The EXPONENT is the binding parameter, not the pool size: at s=1.2 the top
-# ~20 prefixes stay resident however long the tail is (simulated 0.69 even at
-# 256 prefixes). 128 prefixes at s=0.9 predicts ~0.60 under normal load and
-# ~0.52 under kvaware's concentration: enough reuse that routing to the holder
-# is worth something, little enough that placement is a real decision. It also
-# puts the LMCache CPU tier (114k tok = 56 prefixes) and HBM (~50 prefixes) at
-# comparable capacity, so the registry tracks HBM reality instead of drifting.
+# The exponent is the binding parameter, not the pool size - measured
+# falsification in test_freeze_workloads.py's docstring and the report. 128
+# prefixes at s=0.9 is the operating point: enough reuse that routing to the
+# holder is worth something, little enough that placement is a real decision. It
+# also puts the LMCache CPU tier and HBM at comparable capacity, so the registry
+# tracks HBM reality instead of drifting.
 #
-# 20 seeds (raised from 10, 2026-08-04 pre-registration). n=10 returned
-# p=0.0527 on the headline: underpowered, and one reversal is expensive at that
-# size. A seed replay costs ~50 s against ~8 min of fixed setup per CELL, so
-# power here is close to free - cells are the only thing worth cutting to
-# shorten a run (see run_sweep.sh).
+# 20 seeds, raised from 10 by pre-registration (#3): n=10 was underpowered and
+# one reversal is expensive at that size. A seed replay is cheap against the
+# fixed setup cost of a CELL, so power here is close to free - cells are the only
+# thing worth cutting to shorten a run (see run_sweep.sh).
 #
 # The beta-sweep cells replay a 3-seed subset of the SAME files, so there is
 # still exactly one frozen dataset.

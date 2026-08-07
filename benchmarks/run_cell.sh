@@ -22,13 +22,14 @@ CELL="${1:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RATE="${2:?usage: run_cell.sh <cell> <rate> [results-root]}"
 RESULTS_ROOT="${3:-results}"
 
-# Checked here rather than in bench_job.sh so the cell fails in the first second instead of
-# after ~8 minutes of helm upgrade, cold start and warm-up.
+# BENCH_TAG is checked here rather than in bench_job.sh so the cell fails in the first second
+# instead of minutes into helm upgrade, cold start and warm-up.
 : "${BENCH_TAG:?every cell needs BENCH_TAG=<git short SHA of the CI-built bench image>}"
 
 # Which frozen seeds this cell replays. EVERY cell runs the full 20 (run_sweep.sh SEEDS_FULL),
-# curve arms included: n=6 cannot survive a single reversal and n=10 returned p=0.0527.
-# All cells replay the same frozen files, so there is exactly one dataset.
+# curve arms included - smaller n cannot survive a reversal (derivation: benchmarks/README.md,
+# "Statistics (pre-registered)"). All cells replay the same frozen files, so there is exactly
+# one dataset.
 SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,9 +57,10 @@ DCGM_PORT="${DCGM_PORT:-19400}"
 # changing it costs no dataset regeneration and the manifest stays valid.
 #
 # OSL is the main lever on per-request work: it sets decode time, hence in-flight
-# concurrency at a fixed rate (L = lambda*W), hence KV pressure. At 64 the
-# mechanism by which imbalance hurts is dormant (waiting 0, preempt 0, KV
-# 20-27%); raising it is how that mechanism is reached without touching the rate.
+# concurrency at a fixed rate (L = lambda*W), hence KV pressure. At the swept
+# value the mechanism by which imbalance hurts is dormant; raising it is how that
+# mechanism is reached without touching the rate. See benchmarks/README.md, "Why
+# the operating point is rate 16 / OSL 64".
 MAX_TOKENS="${MAX_TOKENS:-64}"
 
 # ---- cell → helm args -------------------------------------------------------
@@ -123,10 +125,10 @@ fi
 # explicitly on loadaware cells and REMOVE it on baselines - the three-way merge
 # preserves out-of-band env across upgrades, so a stale β would otherwise leak
 # between cells.
-# HF_HOME=/tmp/hf must be set on BOTH arms (#21): without it the router blocks
-# its event loop ~0.25 s per request and the comparison is void if only one arm
-# gets it. Mechanism and why it cannot live in values: benchmarks/README.md,
-# "Cluster gotchas".
+# HF_HOME=/tmp/hf must be set on BOTH arms (#21): without it the router blocks its
+# event loop on every request, and the comparison is void if only one arm gets it.
+# Mechanism and why it cannot live in values: benchmarks/README.md, "Cluster
+# gotchas".
 if [ "$ARM" = "loadaware" ]; then
   oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" \
     HF_HOME=/tmp/hf "LOADAWARE_BETA=$BETA"
@@ -160,7 +162,7 @@ else
   esac
 fi
 
-# ---- 4. cold, stale-free start (drain -> router -> engines -> registration) --
+# ---- 4. cold, stale-free start (drain -> router -> engines -> registration, #13)
 # Drain-then-restart, NOT `rollout restart` - a still-live old engine registers
 # instance_ids that outlive it and the stock kvaware router 500s on them.
 # cold_start.sh owns that ordering, the registration wait and the stale-id
@@ -193,8 +195,8 @@ fi
 # ---- 7. collectors ----------------------------------------------------------
 # NOTE: no Prometheus port-forward here. prom_dump uses query_range over a past
 # window, so it only needs Prometheus reachable at DUMP time; a forward held
-# open across the whole cell has ~10 min to die, and under `set -e` it takes the
-# cell and the rest of the sweep with it. Established in step 9 instead, with
+# open across the whole cell has the whole cell to die in, and under `set -e` it
+# takes the cell and the rest of the sweep with it. Established in step 9, with
 # retries. DCGM genuinely needs a live forward because it polls continuously.
 # DCGM is a DaemonSet: forward each pod on its own port, or one node's GPU is lost
 #

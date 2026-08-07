@@ -6,12 +6,11 @@ exists:
     queue-correlated and never treated as independent evidence
   - headline: one-sided exact Wilcoxon signed-rank on the 20 paired per-seed
     differences (candidate - baseline), H1 = candidate is LOWER. Threshold is
-    0.025, Bonferroni-corrected for two co-primaries (TTFT p95 and imbalance);
-    n was raised 6 -> 20 after n=10 returned p=0.0527, pre-registered on #31
+    0.025, Bonferroni-corrected for two co-primaries (TTFT p95 and imbalance)
   - effect size: median relative reduction with a bootstrap 95% CI over the
     paired differences
-  - validity: error requests are excluded from latency stats but counted;
-    a seed with > 1% errors invalidates the run
+  - validity: error requests are excluded from latency stats but counted; see
+    the amended rule 1 beside ALPHA below for what voids a run
 
 stdlib-only, deterministic (bootstrap is seeded).
 
@@ -24,10 +23,9 @@ milliseconds under a column named `itls_ms`, and seed_stats divides by 1000 on
 read, so the `itl_p95` that comes out of here is seconds despite the source
 column's name. The names carry no unit suffix and are the column headers in the
 committed summary CSV, so a reader checking a figure against that CSV has
-nothing but this note to go on. Not
-renamed deliberately: the names are load-bearing in export_summary.py,
-plot_results.py, load_gate.py and the already-committed
-results/summary-per-seed.csv.
+nothing but this note to go on. Not renamed deliberately: the names are
+load-bearing in export_summary.py, plot_results.py, load_gate.py and the
+already-committed results/summary-per-seed.csv.
 
 Usage:
   python3 analyze.py summary  results/<run>...
@@ -40,8 +38,7 @@ Usage:
 It is computed from the same committed driver CSVs as every other statistic
 here, and its objective is swept rather than fixed. See TTFT_SLO_S below; the
 ruling that goodput reports the whole SLO curve rather than one point is in
-docs/report/report.md ("An instrument problem, not a result") and landed in
-a137f5a (#31).
+docs/report/report.md ("An instrument problem, not a result").
 """
 
 from __future__ import annotations
@@ -64,26 +61,20 @@ from typing import Dict, List, Sequence, Tuple
 # future sweep. Guarded by
 # test_analyze.py::test_analyze_module_level_imports_survive_the_bench_image.
 
-# Validity rule 1, AMENDED 2026-08-04 (pre-registered on #3 before the run).
+# Validity rule 1, AMENDED (pre-registered on #3 before the run).
 #
-# The original rule voided a whole run if any single seed exceeded 1% errors.
-# At a rate near the knee that fires on noise - the gate probe measured 0/500 and
-# 4/500 (0.8%) at rate 16 and 0/500 and 5/500 (exactly 1.0%) at rate 18 - so
-# across 63 replays it would discard the run for a cause already shown to be
-# harmless.
+# The original rule voided a whole run if any single seed exceeded MAX_ERROR_RATE.
+# An error floor that is ARM-INDEPENDENT cannot bias a paired comparison, and
+# rule 1 exists to prevent bias - so a flat floor is reported, not fatal. What
+# voids a comparison is errors DIFFERING between the arms: ratio >
+# ERROR_BIAS_RATIO AND absolute gap > ERROR_BIAS_ABS. A single seed above
+# HARD_ERROR_RATE still voids on its own. The evidence behind the amendment is
+# in benchmarks/README.md ("Validity rules").
 #
-# The 500s are ARM-INDEPENDENT: they appear in every arm including roundrobin,
-# which never touches the KV registry, and 16/16 captured tracebacks are
-# `aiohttp ServerDisconnectedError` raised AFTER the routing decision had already
-# succeeded. An error floor that hits both arms equally is noise, not bias, and
-# rule 1 exists to prevent bias.
-#
-# So: a flat floor is reported, not fatal. What voids a comparison is errors
-# DIFFERING between the arms, which is the thing that could actually distort it.
-# The pre-registered threshold (#31 rev 2): 0.025, Bonferroni over the two
-# co-primaries (TTFT p95 and imbalance). It is a constant so the verdict line
-# and this file's docstring can never disagree: a p between 0.025 and 0.05 is
-# null under the pre-registration and must never print "significant".
+# ALPHA is the pre-registered threshold, Bonferroni over the two co-primaries
+# (TTFT p95 and imbalance). It is a constant so the verdict line and this file's
+# docstring can never disagree: a p between ALPHA and 0.05 is null under the
+# pre-registration and must never print "significant".
 ALPHA = 0.025
 
 MAX_ERROR_RATE = 0.01       # reporting threshold - flags a seed, does not void
@@ -94,11 +85,9 @@ ERROR_BIAS_ABS = 0.01       # ...or by more than 1 percentage point absolute
 # The default TTFT service-level objective behind `ttft_slo_miss`, in SECONDS.
 #
 # A DEFAULT, NOT A FIXED THRESHOLD. This is the tunable parameter of the metric
-# (§4), overridable per invocation with `compare --slo`. The reported result
-# does not rest on it: fig12 sweeps 50-400 ms and the arms separate across that
-# whole range, so no single value is load-bearing. 0.150 is the midpoint of the
-# separation, not a service requirement. A report quoting one objective must
-# quote the sweep beside it - see benchmarks/README.md ("Goodput").
+# (§4), overridable per invocation with `compare --slo`. No single value is
+# load-bearing: fig12 sweeps the objective, and a report quoting one objective
+# must quote the sweep beside it - see benchmarks/README.md ("Goodput").
 #
 # Deliberately absent from export_summary.py's committed per-seed table: that CSV
 # is the evidence a reader checks the report against, and baking one objective
@@ -127,10 +116,6 @@ def goodput(ttfts: Sequence[float], sent: int, slo: float) -> float:
     seed_stats excludes them and counts them separately. It is deliberate:
     percentiles describe the service that was delivered, goodput describes the
     service that was promised.
-
-    Error rates on the committed runs are 0.2-0.5%, so the two denominators move
-    the number by well under a point. The choice matters for what happens if a
-    future arm fails a lot, not for the runs analysed so far.
     """
     if not sent:
         return float("nan")
@@ -197,9 +182,8 @@ def seed_stats(csv_path: str, slo: float = TTFT_SLO_S) -> Dict:
     }
     for name, xs in (("ttft", ttft), ("e2e", e2e), ("itl", itl)):
         s[f"{name}_mean"] = sum(xs) / len(xs) if xs else float("nan")
-        # p90 as well as p95: the policy shifts the whole TTFT body, while p95
-        # over 500 samples is dominated by bursty engine stalls that have
-        # nothing to do with routing.
+        # p90 as well as p95 - which percentile carries the effect, and why, is
+        # in docs/report/report.md.
         for p in (50, 90, 95, 99):
             s[f"{name}_p{p}"] = percentile(xs, p)
     return s
@@ -249,7 +233,7 @@ def per_seed_imbalance(run_dir: str) -> Dict[int, float]:
     The parse lives in utilization.read_series, which also drops the router's
     re-export of this metric: the router publishes one series per backend under a
     shared `instance`, which merges both engines into a synthetic third series
-    and corrupts the max/min.
+    and corrupts the max/min. Do not re-inline the filter here.
     """
     # Deliberately function-level: see the NOTE beside this module's imports.
     # utilization.py is not in the bench image, and analyze.py is.
