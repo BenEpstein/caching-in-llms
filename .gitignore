@@ -24,6 +24,12 @@ docs/handoff-*.md
 /CONTEXT.md
 /CHANGELOG.md
 CLAUDE.local.md
+# Agent session worktrees are nested git checkouts, hundreds of MB. Already invisible to a
+# clone (nothing here is tracked), but only THIS clone ignores them, via .git/info/exclude -
+# which never travels. Without this line a second collaborator's `git add -A` tries to commit
+# them. Deliberately narrow: `.claude/` itself stays trackable in case shared project config
+# ever lands there.
+.claude/worktrees/
 __pycache__/
 .hypothesis/
 .pytest_cache/
