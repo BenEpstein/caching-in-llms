@@ -610,7 +610,3 @@ def test_the_cli_accepts_every_routing_logic_value():
     assert set(routing_logic_choices()) == {
         member.value for member in routing_logic.RoutingLogic
     }
-
-
-def test_loadaware_is_selectable_from_the_command_line():
-    assert "loadaware" in routing_logic_choices()

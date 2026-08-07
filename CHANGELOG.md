@@ -8,6 +8,37 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-07 - test-suite audit (#60) and upstream-PR re-scope (#10)
+
+### Changed
+- **Test suite 196 → 190** (#60). Deleted four redundant tests: `test_classification_is_pure_and_repeatable`
+  (3 params, asserted `f(x) == f(x)` on a pure function), `test_substring_test_would_have_failed_here`
+  (asserted a property of its own fixture string, plus a repeat of the test above it),
+  `test_loadaware_is_selectable_from_the_command_line` (implied by the set-equality test beside it),
+  and `test_list_position_equals_seed_number_after_the_fix` (same fixture and assertion as
+  `test_read_run_orders_numerically_not_lexicographically`, whose docstring absorbed it).
+  No coverage lost. `pytest benchmarks/ tests/ -q` and `scripts/reproduce.sh` both green.
+
+### Decided
+- **The benchmark suite is correctly sized; #60's premise does not hold.** All 11 files were read
+  test by test. Almost every test names a specific defect this project shipped, so only 6 of 196
+  were removable. `tests/` (66) serves §4's "unit tests covering your new policy" and scores
+  Correctness (40%); `benchmarks/` (130) tests the measurement harness and serves §3 + §5,
+  scoring Reproducibility (30%) and protecting Performance Gain (15%). Evidence: the ticket's own
+  three delete leads were each checked and none held - no tests reference the dead driver flags,
+  the three `job=vllm-engines` parses are still three separate implementations (they only become
+  duplicates once #55 consolidates them), and no test is pinned to a `results/` run dir.
+- **Upstream PR 2 is re-scoped from the Lookup Extension to the `loadaware` Placement Policy** (#10).
+  The prior deferral stands: [LMCache#4025](https://github.com/LMCache/LMCache/issues/4025) marks
+  v1 `cache_controller` for non-MP deprecation, so `tests/v1/cache_controller/` is a dying target.
+  `src/vllm_router/routers/routing_logic.py` is alive upstream (six `RoutingLogic` members), its CI
+  is `ubuntu-latest` + `uv run pytest` with no GPU, and `src/tests/test_prefixaware_router.py` is a
+  ready template. #10 now carries a 7-step DoD that simulates their CI locally before opening the PR.
+- **Upstream test conventions stay out of this repo.** Our `tests/conftest.py` stubs the `lmcache`
+  and `vllm_router` import surface so the suite runs with no cluster and no GPU; upstream CI has the
+  real packages. Porting to their layout is work for the fork, at PR time. #10 is opportunistic and
+  gates no graded deliverable, so rewriting our suite for it would spend 70% of the grade to chase 0%.
+
 ## 2026-08-06 (goodput promoted) - `ttft_slo_miss` is a reported secondary, not exploratory
 
 ### Decided

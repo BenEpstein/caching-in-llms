@@ -215,16 +215,13 @@ def test_seed_id_parses_the_number_not_the_position():
 
 
 def test_read_run_orders_numerically_not_lexicographically(tmp_path):
-    """sorted(glob) gives 1,10,11..19,2,20,3..9 - the trap that caused the bug."""
+    """sorted(glob) gives 1,10,11..19,2,20,3..9 - the trap that caused the bug.
+
+    Equivalently: list position equals seed number, which is the invariant the
+    printed and plotted labels relied on and only assumed.
+    """
     d = _run_dir(tmp_path, "cell", range(1, 21))
     assert [s["seed"] for s in read_run(d)] == list(range(1, 21))
-
-
-def test_list_position_equals_seed_number_after_the_fix(tmp_path):
-    """The invariant the labels relied on, now actually true rather than assumed."""
-    d = _run_dir(tmp_path, "cell", range(1, 21))
-    for i, s in enumerate(read_run(d), start=1):
-        assert s["seed"] == i, f"position {i} carries seed {s['seed']}"
 
 
 def test_seed_stats_carries_its_seed(tmp_path):
