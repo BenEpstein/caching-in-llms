@@ -9,11 +9,11 @@ In a distributed KV cache, **placement is the cache policy**: the router decides
 instance's cache is even eligible to hit, so it sets the fleet's effective hit rate.
 
 And the lever is large. Round-robin placement against the same cache is **better balanced**
-than the cache-aware baseline — imbalance 1.72 against `kvaware`'s 2.68 — and still an order of
+than the cache-aware baseline - imbalance 1.49 against `kvaware`'s 2.36 - and still an order of
 magnitude slower, because it equalises request *counts*, not *work*: a request sent to the
 engine that does not hold its prefix pays a full prefill. Balanced counts, ruined locality.
 That is why load-awareness has to be added **on top of** cache-awareness rather than
-substituted for it. (`results/20260804-191644-roundrobin`, n=3, offered rate 16 — a descriptive
+substituted for it. (`results/20260806-144135-roundrobin`, n=20, offered rate 16 - a descriptive
 cell, not a hypothesis test.)
 
 ```
@@ -35,25 +35,24 @@ latency numbers.
 
 | Co-primary | Status |
 |---|---|
-| **Load imbalance** | **Settled.** `loadaware` β=0.5 cuts imbalance **43.7%** vs `kvaware`, **20 of 20 seeds**, p < 0.0001 |
-| **TTFT p95** | **Not settled — final measurement pending.** See the note below |
+| **Load imbalance** | **Settled.** `loadaware` β=0.5 cuts imbalance **48.1%** vs `kvaware` (CI [37.7%, 56.3%]), **18 of 20 seeds**, p < 0.0001 |
+| **TTFT p95** | **Settled as a null.** 2.7% median reduction, CI [−4.3%, 15.4%], p = 0.115 - no latency effect at this operating point |
 
-The ablation is what makes the mechanism credible: **β=0 lands on the baseline** (imbalance
-2.647 vs 2.630, and null on latency too), while β=0.5 sits at 1.262. The load term is the
-entire mechanism — the routing rewrite on its own does nothing. That was pre-declared
-falsifiable before the comparator ran.
+The ablation is what makes the mechanism credible: **β=0 does not move imbalance** (2.662
+against the baseline's 2.358 - if anything slightly worse, p = 0.9734), while β=0.5 sits at
+1.249. The load term is the entire mechanism - the routing rewrite on its own does nothing.
+That was pre-declared falsifiable before the comparator ran.
 
-> **Latency is deliberately unresolved here.** The pre-registered TTFT test was measured from a
-> laptop, and 45–59% of that number turned out to be laptop-to-cluster network, with a per-cell
-> offset larger than the effect. Rather than switch to the engine-side metric that happens to
-> look better — chosen *after* seeing the null, so exploratory by construction — the instrument
-> was fixed: the driver now runs in-cluster, and the originally pre-registered test is being
-> re-run unchanged ([#31](https://github.com/BenEpstein/caching-in-llms/issues/31)). This
-> section gets its final numbers from that run.
+> **The latency null is the pre-registered result, not a fallback.** The original TTFT test was
+> measured from a laptop, and 45–59% of that number turned out to be laptop-to-cluster network,
+> with a per-cell offset larger than the effect. Rather than switch to the engine-side metric
+> that happens to look better - chosen *after* seeing the null, so exploratory by construction - > the instrument was fixed: the driver moved in-cluster and the originally pre-registered test
+> was re-run unchanged ([#31](https://github.com/BenEpstein/caching-in-llms/issues/31)). It came
+> back null. Goodput against a 150 ms SLO, a reported secondary, does move: **19.0% fewer misses**
+> (CI [10.7%, 22.1%], p = 0.002).
 
-Provenance: `results/20260805-005210-kvaware`, `results/20260805-011148-loadaware-b0`,
-`results/20260805-013208-loadaware-b0.5`. Every number above is recomputable with no cluster —
-see [Verify without a cluster](#verify-without-a-cluster).
+Provenance: `results/20260805-230541-kvaware`, `results/20260806-002645-loadaware-b0`,
+`results/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster - see [Verify without a cluster](#verify-without-a-cluster).
 
 ## What we changed upstream
 
@@ -135,10 +134,13 @@ cached fraction, α was a redundant scale factor and only β sets the trade-off.
 Every figure and both statistical tests are recomputable from committed artifacts:
 
 ```bash
-python3 benchmarks/export_summary.py results/20260805-* --out /tmp/summary.csv
-python3 benchmarks/analyze.py compare results/20260805-013208-loadaware-b0.5 \
-                                      results/20260805-005210-kvaware
-python3 benchmarks/plot_results.py results/20260805-0* --cand loadaware-b0.5 --out /tmp/figures
+./scripts/reproduce.sh   # all of the below, diffed against the committed baselines
+
+python3 benchmarks/export_summary.py results/2026080[56]-* --out /tmp/summary.csv
+python3 benchmarks/analyze.py compare results/20260805-232541-loadaware-b0.5 \
+                                      results/20260805-230541-kvaware
+python3 benchmarks/plot_results.py results/20260805-2* results/20260806-0* \
+  --comparator results/20260806-144135-roundrobin --cand loadaware-b0.5 --out /tmp/figures
 ```
 
 `analyze.py compare` **refuses** to pair two runs whose `run.json` records a different rate or
