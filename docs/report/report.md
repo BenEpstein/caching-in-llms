@@ -483,12 +483,29 @@ and no GPU.
 | `loadaware` β = 2.0 | `results/20260806-000626-loadaware-b2.0` | 16 | 20 |
 | `roundrobin` (comparator) | `results/20260806-144135-roundrobin` | 16 | 20 |
 
-These six cells are the whole evidence base: every number and figure in this report comes from
-one of them, and `scripts/reproduce.sh` regenerates all of it from exactly these directories.
-Earlier sweeps - the pre-normalization policy with an absolute-load α term, and every cell
-driven from a laptop across the wide-area network - are **not** in the working tree. They are
-superseded rather than comparable, and they remain in git history if the design trail is
-wanted.
+These six cells are the evidence base for every **reported** number and figure, and
+`scripts/reproduce.sh` regenerates all of it from exactly these directories.
+
+The superseded **WAN sweep** is kept alongside them, because *An instrument problem, not a
+result* is an argument about measurement and the measurement is its evidence:
+
+| Arm | Run directory | Rate | Seeds |
+|---|---|---|---|
+| `kvaware` | `results/20260805-005210-kvaware` | 16 | 20 |
+| `loadaware` β = 0 | `results/20260805-011148-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.5 | `results/20260805-013208-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 | `results/20260805-015202-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `results/20260805-021215-loadaware-b2.0` | 16 | 20 |
+
+Same arms, same frozen workload, same offered rate - driven from a laptop over the public
+internet instead of from inside the cluster. They are **not results**, and they are deliberately
+excluded from `results/summary-per-seed.csv` so that one table means one instrument. They get
+their own full figure set (`docs/figures-wan/`), regenerated and diffed by `reproduce.sh` on
+every run, so the instrument argument is as reproducible as the results it justifies.
+
+Earlier generations still - the 2026-08-03 characterization sweeps at 7.5-16 req/s and the
+2026-08-04 absolute-β cells, which used the pre-normalization policy with an α term - are in git
+history rather than the working tree. `results/README.md` indexes what is here and what is not.
 
 Each run directory contains the per-request driver CSVs, the Prometheus scrapes, `dcgm.csv`,
 and a `run.json` recording the arm, β, rate, workload profile, router image and image ID, git
