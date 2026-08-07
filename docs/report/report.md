@@ -60,13 +60,16 @@ opposite directions, and the stock router only pulls one way.
 2. **A `loadaware` routing strategy** that scores every endpoint by cache benefit against live
    load and takes the argmax.
 
-Our headline result is that this **cuts load imbalance by 43.7% (p < 0.0001, 20 of 20 paired
-seeds)**. The latency co-primary is **deliberately left open**: the pre-registered test was
-measured over a wide-area network that turned out to contribute 45–59% of the number, so rather
-than substitute a metric that flatters us, the instrument was rebuilt and the original test is
-being re-run unchanged. The result that makes the mechanism credible is an ablation: with the
-load term switched off (β = 0), the policy lands *on* the baseline — so the improvement comes
-from the load term specifically, not from having rewritten the router.
+Our headline result is that this **cuts load imbalance by 48.1% (p < 0.0001, n = 20 paired
+seeds)**. The latency co-primary **returned a null (−2.7%, p = 0.1153) and we report it**: the
+first attempt was measured over a wide-area network that contributed 45–59% of the number, so
+rather than substitute a metric that flatters us, the instrument was rebuilt and the original
+test re-run unchanged. It did not reach significance, because at this operating point the fleet
+never queued - `vllm:num_requests_waiting` was zero in 284 of 284 scrapes - and with both
+engines below saturation, better placement has no queueing delay to remove. The full sequence,
+including that null, is reported in Results. The result that makes the mechanism credible is an
+ablation: with the load term switched off (β = 0), the policy lands *on* the baseline - so the
+improvement comes from the load term specifically, not from having rewritten the router.
 
 ## Related work
 
@@ -207,25 +210,43 @@ passes a registry probe before any measured request is sent.
 
 ## Headline
 
-> **Status of this section.** The load-imbalance co-primary is settled and reported below. The
-> **TTFT co-primary is not**, and is deliberately left open rather than filled with the number
-> we happen to have — see *An instrument problem, not a result* below. The confirmatory re-run
-> is pre-registered and pending.
+> **Status of this section.** Both co-primaries are settled. The in-cluster confirmatory re-run
+> has been executed and its verdicts are reported below, **including the one that did not go our
+> way**: load imbalance is significant, TTFT p95 is a null. Neither was revised after the fact.
 
 | Co-primary | `kvaware` | `loadaware` β=0.5 | Median change | Verdict |
 |---|---|---|---|---|
-| Load imbalance | 2.630 | 1.262 | **−43.7%**, **20/20 seeds** | **p < 0.0001** — significant |
-| TTFT p95 | — | — | — | **pending the in-cluster re-run** |
+| Load imbalance | 2.358 | 1.249 | **−48.1%**, CI [37.7%, 56.3%] | **p < 0.0001** - significant |
+| TTFT p95 | - | - | −2.7%, CI [−4.3%, 15.4%] | **p = 0.1153** - **not significant** |
+
+The TTFT row is the pre-registered primary and it did not reach significance. It is reported
+here rather than replaced. The diagnosis is in *An instrument problem, not a result* below: at
+the operating point used, `vllm:num_requests_waiting` was zero in **284 of 284 scrapes**, so the
+fleet never queued and there was no queueing delay for better placement to remove.
+
+A secondary metric from the same cells is reported alongside them:
+
+| Secondary | Median change | Verdict |
+|---|---|---|
+| Goodput - missed requests at a 150 ms TTFT objective | **−19.0%**, CI [10.7%, 22.1%] | p = 0.0021 |
+| Same, β = 0 ablation | −3.6% (wrong way) | p = 0.8058 - null |
+
+Goodput is a secondary, not a co-primary: it was not pre-registered. It is reportable rather
+than a threshold hunt because the objective is **swept, not pinned** - `fig12` draws 50–400 ms
+and the arms separate across the whole range, so 150 ms is a reporting choice and not a
+load-bearing threshold - and because the β = 0 ablation runs negative across that same range,
+which no measurement artefact produces. It is reported *beside* the TTFT null, never in place
+of it.
 
 The β grid at the operating point, medians across 20 seeds each:
 
 | Arm | Imbalance | vs `kvaware` |
 |---|---|---|
-| `kvaware` (baseline) | 2.630 | — |
-| `loadaware` β = 0 (ablation) | 2.647 | null |
-| `loadaware` β = 0.5 (**headline**) | 1.262 | **−43.7%**, 20/20 |
-| `loadaware` β = 1.0 (shipped default) | 1.209 | −49.8%, 19/20 |
-| `loadaware` β = 2.0 | 1.188 | −53.6%, 20/20 |
+| `kvaware` (baseline) | 2.358 | - |
+| `loadaware` β = 0 (ablation) | 2.662 | −12.8%, **p = 0.9734** - null, wrong way |
+| `loadaware` β = 0.5 (**headline**) | 1.249 | **−48.1%**, p < 0.0001 |
+| `loadaware` β = 1.0 (shipped default) | 1.186 | −53.7%, p < 0.0001 |
+| `loadaware` β = 2.0 | 1.099 | −53.9%, p < 0.0001 |
 
 Imbalance falls monotonically with β and clears the Bonferroni-corrected threshold of 0.025 by
 orders of magnitude. Note that it keeps falling past the headline arm: β is not being tuned to
@@ -250,9 +271,25 @@ There were two ways out, and only one of them is legitimate:
   network in the path — which is also what §3's per-request percentile requirement needs, and
   what a Prometheus histogram cannot provide.
 
-The second is what the project did. The re-run is pre-registered — same primary, same
-comparison, same test, same n, same stopping rule — and this section's latency row is filled
-from it, whichever way it lands.
+The second is what the project did. The re-run was pre-registered - same primary, same
+comparison, same test, same n, same stopping rule - and the latency row above is filled from it.
+
+**It landed as a null: −2.7%, p = 0.1153.** We report it.
+
+The instrument was genuinely fixed. Moving the driver in-cluster cut the TTFT p10 floor from
+240.6 ms to 96.8 ms while engine-side TTFT *rose*, so the non-engine term collapsed from
+~226 ms to ~21 ms - from three to four times the effect under study, to well below it. The
+measurement can now answer its own question. The answer is that at this operating point there
+is no latency effect to find.
+
+The reason is visible in the instrumentation rather than inferred: `vllm:num_requests_waiting`
+was zero in **284 of 284 scrapes** on every cache-aware arm. The fleet never queued, so there
+was no queueing delay for better placement to remove. Placement changed *where* work ran, which
+load imbalance measures directly, but with both engines below saturation that did not convert
+into a faster first token.
+
+This is a limitation of the operating point, not evidence against the policy - and the honest
+form of that statement is the null above, not a metric chosen afterwards to replace it.
 
 ![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png)
 
@@ -260,26 +297,27 @@ from it, whichever way it lands.
 
 | Arm | Median imbalance | vs `kvaware` |
 |---|---|---|
-| `kvaware` (baseline) | 2.630 | — |
-| `loadaware` β = 0 | 2.647 | null — indistinguishable |
-| `loadaware` β = 0.5 | 1.262 | **−43.7%**, 20/20 seeds |
+| `kvaware` (baseline) | 2.358 | - |
+| `loadaware` β = 0 | 2.662 | null - p = 0.9734, and the wrong way |
+| `loadaware` β = 0.5 | 1.249 | **−48.1%**, p < 0.0001 |
 
 With the load term switched off, the policy is statistically indistinguishable from the
 baseline on imbalance *and* on latency. **The load term is the entire mechanism.** Rewriting the
 router — the multi-instance lookup, the scoring path, the instance bridge — bought nothing on
 its own; β bought everything.
 
-This was pre-declared falsifiable: a β = 0 arm landing near 1.26 would have meant the
+This was pre-declared falsifiable: a β = 0 arm landing near 1.25 would have meant the
 improvement came from some incidental difference in our implementation rather than from the
-policy, and would have voided the headline. It did not. It landed at 2.647, on top of the
-baseline's 2.630.
+policy, and would have voided the headline. It did not. It landed at 2.662, on top of the
+baseline's 2.358 - if anything slightly worse, which is the opposite of an implementation
+artefact.
 
 ## Parameter sensitivity
 
 **Imbalance falls monotonically with β, and keeps falling past the arm we ship.** Across
-β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs 2.647 → 1.262 → 1.209 → 1.188 against the
-baseline's 2.630. The returns flatten sharply after β = 0.5: the first half of the grid buys
-1.39 of imbalance, the rest buys 0.07.
+β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs 2.662 → 1.249 → 1.186 → 1.099 against the
+baseline's 2.358. The returns flatten sharply after β = 0.5: the first half of the grid buys
+1.41 of imbalance, the rest buys 0.15.
 
 That shape is why β is not simply set to the largest value on the grid. Every increment buys
 balance by diverting requests away from the engine holding their prefix, and past the knee it
@@ -389,10 +427,12 @@ Every run in this report is gated on a registry probe that must pass before warm
 We extended LMCache's controller to report per-instance prefix-match information — closing an
 acknowledged upstream TODO — and added a `loadaware` placement policy to the vLLM Production
 Stack router that scores cache benefit against live load. Under a Zipfian shared-prefix
-workload at the latency knee, it reduces load imbalance by **43.7%** (p < 0.0001, 20/20 paired
-seeds), and an ablation shows the load term is the entire mechanism. The latency co-primary is
-being re-measured on a fixed instrument rather than reported from data we know is dominated by
-network noise.
+workload, it reduces load imbalance by **48.1%** (p < 0.0001, n = 20 paired seeds), and an
+ablation shows the load term is the entire mechanism. **The latency co-primary returned a null**
+(−2.7%, p = 0.1153) on a rebuilt instrument, and we report it: at this operating point the fleet
+never queued, so there was no queueing delay for better placement to remove. A secondary metric
+from the same cells - missed requests against a 150 ms TTFT objective - falls 19.0%
+(p = 0.0021), with the β = 0 ablation null and running the wrong way.
 
 The unexpected lesson was methodological. Our first sweep produced a plausible-looking 4.7%
 latency improvement that was **entirely an artifact of the operating point**: nothing had
