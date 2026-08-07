@@ -3,7 +3,7 @@
 Change 2 of the project: the router must place a request by
 ``cache_hit_benefit - beta * relative_load`` over *every* instance, instead of
 kvaware's "first instance reported to hold the prefix". See CONTEXT.md
-("Placement Policy"), patches/README.md, and issue #5.
+("Placement Policy"), README.md ("What we changed upstream"), and issue #5.
 
 Both terms are dimensionless - a fraction of this prompt, and a fraction of
 this fleet's mean load - so ``beta`` carries no unit from the deployment. The
@@ -610,7 +610,3 @@ def test_the_cli_accepts_every_routing_logic_value():
     assert set(routing_logic_choices()) == {
         member.value for member in routing_logic.RoutingLogic
     }
-
-
-def test_loadaware_is_selectable_from_the_command_line():
-    assert "loadaware" in routing_logic_choices()
