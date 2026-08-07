@@ -9,8 +9,8 @@ In a distributed KV cache, **placement is the cache policy**: the router decides
 instance's cache is even eligible to hit, so it sets the fleet's effective hit rate.
 
 And the lever is large. Round-robin placement against the same cache is **better balanced**
-than the cache-aware baseline - imbalance 1.49 against `kvaware`'s 2.36 - and still an order of
-magnitude slower, because it equalises request *counts*, not *work*: a request sent to the
+than the cache-aware baseline - imbalance 1.49 against `kvaware`'s 2.36 - and still **34×**
+slower, because it equalises request *counts*, not *work*: a request sent to the
 engine that does not hold its prefix pays a full prefill. Balanced counts, ruined locality.
 That is why load-awareness has to be added **on top of** cache-awareness rather than
 substituted for it. (`results/20260806-144135-roundrobin`, n=20, offered rate 16 - a descriptive
@@ -46,13 +46,15 @@ That was pre-declared falsifiable before the comparator ran.
 > **The latency null is the pre-registered result, not a fallback.** The original TTFT test was
 > measured from a laptop, and 45–59% of that number turned out to be laptop-to-cluster network,
 > with a per-cell offset larger than the effect. Rather than switch to the engine-side metric
-> that happens to look better - chosen *after* seeing the null, so exploratory by construction - > the instrument was fixed: the driver moved in-cluster and the originally pre-registered test
+> that happens to look better - chosen *after* seeing the null, so exploratory by construction -
+> the instrument was fixed: the driver moved in-cluster and the originally pre-registered test
 > was re-run unchanged ([#31](https://github.com/BenEpstein/caching-in-llms/issues/31)). It came
 > back null. Goodput against a 150 ms SLO, a reported secondary, does move: **19.0% fewer misses**
 > (CI [10.7%, 22.1%], p = 0.002).
 
 Provenance: `results/20260805-230541-kvaware`, `results/20260806-002645-loadaware-b0`,
-`results/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster - see [Verify without a cluster](#verify-without-a-cluster).
+`results/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster -
+see [Verify without a cluster](#verify-without-a-cluster).
 
 ## What we changed upstream
 
@@ -136,7 +138,7 @@ Every figure and both statistical tests are recomputable from committed artifact
 ```bash
 ./scripts/reproduce.sh   # all of the below, diffed against the committed baselines
 
-python3 benchmarks/export_summary.py results/2026080[56]-* --out /tmp/summary.csv
+python3 benchmarks/export_summary.py results/20260805-2* results/20260806-* --out /tmp/summary.csv
 python3 benchmarks/analyze.py compare results/20260805-232541-loadaware-b0.5 \
                                       results/20260805-230541-kvaware
 python3 benchmarks/plot_results.py results/20260805-2* results/20260806-0* \

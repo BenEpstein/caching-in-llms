@@ -144,18 +144,13 @@ if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
 else fail "expected at least 12 figures, got $nfigs"; fi
 
 echo "==> 6/6 the WAN generation regenerates its own figure set"
-# The superseded laptop-driven cells are kept as the evidence behind the report's instrument
-# section, so they get the same treatment as the reported cells rather than sitting unchecked:
-# a full figure set of their own, diffed against a committed baseline. Data that no check
-# regenerates is data that rots silently. No --comparator: the WAN sweep has no roundrobin cell,
-# and fig12 simply omits that curve.
-: "${WAN_BASELINE:=results/20260805-005210-kvaware}"
-: "${WAN_ABLATION:=results/20260805-011148-loadaware-b0}"
-: "${WAN_HEADLINE:=results/20260805-013208-loadaware-b0.5}"
-: "${WAN_BETA1:=results/20260805-015202-loadaware-b1.0}"
-: "${WAN_BETA2:=results/20260805-021215-loadaware-b2.0}"
-python3 "$BENCH/plot_results.py" "$ROOT/$WAN_BASELINE" "$ROOT/$WAN_ABLATION" \
-  "$ROOT/$WAN_HEADLINE" "$ROOT/$WAN_BETA1" "$ROOT/$WAN_BETA2" \
+# Data that no check regenerates is data that rots silently, and these five back a report
+# section. Not overridable like the cells above: this generation is frozen, so there is nothing
+# to repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
+python3 "$BENCH/plot_results.py" \
+  "$ROOT/results/20260805-005210-kvaware" "$ROOT/results/20260805-011148-loadaware-b0" \
+  "$ROOT/results/20260805-013208-loadaware-b0.5" "$ROOT/results/20260805-015202-loadaware-b1.0" \
+  "$ROOT/results/20260805-021215-loadaware-b2.0" \
   --cand "loadaware-b0.5" --out "$WORK/figs-wan" --dump-data "$WORK/figdata-wan.json" >/dev/null
 check "$WORK/figdata-wan.json" "$EXPECTED/figure-data-wan.json" "WAN figure data"
 nwan=$(ls "$WORK/figs-wan" | wc -l | tr -d ' ')

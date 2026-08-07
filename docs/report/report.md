@@ -38,7 +38,8 @@ produced entirely by the routing decision - with a vLLM prefix-cache hit rate of
 against 0.912.
 
 The instructive part is *why*, and it is not that round-robin balances badly. **Round-robin is
-better balanced than the cache-aware baseline** - imbalance 1.490 against `kvaware`'s 2.358 - and still 34× slower. It equalises request *counts*, not *work*: a request sent to the engine
+better balanced than the cache-aware baseline** - imbalance 1.490 against `kvaware`'s 2.358 -
+and still 34× slower. It equalises request *counts*, not *work*: a request sent to the engine
 that does not hold its prefix pays a full 2048-token prefill. Balanced counts, ruined locality.
 
 That is the argument of this project in one comparison. Load-awareness has to be added **on top
@@ -277,7 +278,7 @@ comparison, same test, same n, same stopping rule - and the latency row above is
 
 The instrument was genuinely fixed. Moving the driver in-cluster cut the TTFT p10 floor from
 240.6 ms to 96.8 ms while engine-side TTFT *rose*, so the non-engine term collapsed from
-~226 ms to ~21 ms - from three to four times the effect under study, to well below it. The
+~226 ms to ~21 ms - from three to four times the effect under study, to well below it.[^wan] The
 measurement can now answer its own question. The answer is that at this operating point there
 is no latency effect to find.
 
@@ -289,6 +290,12 @@ into a faster first token.
 
 This is a limitation of the operating point, not evidence against the policy - and the honest
 form of that statement is the null above, not a metric chosen afterwards to replace it.
+
+[^wan]: These two figures are the one exception to "every number here regenerates from committed
+data". They were measured on the 2026-08-04 cells, which were pruned from the working tree and
+are in git history. The retained WAN sweep supports the same argument on committed data: p10
+157.4 → 101.9 ms, non-engine term 124.6 → 48.5 ms, and the 45–59% share above. See
+`results/README.md`.
 
 ![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png)
 
@@ -500,8 +507,10 @@ result* is an argument about measurement and the measurement is its evidence:
 Same arms, same frozen workload, same offered rate - driven from a laptop over the public
 internet instead of from inside the cluster. They are **not results**, and they are deliberately
 excluded from `results/summary-per-seed.csv` so that one table means one instrument. They get
-their own full figure set (`docs/figures-wan/`), regenerated and diffed by `reproduce.sh` on
-every run, so the instrument argument is as reproducible as the results it justifies.
+their own full figure set (`docs/figures-wan/`), whose underlying series `reproduce.sh`
+regenerates and diffs on every run, so the instrument argument is as reproducible as the results
+it justifies. As everywhere else here, the check is on the numbers behind the figures, not on
+the PNG bytes.
 
 Earlier generations still - the 2026-08-03 characterization sweeps at 7.5-16 req/s and the
 2026-08-04 absolute-β cells, which used the pre-normalization policy with an α term - are in git

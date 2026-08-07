@@ -49,8 +49,8 @@ RELATIVE imbalance, which is what the policy acts on and the quantity §5
 should report.
 
 Usage:
-  python3 load_gate.py results/probe/<ts>-kvaware [...]
-  python3 load_gate.py results/probe/*
+  python3 load_gate.py results/20260805-230541-kvaware [...]
+  python3 load_gate.py results/20260805-2*
 """
 
 from __future__ import annotations
