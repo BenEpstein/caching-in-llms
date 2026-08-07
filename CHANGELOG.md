@@ -8,6 +8,26 @@ with a pointer to the evidence — those matter as much as code.
 
 ## [Unreleased]
 
+## 2026-08-07 (upstream conformance, #65) - the real pinned packages now test the patch
+
+### Added
+- **`conformance/test_lmcache_conformance.py`** (19 tests, CI-only): installs the real
+  `lmcache==0.3.9.post2` and proves the offline doubles faithful - message fields (read from
+  `tests/conftest.py` by AST parse, names *and* positional order), the
+  `ChunkedTokenDatabase.process_tokens` contract `PrefixHashTokenDatabase` reimplements, and
+  the patched `kv_controller.py` imported and exercised with zero stubs.
+- **`.github/workflows/upstream-conformance.yml`**: one path-gated ubuntu job - production-stack
+  checked out at `37bafbcf5` (the exact commit in the measured router image tag), upstream's own
+  `src/tests` run unmodified (baseline), rerun with our two patched files overlaid (must not
+  change), then the conformance suite. CPU torch pinned first so the GPU-less runner skips the
+  multi-GB CUDA wheels.
+
+### Fixed
+- Nothing found: baseline 45/45 green, patched 45/45 green, conformance 19/19 green - the
+  fakes were faithful. The `tests/conftest.py` provenance header ("read from the running pod")
+  is now a tested claim, not a trusted one. The 196 offline tests are byte-untouched and
+  `scripts/reproduce.sh` still exits 0 with no new local dependency.
+
 ## 2026-08-07 (docs consolidation) - seven docs deleted, five graded documents survive
 
 ### Decided
