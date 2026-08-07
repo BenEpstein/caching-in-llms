@@ -14,7 +14,7 @@ workload at fixed load.
 |---|---|
 | `workload_gen.py` | Zipfian prefix workload generator (pure, seeded, unit-tested) |
 | `freeze_workloads.py` | Materialize + verify the frozen seed files against their manifest (`--profile zipfian` or `novel`) |
-| `load_driver.py` | Async open-loop (Poisson) / closed-loop driver; per-request CSV; streaming TTFT |
+| `load_driver.py` | Async open-loop (Poisson) driver; per-request CSV; streaming TTFT |
 | `in_pod.sh` | The measured replay, run **inside the cluster** by the bench image (#27) |
 | `verify_dataset.sh` | Regenerate + verify the frozen workload; called by `in_pod.sh` and by CI |
 | `bench_job.sh` | Laptop side: emit/apply the driver Job, wait it out, pull the log back |
@@ -31,8 +31,7 @@ workload at fixed load.
 | `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
 | `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
 | `scarcity_gate.sh` | One-shot precondition probe. **Historical**: it produced the 128-prefix / s=0.9 amendment; its `PROBE_RATE` default is the retired 7.5 |
-| `cold_start.sh` | Cold-cache variant of a cell |
-| `utilization.py` | §3 utilization readout (GPU / GPU memory / CPU / memory) + the coverage gate |
+| `cold_start.sh` | Cold, stale-free restart before each cell: registration ordering (#13) + stale-id assertion |
 
 ## The frozen workload
 
@@ -92,13 +91,15 @@ writes the manifest. A workload that quietly started sharing prefixes would meas
 benefit while claiming to measure cache cost — and nothing in the resulting numbers would look
 wrong.
 
-The cache-off comparator and its pre-registered expectation are in
-[`deploy/nocache-arm.md`](../deploy/nocache-arm.md). Ticket: #25.
+A dedicated cache-OFF comparator arm was considered and retired without running: #25 closed
+as premise-wrong - §3 offers the two workload profiles as examples of a test suite, not as
+requirements, and the novel profile above already measures what the cache costs.
 
 ## Sweep design
 
 **5 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
-every cell. The grid is `BETA_GRID` in `run_sweep.sh:82`, default `0 0.5 1.0 2.0`:
+every cell. The grid is `BETA_GRID` in `run_sweep.sh`, default `0.5 1.0 2.0 0` - the
+pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last** as the drift sentinel (#31):
 
 | Cell | Arm | Router image |
 |---|---|---|
@@ -115,6 +116,62 @@ calibration, before the load term was normalized against the fleet mean.
 
 Built images only - the dev-loop ConfigMap overlay (`deploy/dev/`) is **never** measured.
 No mock or simulation anywhere: every reported number comes from the real cluster.
+
+## Deploying the stack (OpenShift, cluster `gapu-2`)
+
+Target topology: 1 CPU router pod → 2 vLLM+LMCache replicas, one per A10 GPU.
+Prereqs: `oc` logged in with rights to create namespaces/SCC bindings, `helm` v3, and a
+HuggingFace token if the model is gated (the Llama family is).
+
+```bash
+oc new-project cache-llm
+oc create secret generic hf-token-secret \
+  --from-literal=HF_TOKEN=<your token> -n cache-llm        # gated models only
+helm repo add vllm https://vllm-project.github.io/production-stack
+helm install stack vllm/vllm-stack -n cache-llm \
+  -f deploy/values-baseline-kvaware.yaml \
+  --set "servingEngineSpec.modelSpec[0].modelURL=<MODEL>" \
+  --set "servingEngineSpec.modelSpec[0].hf_token.secretName=hf-token-secret" \
+  --set "servingEngineSpec.modelSpec[0].hf_token.secretKey=HF_TOKEN"
+oc get pods -n cache-llm -w
+```
+
+Pin the chart version you actually used (`--version`); the committed runs used 0.1.11.
+Access without port-forward (VPN required, self-signed cert → `curl -k`):
+
+```bash
+oc create route edge llm --service=stack-router-service --port=router-sport -n cache-llm
+oc create route edge grafana --service=stack-grafana --port=http-web -n cache-llm
+```
+
+Sanity check after install: send two completions sharing a long prefix; the second must land
+on the same pod (router logs, `grep -i routing`).
+
+### Cluster gotchas (each bit once; the fix lives in code, this list is the index)
+
+- **The chart's router Service is missing the LMCache controller ports** (upstream bug):
+  workers register on reply port 9001 and heartbeat on 9002, the chart exposes only 9000,
+  and registration hangs **silently** - every lookup misses and kvaware degrades to QPS
+  routing with no error anywhere. `run_cell.sh` re-applies the port patch before every
+  cell. Diagnose via `Registered instance-worker` router log lines (this router build
+  exposes no registered-workers gauge). Upstream-PR candidate.
+- **lmcache version skew router↔engine fails silently** (msgspec ZMQ schema drift): both
+  images are digest-pinned to the same lmcache minor - see `Dockerfile` and the image pins
+  in `deploy/values-baseline-kvaware.yaml`. Check live:
+  `oc exec <pod> - /opt/venv/bin/python3 -c "from importlib.metadata import version; print(version('lmcache'))"`.
+- **A router restart re-registers workers only because `workerHeartbeatTime` is set**, and
+  the KV registry stays blind ~40 s afterwards (#13) - admits in that window are lost for
+  the life of the engine process. Measurements gate on `deploy/dev/registry-probe.sh`;
+  `cold_start.sh` owns the stale-free ordering. Broken-state symptom: router logs show
+  `Routing request ... with session id None` and no `found by kvaware router` lines;
+  recovery is an engine rollout restart.
+- **Four more, each pinned as a comment beside the setting in
+  `deploy/values-baseline-kvaware.yaml`:** RollingUpdate deadlocks on full GPUs
+  (`strategy: Recreate`), arbitrary-UID pods need `HOME=/tmp`, the router startup probe
+  needs a relaxed `failureThreshold`, and the shared model PVC needs RWX (CephFS, not
+  ceph-rbd RWO).
+- Router discovers engines via the K8s API; the chart's RBAC handles it. Verify:
+  `oc auth can-i list pods --as=system:serviceaccount:cache-llm:stack-router-service-account`.
 
 ## Running it
 
@@ -138,9 +195,8 @@ python3 benchmarks/analyze.py compare results/<...loadaware-b0.5> results/<...kv
 #    always yields three non-b0 cells, so nothing can infer it (#30).
 python3 benchmarks/export_summary.py results/<...> --out results/summary-per-seed.csv
 python3 benchmarks/plot_results.py results/<...> --cand loadaware-b0.5 --out docs/figures
-python3 benchmarks/utilization.py report results/<...>
 
-# 4. §3 utilization: GPU, GPU memory, CPU, host memory
+# 5. §3 utilization: GPU, GPU memory, CPU, host memory
 python3 benchmarks/utilization.py report results/*
 ```
 
@@ -179,7 +235,7 @@ Per-cell choreography (`run_cell.sh`): `helm upgrade` with the cell's values (ch
 check (a mounted `router-patch` ConfigMap is auto-reverted - validity rule 2) → β via
 `oc set env` (chart 0.1.11 ignores `routerSpec.env`; baselines get the vars *removed* so
 a stale β can't leak through the three-way merge) → router-Service controller-port patch
-(deploy/README gotcha #0) → **router image asserted against the cell's label** (validity
+(the upstream chart bug above) → **router image asserted against the cell's label** (validity
 rule 2) → **engine restart** so every cell starts from identical empty caches (#13) →
 wait for 2 `Registered instance-worker` router-log lines since the restart (this router
 build exposes no registered-workers gauge) → `registry-probe.sh` with a fresh seed (#13
@@ -322,7 +378,7 @@ with a per-cell constant in it. Load imbalance is unaffected in both, being serv
   co-primaries; the second is load imbalance). Pre-registered on #31.
 - Effect size: median relative reduction with a bootstrap 95% CI over the paired
   differences (seeded, 10 000 resamples).
-- Any pairwise cell comparison is significance-capable (all cells get all 6 seeds).
+- Any pairwise cell comparison is significance-capable (all cells get all 20 seeds).
 
 ## Goodput (`ttft_slo_miss`) - secondary metric
 

@@ -13,7 +13,8 @@
 
 # Pinned by digest, not just tag: the router and the engines must carry the SAME lmcache
 # minor version (both 0.3.9post2 here) or the controller<->worker msgspec ZMQ decoding
-# fails *silently*. A floating tag is a silent-failure trap — see deploy/README.md.
+# fails *silently*. A floating tag is a silent-failure trap - see the cluster gotchas in
+# benchmarks/README.md.
 FROM docker.io/lmcache/lmstack-router@sha256:23c64ba6f14ac363be30800764f22e3b937fee2acd7280cf61100c527644f3c7
 
 # `patches/` mirrors the layout under site-packages, so the overlay is a straight copy and

@@ -411,7 +411,8 @@ def test_analyze_module_level_imports_survive_the_bench_image():
 #
 # Secondary metric (added 2026-08-06), computed from the same committed driver
 # CSVs as the co-primaries. These tests pin its arithmetic, not its standing as
-# evidence - see analyze.TTFT_SLO_S and docs/sweep-2026-08-06-findings.md Part 3.
+# evidence - see analyze.TTFT_SLO_S and the goodput ruling in
+# docs/report/report.md ("An instrument problem, not a result", a137f5a).
 
 def test_goodput_counts_strictly_under_the_slo():
     """A request that lands exactly ON the objective missed it.

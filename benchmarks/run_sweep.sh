@@ -112,13 +112,13 @@ SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 # bracket was written when drift meant client TTFT drifting over the WAN, and
 # #27 removed that cause by moving the driver in-cluster. b0-last is what
 # replaces it, at zero extra cluster time.
-CELL_SEEDS=("kvaware:${SEEDS_FULL}")
+CELLS="kvaware"
 for b in $BETA_GRID; do
-  CELL_SEEDS+=("loadaware-b${b}:${SEEDS_FULL}")
+  CELLS+=" loadaware-b${b}"
 done
 
-for entry in "${CELL_SEEDS[@]}"; do
-  SEEDS="${entry#*:}" "$BENCH_DIR/run_cell.sh" "${entry%%:*}" "$RATE" "$RESULTS_ROOT"
+for cell in $CELLS; do
+  SEEDS="$SEEDS_FULL" "$BENCH_DIR/run_cell.sh" "$cell" "$RATE" "$RESULTS_ROOT"
 done
 echo "==> sweep complete under $RESULTS_ROOT"
 echo "    No closing kvaware cell - b0 ran last and is the drift sentinel (#31)."

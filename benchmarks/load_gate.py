@@ -37,7 +37,7 @@ actually cost latency? That is **stricter** than "a counter is nonzero" - a
 counter can fire without harming anyone, whereas measured degradation cannot.
 
 The per-seed windowing is deliberately the same code path as
-`export_summary.per_seed_imbalance`: a mean taken over the raw dump would
+`analyze.per_seed_imbalance`: a mean taken over the raw dump would
 include warm-up and engine-restart time, diluting mean in-flight toward zero,
 which biases both the reported imbalance and the degradation ratios.
 
@@ -70,6 +70,7 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple
 
+import utilization
 from analyze import percentile, read_run
 
 #: Busiest/idlest mean in-flight below this and kvaware is self-balancing at
@@ -87,32 +88,6 @@ MIN_DEGRADATION = 1.25
 #: pushed latency materially above an idle system's.
 BASELINE_TTFT_P95 = 0.161
 BASELINE_ITL_P95 = 0.0313
-
-
-def _engine_series(run_dir: str, metric: str) -> Dict[str, List[Tuple[float, float]]]:
-    """{pod: [(ts, value)]} for one metric, engine job only.
-
-    The `job=vllm-engines` filter is not cosmetic: `vllm:num_requests_running`
-    is also exported per-backend under `job=router`, where every series shares
-    `instance="stack-router-service:80"` and differs only by the `server` label.
-    Keying on `pod or instance` collapses those into a synthetic third "engine"
-    that averages the real two - which corrupted 17 of 74 committed seed rows
-    before it was caught.
-    """
-    path = os.path.join(run_dir, "prom", f"{metric}.json")
-    if not os.path.exists(path):
-        return {}
-    series: Dict[str, List[Tuple[float, float]]] = {}
-    for s in json.load(open(path))["data"]["result"]:
-        if s["metric"].get("job") != "vllm-engines":
-            continue
-        pod = s["metric"].get("pod") or s["metric"].get("instance", "?")
-        series.setdefault(pod, []).extend(
-            (float(t), float(v))
-            for t, v in s["values"]
-            if v not in ("NaN", "+Inf", "-Inf")
-        )
-    return series
 
 
 def _window(run_dir: str) -> Optional[Tuple[float, float]]:
@@ -138,9 +113,12 @@ def gate(run_dir: str) -> Dict:
         return {"run": run_dir, "error": "no driver CSVs"}
     lo, hi = win
 
-    running = _engine_series(run_dir, "vllm_num_requests_running")
-    waiting = _engine_series(run_dir, "vllm_num_requests_waiting")
-    preempt = _engine_series(run_dir, "vllm_num_preemptions_total")
+    # utilization.read_series owns the job=vllm-engines filter (the router
+    # re-exports these metrics per backend under one shared instance, which
+    # corrupted 17 of 74 committed seed rows before it was caught).
+    running = utilization.read_series(run_dir, "vllm_num_requests_running", utilization.ENGINE_JOB)
+    waiting = utilization.read_series(run_dir, "vllm_num_requests_waiting", utilization.ENGINE_JOB)
+    preempt = utilization.read_series(run_dir, "vllm_num_preemptions_total", utilization.ENGINE_JOB)
     if not running:
         return {"run": run_dir, "error": "no vllm_num_requests_running dump"}
 
