@@ -118,7 +118,7 @@ class ChunkedTokenDatabase:
     def process_tokens(self, *args, **kwargs):  # pragma: no cover - never called
         raise NotImplementedError(
             "tests must inject a PrefixHashTokenDatabase; the real chunker "
-            "needs torch and an lmcache config"
+            "needs a torch install (conformance/ runs it in CI)"
         )
 
 
@@ -223,11 +223,15 @@ class EndpointInfo:
 
 @dataclass
 class EngineStats:
-    """Scraped stats. `loadaware` ignores these (stale); shape only."""
+    """Scraped stats. `loadaware` ignores these (stale); shape only.
+
+    Field names are a positional prefix of the real class - conformance/
+    holds this to the pinned upstream (a `gpu_cache_hit_rate` misnaming
+    was caught exactly that way, #65)."""
 
     num_running_requests: int = 0
     num_queuing_requests: int = 0
-    gpu_cache_hit_rate: float = 0.0
+    gpu_prefix_cache_hit_rate: float = 0.0
 
 
 @dataclass
