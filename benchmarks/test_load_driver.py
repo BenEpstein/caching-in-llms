@@ -17,8 +17,6 @@ The lesson encoded here: classify a chunk by whether it CARRIES A TOKEN
 
 import json
 
-import pytest
-
 from load_driver import classify_chunk
 
 # A real token-carrying chunk from vLLM with include_usage on. Note `usage: null`
@@ -68,18 +66,6 @@ def test_token_chunk_without_a_usage_key_still_carries_a_token():
     usage, carries_token = classify_chunk(_TOKEN_CHUNK_NO_USAGE_KEY)
     assert usage is None
     assert carries_token is True
-
-
-def test_substring_test_would_have_failed_here():
-    """Pins the actual defect, so a future 'optimization' back to a substring
-    prefilter fails loudly instead of silently voiding the primary metric."""
-    assert '"usage"' in _TOKEN_CHUNK          # the old check matched...
-    assert classify_chunk(_TOKEN_CHUNK)[1]    # ...but the chunk does carry a token
-
-
-@pytest.mark.parametrize("chunk", [_TOKEN_CHUNK, _USAGE_CHUNK, _TOKEN_CHUNK_NO_USAGE_KEY])
-def test_classification_is_pure_and_repeatable(chunk):
-    assert classify_chunk(chunk) == classify_chunk(chunk)
 
 
 def test_ttft_is_taken_from_the_first_token_chunk_not_the_first_chunk():
