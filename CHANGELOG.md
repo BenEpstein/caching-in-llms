@@ -330,9 +330,9 @@ with a pointer to the evidence — those matter as much as code.
   It was first computed *after* the pre-registered `ttft_p95` test returned null on the same
   data, and `compare` prints that caveat beside the p-value so an operator pasting output into
   the report cannot lose it. A performance claim needs a fresh run whose pre-registration
-  fixes the metric and the objective before the data exists. Evidence:
-  `docs/sweep-2026-08-06-findings.md` Part 3, and the effect is broad rather than peaked
-  (7.4 points at 150 ms, 8.2 at 124 ms), so the objective is a service-grounds choice.
+  fixes the metric and the objective before the data exists. Evidence: the goodput scan on
+  #31 (`fig12-goodput.png`), where the effect is broad rather than peaked (7.4 points at
+  150 ms, 8.2 at 124 ms), so the objective is a service-grounds choice.
 - **The objective stays out of `results/summary-per-seed.csv`.** That table is the evidence a
   reader checks the report against; baking one provisional threshold into it would read as a
   threshold already chosen. The driver CSVs are committed, so any objective is recomputable.
@@ -379,7 +379,8 @@ with a pointer to the evidence — those matter as much as code.
 
 ## 2026-08-06 - Confirmatory sweep run; claim 1 passes, claim 2 null (#31)
 
-Full run log, diagnosis and next-experiment proposal: `docs/sweep-2026-08-06-findings.md`.
+Full run log, diagnosis and next-experiment proposal: #31 (the findings doc that carried
+them was deleted by #55; its conclusions are in the report and the entries below).
 
 ### Decided
 - **Claim 1 (balance) PASSES, claim 2 (TTFT p95) is NULL**, against pre-registration rev 2
