@@ -37,7 +37,11 @@ FIELDS = [
     # both sides. Never pool or compare across that boundary without saying which
     # side each cell is on. Which cells fall where: benchmarks/README.md, "Two
     # eras of `beta`".
-    "run", "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
+    # `sweep_id` travels in the row because the one-table-per-sweep layout separates batches
+    # only until someone concatenates two tables. Why cells from different sweeps must never be
+    # paired: analyze.check_comparable. Empty for run dirs that predate the field.
+    "run", "sweep_id",
+    "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
     "itl_p50", "itl_p95", "itl_p99",
@@ -64,6 +68,7 @@ def main() -> None:
             seed = s["seed"]
             rows.append({
                 "run": os.path.basename(run_dir.rstrip("/")),
+                "sweep_id": run.get("sweep_id", ""),
                 "cell": run["cell"], "arm": run["arm"],
                 "alpha": run.get("alpha"), "beta": run.get("beta"),
                 "osl_tokens": run.get("osl_tokens"),

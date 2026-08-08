@@ -275,8 +275,19 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
+# SWEEP_ID names the batch this cell belongs to; `analyze.py compare` refuses to pair cells
+# carrying different ones. Why that guard needs a name of its own: benchmarks/README.md,
+# "Separating sweeps".
+#
+# The results-root basename is the fallback, but NEVER the shared default root: `results` as an
+# id would stamp every sweep ever run identically and let the guard pass the cross-window pairs
+# it exists to stop. A bare cell run is its own batch, so it gets its own stamped id.
+if [ -z "${SWEEP_ID:-}" ]; then
+  SWEEP_ID="$(basename "$RESULTS_ROOT")"
+  [ "$SWEEP_ID" = "results" ] && SWEEP_ID="cell-$(date +%Y%m%d-%H%M%S)"
+fi
 export CELL ARM BETA RATE MAX_TOKENS CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
-export DRIVER_NODE BENCH_IMAGE TARGET_URL
+export DRIVER_NODE BENCH_IMAGE TARGET_URL SWEEP_ID
 python3 - <<'PY'
 import json, os
 env = os.environ
@@ -285,6 +296,7 @@ sub = "workloads" if profile == "zipfian" else os.path.join("workloads", profile
 manifest = json.load(open(os.path.join(env["BENCH_DIR"], sub, "manifest.json")))
 run = {
     "cell": env["CELL"],
+    "sweep_id": env["SWEEP_ID"],
     "arm": env["ARM"],
     "beta": env["BETA"] or None,
     "rate_req_s": float(env["RATE"]),

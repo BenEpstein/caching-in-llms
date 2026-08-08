@@ -398,6 +398,20 @@ def check_comparable(cand_dir: str, base_dir: str) -> None:
                     f"runs are not comparable: {key} differs - the methodology "
                     "requires identical workload and rate across arms"
                 )
+        # Cells from different sweeps are NOT comparable, and the two keys above cannot
+        # detect that: separate sweeps replay the same frozen dataset at the same rate, so
+        # both match by construction. What differs is the measurement window - pairing across
+        # sweeps measures cluster drift plus the policy, inseparably, and still prints a
+        # p-value. Guarded only when BOTH runs carry the field: `sweep_id` postdates the runs
+        # committed before it, and back-filling a batch name onto them is a claim about
+        # provenance this check has no business inventing.
+        if a.get("sweep_id") and b.get("sweep_id") and a["sweep_id"] != b["sweep_id"]:
+            raise SystemExit(
+                f"runs are not comparable: sweep_id differs "
+                f"({a['sweep_id']!r} vs {b['sweep_id']!r}) - these cells were measured in "
+                "different windows, so their difference confounds cluster drift with the "
+                "policy. Compare cells from one sweep."
+            )
 
 
 def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO_S) -> int:

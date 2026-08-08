@@ -22,7 +22,22 @@ jobs:
       # It reads only committed data - no cluster, no GPU, no network - so it belongs on
       # every push rather than in a human's pre-merge checklist, which is where it was.
       - name: reproduce.sh (every reported number regenerates from committed data)
-        run: ./scripts/reproduce.sh
+        run: FIGS_OUT="$GITHUB_WORKSPACE/ci-figures" ./scripts/reproduce.sh
+
+      # reproduce.sh renders these into a temp dir and deletes them; publish so a reviewer can
+      # see a sweep's graphs without cloning. They are REGENERATED from committed data, never a
+      # new measurement - CI has no cluster. `if: always()` because a drift failure is exactly
+      # when someone wants to look at them.
+      - name: Publish per-sweep figures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: figures-by-sweep
+          path: ci-figures/
+          # warn, not error: paired with `if: always()`, erroring would turn any hard exit of
+          # reproduce.sh before the figure checks into a SECOND red step pointing at the upload
+          # rather than at the real failure.
+          if-no-files-found: warn
 
       # §3 Automation: the timed run. No pass/fail threshold on purpose - thresholds on shared
       # CI runners are flaky, get muted, and a muted check is worse than a number in the log

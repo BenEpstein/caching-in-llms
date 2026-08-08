@@ -28,8 +28,55 @@ from analyze import (
     per_seed_imbalance,
     percentile,
     seed_stats,
+    check_comparable,
     wilcoxon_exact_one_sided,
 )
+
+
+# ---- check_comparable -------------------------------------------------------
+#
+# Why sweep_id needs its own key rather than falling out of the other two: analyze.py's
+# check_comparable.
+
+def _meta_run_dir(tmp_path, name, *, sweep_id=None, rate=16.0, manifest="m1"):
+    d = tmp_path / name
+    d.mkdir()
+    meta = {"rate_req_s": rate, "workload_manifest": manifest}
+    if sweep_id is not None:
+        meta["sweep_id"] = sweep_id
+    (d / "run.json").write_text(json.dumps(meta))
+    return str(d)
+
+
+def test_check_comparable_allows_same_sweep(tmp_path):
+    a = _meta_run_dir(tmp_path, "a", sweep_id="gen3-7cell")
+    b = _meta_run_dir(tmp_path, "b", sweep_id="gen3-7cell")
+    check_comparable(a, b)  # must not raise
+
+
+def test_check_comparable_rejects_cross_sweep(tmp_path):
+    a = _meta_run_dir(tmp_path, "a", sweep_id="gen3-7cell")
+    b = _meta_run_dir(tmp_path, "b", sweep_id="gen1-confirmatory")
+    with pytest.raises(SystemExit, match="sweep_id differs"):
+        check_comparable(a, b)
+
+
+def test_check_comparable_skips_when_a_run_predates_the_field(tmp_path):
+    """Back-compat: runs committed before sweep_id existed must still pair.
+
+    Inventing a batch name for them would be a provenance claim this guard cannot support.
+    """
+    a = _meta_run_dir(tmp_path, "a", sweep_id="gen3-7cell")
+    b = _meta_run_dir(tmp_path, "b")  # no sweep_id
+    check_comparable(a, b)  # must not raise
+
+
+def test_check_comparable_still_rejects_rate_mismatch(tmp_path):
+    """The pre-existing guards survive the new one."""
+    a = _meta_run_dir(tmp_path, "a", sweep_id="s", rate=16.0)
+    b = _meta_run_dir(tmp_path, "b", sweep_id="s", rate=8.0)
+    with pytest.raises(SystemExit, match="rate_req_s differs"):
+        check_comparable(a, b)
 
 
 # ---- percentile -------------------------------------------------------------

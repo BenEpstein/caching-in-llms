@@ -26,6 +26,14 @@ trap 'rm -rf "$WORK"' EXIT
 UPDATE=0
 [ "${1:-}" = "--update" ] && UPDATE=1
 
+# Where the regenerated figures land, ONE DIRECTORY PER SWEEP, named for the sweep_id in each
+# cell's run.json so an artifact cannot be mistaken for another batch's. Defaults to the temp
+# dir, so a local verify run still throws them away - this script's job is to prove the figures
+# regenerate, not to produce them, and writing into docs/ by default would silently overwrite a
+# committed set. CI points it at a real path and uploads the result.
+FIGS="${FIGS_OUT:-$WORK/figs}"
+mkdir -p "$FIGS"
+
 # Accumulate failures rather than exiting on the first: stopping at problem one hides
 # problems two through five, and they then get fixed in serial.
 FAILURES=()
@@ -74,21 +82,40 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
   || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
 
-echo "==> 1/6 every run referenced by the summary has committed raw data"
+# Every summary-per-seed.csv in the tree: the root file for the reported generation (cited by
+# docs/report/report.md, so it does not move) plus one inside each sweep directory. Column 1 of
+# a table is the manifest of which runs belong to its sweep, so checks 1 and 3 both walk it -
+# resolved relative to the TABLE'S OWN directory, so a nested sweep's rows name paths inside
+# that sweep.
+#
+# No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
+summaries=("$ROOT/results/summary-per-seed.csv")
+while read -r extra; do summaries+=("$extra"); done < <(
+  find "$ROOT/results" -mindepth 2 -name summary-per-seed.csv | sort)
+
+table_label() {  # table_label <table-path>
+  [ "$(dirname "$1")" = "$ROOT/results" ] && { echo "summary-per-seed.csv (reported)"; return; }
+  echo "summary-per-seed.csv ($(basename "$(dirname "$1")"))"
+}
+
+echo "==> 1/7 every run referenced by a summary has committed raw data"
 # Catches the worst failure mode: a reported number whose evidence is not in the repository.
 # Regenerating cannot catch it - a missing directory contributes no rows, so the output
 # shrinks and still looks well-formed.
 missing=0
-while read -r run; do
-  [ -d "$ROOT/results/$run" ] || { echo "  MISSING results/$run" >&2; missing=$((missing+1)); }
-done < <(awk -F, 'NR>1 {print $1}' "$ROOT/results/summary-per-seed.csv" | sort -u)
+for table in "${summaries[@]}"; do
+  base="$(dirname "$table")"
+  while read -r run; do
+    [ -d "$base/$run" ] || { echo "  MISSING ${base#$ROOT/}/$run" >&2; missing=$((missing+1)); }
+  done < <(awk -F, 'NR>1 {print $1}' "$table" | sort -u)
+done
 if [ "$missing" -eq 0 ]; then
-  ok "all runs have raw data"
+  ok "all runs in ${#summaries[@]} table(s) have raw data"
 else
-  fail "$missing run(s) in summary-per-seed.csv have no committed directory"
+  fail "$missing run(s) referenced by a summary have no committed directory"
 fi
 
-echo "==> 2/6 frozen workloads are reconstructible (both profiles)"
+echo "==> 2/7 frozen workloads are reconstructible (both profiles)"
 # Same shape as the in-cluster path: copy the committed manifest into a writable directory
 # and regenerate beside it, so this exercises the contract verify_dataset.sh depends on.
 mkdir -p "$WORK/wl"; cp "$BENCH/workloads/manifest.json" "$WORK/wl/"
@@ -104,16 +131,23 @@ else
   fail "novel frozen workload does not reconstruct from its manifest"
 fi
 
-echo "==> 3/6 summary-per-seed.csv regenerates"
-# No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
-RUNS=()
-while read -r run; do
-  [ -d "$ROOT/results/$run" ] && RUNS+=("$ROOT/results/$run")
-done < <(awk -F, 'NR>1 {print $1}' "$ROOT/results/summary-per-seed.csv" | sort -u)
-python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/summary.csv" >/dev/null
-verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary-per-seed.csv"
+echo "==> 3/7 every summary-per-seed.csv regenerates"
+for table in "${summaries[@]}"; do
+  base="$(dirname "$table")"
+  label="$(table_label "$table")"
+  RUNS=()
+  while read -r run; do
+    [ -d "$base/$run" ] && RUNS+=("$base/$run")
+  done < <(awk -F, 'NR>1 {print $1}' "$table" | sort -u)
+  if [ "${#RUNS[@]}" -eq 0 ]; then
+    fail "$label: no run directories resolved from column 1"
+    continue
+  fi
+  python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/$(basename "$base")-summary.csv" >/dev/null
+  verify_against "$WORK/$(basename "$base")-summary.csv" "$table" "$label"
+done
 
-echo "==> 4/6 the reported statistics regenerate"
+echo "==> 4/7 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
 # and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
 # check that verifies the wrong run reads exactly like a check that passes.
@@ -142,28 +176,46 @@ echo "==> 4/6 the reported statistics regenerate"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 
-echo "==> 5/6 the numbers behind every figure regenerate"
-python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
-  "$ROOT/$BETA1" "$ROOT/$BETA2" --comparator "$ROOT/$COMPARATOR" \
-  --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
-check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
-nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
-if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
-else fail "expected at least 12 figures, got $nfigs"; fi
+# Regenerate one sweep's figure set and diff the series behind it. Data that no check
+# regenerates is data that rots silently, so every committed generation gets one of these -
+# including generations that back no report section yet.
+#
+#   figure_set <sweep> <expected-json> <label> <plot args...>
+#
+# `--comparator` belongs in the caller's args, not here: only sweeps that HAVE a roundrobin
+# cell pass one, and it is a framing cell for fig12 that must never become a positional run
+# (its 12 s p95 flattens fig1's whole beta curve).
+FIG_MIN=12
+figure_set() {
+  local sweep="$1" expected="$2" label="$3"; shift 3
+  python3 "$BENCH/plot_results.py" "$@" --cand "loadaware-b0.5" \
+    --out "$FIGS/$sweep" --dump-data "$WORK/figdata-$sweep.json" >/dev/null
+  check "$WORK/figdata-$sweep.json" "$expected" "$label figure data"
+  local n; n=$(ls "$FIGS/$sweep" | wc -l | tr -d ' ')
+  if [ "$n" -ge "$FIG_MIN" ]; then ok "$n $label figures rendered"
+  else fail "$label: expected at least $FIG_MIN figures, got $n"; fi
+}
 
-echo "==> 6/6 the WAN generation regenerates its own figure set"
-# Data that no check regenerates is data that rots silently, and these five back a report
-# section. Not overridable like the cells above: this generation is frozen, so there is nothing
-# to repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
-python3 "$BENCH/plot_results.py" \
+echo "==> 5/7 the numbers behind every figure regenerate"
+figure_set gen1-confirmatory "$EXPECTED/figure-data.json" "reported" \
+  "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" "$ROOT/$BETA1" "$ROOT/$BETA2" \
+  --comparator "$ROOT/$COMPARATOR"
+
+echo "==> 6/7 the WAN generation regenerates its own figure set"
+# Literal paths, unlike the cells above: this generation is frozen, so there is nothing to
+# repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
+figure_set gen2-wan "$EXPECTED/figure-data-wan.json" "WAN" \
   "$ROOT/results/20260805-005210-kvaware" "$ROOT/results/20260805-011148-loadaware-b0" \
   "$ROOT/results/20260805-013208-loadaware-b0.5" "$ROOT/results/20260805-015202-loadaware-b1.0" \
-  "$ROOT/results/20260805-021215-loadaware-b2.0" \
-  --cand "loadaware-b0.5" --out "$WORK/figs-wan" --dump-data "$WORK/figdata-wan.json" >/dev/null
-check "$WORK/figdata-wan.json" "$EXPECTED/figure-data-wan.json" "WAN figure data"
-nwan=$(ls "$WORK/figs-wan" | wc -l | tr -d ' ')
-if [ "$nwan" -ge 12 ]; then ok "$nwan WAN figures rendered"
-else fail "expected at least 12 WAN figures, got $nwan"; fi
+  "$ROOT/results/20260805-021215-loadaware-b2.0"
+
+echo "==> 7/7 the gen-3 7-cell sweep regenerates its own figure set"
+G3="$ROOT/results/gen3-7cell"
+figure_set gen3-7cell "$EXPECTED/figure-data-gen3.json" "gen-3" \
+  "$G3/20260808-023919-kvaware" "$G3/20260808-042133-loadaware-b0" \
+  "$G3/20260808-040053-loadaware-b0.25" "$G3/20260808-025932-loadaware-b0.5" \
+  "$G3/20260808-031955-loadaware-b1.0" "$G3/20260808-034018-loadaware-b2.0" \
+  --comparator "$G3/20260808-044202-roundrobin"
 
 echo
 if [ "${#FAILURES[@]}" -eq 0 ]; then

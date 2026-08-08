@@ -34,3 +34,6 @@ __pycache__/
 .hypothesis/
 .pytest_cache/
 teaching/
+
+# reproduce.sh's FIGS_OUT target. The committed sets under docs/figures*/ are the artifact.
+ci-figures/

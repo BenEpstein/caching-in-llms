@@ -26,7 +26,7 @@ workload at fixed load.
 | `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze at or just under it (see "Picking the rate") |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
-| `export_summary.py` | Derives `results/summary-per-seed.csv` — the table every figure and test reads |
+| `export_summary.py` | Derives a `summary-per-seed.csv` per sweep - committed evidence a reader can check without the raw data, and the manifest `reproduce.sh` reads (column 1) to learn which runs belong to a sweep. No figure or statistic is computed from it: those read each cell's `run.json` and driver CSVs directly |
 | `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
 | `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
 | `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
@@ -97,20 +97,28 @@ requirements, and the novel profile above already measures what the cache costs.
 
 ## Sweep design
 
-**5 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
-every cell. The grid is `BETA_GRID` in `run_sweep.sh`, default `0.5 1.0 2.0 0` - the
-pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last** as the drift sentinel (#31):
+**7 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
+every cell. The grid is `BETA_GRID` in `run_sweep.sh`, default `0.5 1.0 2.0 0.25 0` - the
+pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last of the loadaware cells** as
+the drift sentinel (#31), with `roundrobin` trailing:
 
 | Cell | Arm | Router image |
 |---|---|---|
 | `kvaware` | baseline (headline comparator) | pinned stock |
 | `loadaware-b0` | loadaware β=0 (cache-only ablation) | CI-built, SHA-tagged |
-| `loadaware-b0.5` | loadaware β=0.5 (**configuration of record — headline**) | CI-built, SHA-tagged |
+| `loadaware-b0.25` | loadaware β=0.25 (descriptive, low end) | CI-built, SHA-tagged |
+| `loadaware-b0.5` | loadaware β=0.5 (**configuration of record - headline**) | CI-built, SHA-tagged |
 | `loadaware-b1.0` | loadaware β=1.0 (shipped default) | CI-built, SHA-tagged |
 | `loadaware-b2.0` | loadaware β=2.0 | CI-built, SHA-tagged |
+| `roundrobin` | cache-blind comparator (descriptive) | pinned stock |
 
-`roundrobin` is run separately as a descriptive framing cell, not as part of the sweep. Cell
-names outside this grid (`b0.1`, `b0.25`, `b0.034`, `b4.0`) came from the retired per-rate β
+`roundrobin` and `b0.25` are **descriptive** cells: they carry no p-value, so the pre-registered
+alpha=0.025 pair is unaffected and no multiplicity adjustment is owed for them. `roundrobin`
+saturates at the sweep rate and is therefore not at the same operating point as the other arms -
+report its throughput shortfall, never its latency ratio, and pass it to `plot_results.py` as
+`--comparator`.
+
+Cell names outside this grid (`b0.1`, `b0.034`, `b4.0`) came from the retired per-rate β
 calibration, before the load term was normalized against the fleet mean, and **can no longer be
 generated**. Their run dirs were pruned from the working tree by #57 and are in git history.
 
@@ -141,9 +149,32 @@ window; moving either knob moves the experiment out of it. `roundrobin` **satura
 10.40 req/s achieved against 16 offered (65%) in `20260806-144135-roundrobin` - which is the
 point: it is reported as the cache-blind capacity floor, not as a tuned arm.
 
-Excluded from the grid separately (no effect, not the load window): β=0.25, which at n=3
-measured imbalance 2.257 against a same-hour kvaware control of 2.113 - no effect. The useful
-range starts at 0.5. That cell was pruned by #57; the numbers are recorded here.
+β=0.25 was excluded from the grid on n=3 evidence (imbalance 2.257 against a same-hour kvaware
+control of 2.113 - no effect); that cell was pruned by #57 and the numbers are recorded here.
+It is back in the grid as a descriptive cell, and at n=20 it sits **below the baseline** on both
+metrics rather than level with it (median imbalance -21.0%, TTFT p95 -20.7%). Descriptive means
+descriptive: this cell carries no pre-registered hypothesis, so read those as effect sizes with
+variance, never as a test. The useful range still starts at 0.5, and the response to β looks
+non-monotonic at the low end rather than merely flat - which is a claim for a future
+pre-registration, not one this grid settles.
+
+### Separating sweeps
+
+Every cell records a `sweep_id` in its `run.json`, and `analyze.py compare` refuses to pair two
+cells carrying different ones.
+
+It needs a key of its own because the guard's other two keys **cannot** catch a cross-sweep
+pair: separate sweeps replay the same frozen dataset at the same rate, so `rate_req_s` and
+`workload_manifest` match by construction. Pairing across sweeps therefore measures cluster
+drift plus the policy, inseparably, and still prints a p-value. Measured: a gen-3 cell against a
+gen-1 baseline returns `p=0.0000` and a 45.1% median reduction, none of it attributable.
+
+- `run_sweep.sh` mints one id per batch and exports it, so every cell in a run agrees.
+- `run_cell.sh` falls back to the results-root basename for a standalone cell, but **never** to
+  the shared `results` root - one id for every sweep ever run is a guard that passes everything.
+- Runs predating the field still pair: back-filling a batch name onto an archived directory
+  would be a provenance claim the code cannot support. The 18 committed dirs were back-filled
+  by hand from the table in `results/README.md`.
 
 ### Two eras of `beta`
 
@@ -424,7 +455,7 @@ asks that reader to take the derivation on trust, so the raw artifacts are commi
 | `results/<run>/driver-seed*.csv` | client-observed per-request TTFT / E2E / ITL / tokens |
 | `results/<run>/prom/*.json`, `results/<run>/dcgm.csv` | engine + router Prometheus series and GPU utilization over the run window |
 | `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
-| `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
+| `results/summary-per-seed.csv` | the derived per-seed table for the **reported** sweep: latency percentiles, throughput, error counts, and load imbalance. Each other sweep carries its own beside its data, e.g. `results/gen3-7cell/summary-per-seed.csv` - one table, one measurement window |
 
 Two exclusions. `results/**/*.jsonl` - the frozen workload replay files, regenerable
 bit-identically from `benchmarks/workloads/manifest.json`, megabytes per run for no
