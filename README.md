@@ -111,6 +111,136 @@ The benchmark runs on this hardware and software:
 
 The GPU Operator supplies the DCGM exporter. All GPU measurements come from that exporter.
 
+## Deploy the stack
+
+This procedure installs the stack with our `loadaware` router. That is the default here. The
+baseline router is one values file less. Refer to "Switching between arms".
+
+A benchmark cell does not use this procedure. Each cell installs its own arm, sets the
+parameter, patches the Service and starts the stack cold. Use this procedure to get a working
+deployment, or to run the router outside a benchmark. For the full list of what you need
+first, refer to [`benchmarks/README.md`](benchmarks/README.md), "What you need before you
+start".
+
+### 1. Install
+
+```bash
+kubectl create namespace cache-llm
+helm repo add vllm https://vllm-project.github.io/production-stack
+helm install stack vllm/vllm-stack -n cache-llm --version 0.1.11 \
+  -f deploy/values-baseline-kvaware.yaml \
+  -f deploy/values-loadaware-image.yaml \
+  --set routerSpec.tag=acf43d1
+kubectl apply -n cache-llm -f deploy/prometheus.yaml
+```
+
+The first values file holds the whole deployment. The second file changes two values: the
+router image and the routing policy. The tag comes from `--set`, because the file gives no
+tag. Every other value is the same on both arms. Therefore only the router changes between the
+arms.
+
+Change `storageClass` before you install. Our value is not portable. The table is in
+`benchmarks/README.md`, "Values you must change for your cluster".
+
+The tag `acf43d1` is the image that CI built and that our measurements used. For your own
+image, add `--set routerSpec.repository=<your-repo>`. Never use `latest`: the router and the
+servers must carry the same LMCache version, and a floating tag cannot be audited after the
+run.
+
+The chart does not install a Prometheus that we can use. The last command installs ours.
+Grafana and the benchmark both read it. Without it the load imbalance has no data.
+
+The release name must be `stack`. The scripts derive the names `stack-deployment-router`,
+`stack-llm-deployment-vllm` and `stack-router-service` from it.
+
+The model is `Qwen/Qwen2.5-3B-Instruct`. It is not gated. No token is necessary.
+
+### 2. Add the controller ports to the router Service
+
+```bash
+kubectl patch svc stack-router-service -n cache-llm --type=json -p '[
+  {"op":"add","path":"/spec/ports/-","value":{"name":"lmcache-reply","port":9001,"targetPort":9001,"protocol":"TCP"}},
+  {"op":"add","path":"/spec/ports/-","value":{"name":"lmcache-heartbeat","port":9002,"targetPort":9002,"protocol":"TCP"}}]'
+```
+
+The chart does not expose the ports 9001 and 9002. Without them the servers do not register and
+each lookup fails. There is no error message. The pull request
+[production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029) fixes this
+in the chart. `run_cell.sh` applies the same patch before each cell.
+
+### 3. Set the environment of the router
+
+```bash
+kubectl set env deploy/stack-deployment-router -n cache-llm HF_HOME=/tmp/hf LOADAWARE_BETA=1.0
+```
+
+`LOADAWARE_BETA` is the parameter of the policy. The router reads it one time, when it starts.
+Therefore a new value needs a restart of the router. This command makes that restart.
+
+`HF_HOME` is necessary on both arms. Without it the router has no writable cache directory. The
+tokenizer then fails for each request, and the router accepts approximately 4 requests for each
+second.
+
+Chart 0.1.11 has no `routerSpec.env`. Therefore neither value can go in a values file.
+
+### 4. Start cold and check the registry
+
+```bash
+benchmarks/cold_start.sh
+kubectl port-forward -n cache-llm svc/stack-router-service 8000:80 &
+./deploy/dev/registry-probe.sh $(date +%s)
+```
+
+The first install takes several minutes. Each server loads the model before it is ready.
+
+`cold_start.sh` scales the servers to zero, restarts the router into an empty cluster, then
+starts the servers again. This order is necessary. A server that registers with the old router
+gives an identifier that outlives it, and the baseline router then answers 500 for a lookup
+that returns it. The script also verifies that both servers registered and that no dead
+identifier remains.
+
+Open the port-forward after the cold start, not before. The cold start restarts the router, and
+a forward binds to one pod, so a forward opened first is already dead. An Ingress or an
+OpenShift route fronts the Service and not a pod, so it survives the restart. With one of
+those, set `BASE_URL` to it and use no forward.
+
+`registry-probe.sh` sends the same long prefix four times. If the registry holds the prefix,
+the router sends all four requests to one server. If the registry is empty, the requests
+spread. Exit code 0 means the registry is live.
+
+After every router restart the registry is blind for approximately 40 seconds. A prefix that is
+first stored in that window stays invisible to the controller for the life of the server
+process. Therefore always give the probe a seed that you did not use before on these servers.
+
+### 5. Check the deployment
+
+```bash
+curl http://localhost:8000/v1/models
+```
+
+### Switching between arms
+
+To go back to the baseline router, install with the first values file only, then remove the
+parameter:
+
+```bash
+helm upgrade --install stack vllm/vllm-stack -n cache-llm --version 0.1.11 \
+  -f deploy/values-baseline-kvaware.yaml
+kubectl set env deploy/stack-deployment-router -n cache-llm HF_HOME=/tmp/hf LOADAWARE_BETA-
+```
+
+Helm reads the values files again for each upgrade. Therefore the router image and the routing
+policy return to the baseline when you omit the second file. A value that `kubectl set env`
+wrote does not behave in this way. Helm keeps it across an upgrade. Therefore remove
+`LOADAWARE_BETA` with the final `-`. The baseline router does not read that value, but a value
+that stays becomes the value of the next `loadaware` deployment.
+
+The policy also cannot change without the image. The option `--routing-logic` has a fixed list
+of values in the baseline, and `loadaware` is not in that list. The router stops at the
+argument parser. Our image widens the list.
+
+Every change of arm restarts the router. Repeat step 4 after each change.
+
 ## Run the benchmark
 
 ### Option 1: verify the results without hardware

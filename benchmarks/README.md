@@ -176,6 +176,10 @@ stack-prometheus-5b74f7d9d5-5bcxw            1/1     Running   0          6m
 The two `stack-llm-deployment-vllm` pods are the servers, one on each GPU. Grafana is optional.
 It shows the dashboards of the chart. The benchmark does not use it.
 
+This install gives the baseline router. That is correct for the sweep. The first cell is
+`kvaware`, and each cell installs its own arm before it measures. To deploy the `loadaware`
+router by itself, outside a benchmark, refer to `README.md`, "Deploy the stack".
+
 The measured requests do not leave the cluster. The Job sends them to the router Service at
 `stack-router-service.cache-llm.svc.cluster.local`. Therefore you do not need an Ingress or an
 OpenShift route for the measurement.
@@ -267,6 +271,21 @@ is the rate where the achieved rate becomes less than the offered rate. On our c
 is between 14 and 16 requests for each second.
 
 ### Step 5: run the sweep
+
+Run one cell with two seeds first. It takes approximately 5 minutes.
+
+```bash
+LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> \
+  SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
+```
+
+This runs the whole choreography of one cell: the image check, the cold start, the registry
+probe, the warm-up gate, the Job and the collectors. A wrong tag, a missing Prometheus or a
+storage class that the second pod cannot use fails here in 5 minutes, and not two hours into
+the sweep. Delete `results/smoke` when it passes. It is not a measurement: two seeds cannot
+give a result.
+
+Then run the sweep:
 
 ```bash
 LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
