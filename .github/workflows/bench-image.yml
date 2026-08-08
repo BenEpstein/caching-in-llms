@@ -20,6 +20,10 @@ on:
   push:
     paths:
       - "benchmarks/**"
+      # Docs do not change the image. Without these exclusions a README edit rebuilds and
+      # re-pushes a byte-identical image, and a registry outage then fails a docs PR for
+      # reasons that have nothing to do with it - which is exactly what happened on #80.
+      - "!benchmarks/**.md"
       - "Dockerfile.bench"
       - ".github/workflows/bench-image.yml"
   workflow_dispatch:
