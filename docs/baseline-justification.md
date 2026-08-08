@@ -32,6 +32,12 @@ a `route_request()` method, and a factory. Per-router unit tests show how to tes
 without a GPU. Every LMCache knob is set through environment variables, so configuration the
 Helm chart does not expose is still reachable.
 
+**Measurable in a live deployment.** The stack installs with one Helm command and exposes
+per-request metrics on both tiers through Prometheus. The `--routing-logic` flag swaps the
+routing policy while the deployment, model, and workload stay identical. This supports a
+controlled vanilla-against-extended comparison on a live cluster, which is how we evaluated
+the extension.
+
 ## Main features relevant to this project
 
 - **Prefix-addressed KV cache.** LMCache stores KV data in chunks keyed by prompt prefix. A
