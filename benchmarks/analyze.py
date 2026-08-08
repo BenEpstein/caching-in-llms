@@ -533,17 +533,99 @@ def cmd_compare(cand_dir: str, base_dir: str, metric: str, slo: float = TTFT_SLO
     return 0
 
 
+_TABLE_COLS = [
+    ("seeds", "{}"),
+    ("error_rate", "{:.2%}"),
+    ("ttft_p50_s", "{:.3f}"),
+    ("ttft_p95_s", "{:.3f}"),
+    ("e2e_p95_s", "{:.3f}"),
+    ("req_per_s", "{:.2f}"),
+    ("imbalance", "{:.2f}"),
+]
+
+
+def cmd_table(run_dirs: List[str]) -> int:
+    """One row per cell: the median over that cell's seeds, per metric.
+
+    Descriptive on purpose - no p-values. The pre-registered method tests two
+    co-primary metrics on named pairs (`compare`); a grid printing a p-value for
+    every pair of cells would be a multiple-comparison sweep dressed as the real
+    test. This table answers "what did each cell measure", never "which
+    differences are significant".
+
+    The engine-local LMCache hit rate is also absent, on purpose: it saturates
+    on every arm including roundrobin (see plot_results.fig_hit_rate), so a
+    column here would invite reading it as routing quality.
+    """
+    # The documented invocation is `table results/<sweep>/*`, and a sweep dir
+    # also holds summary-per-seed.csv - files are not cells.
+    run_dirs = [d for d in run_dirs if os.path.isdir(d)]
+    if not run_dirs:
+        raise SystemExit("no run directories among the arguments")
+    rows = []
+    sweeps = set()
+    for d in run_dirs:
+        meta_path = os.path.join(d, "run.json")
+        meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
+        if meta.get("sweep_id"):
+            sweeps.add(meta["sweep_id"])
+        seeds = read_run(d)
+        # Median of the PER-SEED ratios - the same numbers `compare` tests - not
+        # a ratio of whole-window means, which is a different statistic.
+        imb = sorted(per_seed_imbalance(d).values())
+
+        def med(key):
+            return percentile([s[key] for s in seeds], 50)
+
+        rows.append({
+            "cell": meta.get("cell") or os.path.basename(os.path.normpath(d)),
+            "seeds": len(seeds),
+            "error_rate": error_rate(seeds),
+            "ttft_p50_s": med("ttft_p50"),
+            "ttft_p95_s": med("ttft_p95"),
+            "e2e_p95_s": med("e2e_p95"),
+            "req_per_s": med("throughput_req_s"),
+            "imbalance": percentile(imb, 50) if imb else None,
+        })
+    if len(sweeps) > 1:
+        raise SystemExit(
+            f"cells from different sweeps: {sorted(sweeps)} - one table would "
+            "compare measurement windows, not policies. Pass cells from one sweep."
+        )
+    width = max(len("cell"), *(len(r["cell"]) for r in rows))
+    print("cell".ljust(width)
+          + "".join(name.rjust(len(name) + 2) for name, _ in _TABLE_COLS))
+    for r in rows:
+        cells = [
+            fmt.format(r[name]) if r[name] is not None else "n/a"
+            for name, fmt in _TABLE_COLS
+        ]
+        print(r["cell"].ljust(width)
+              + "".join(v.rjust(len(n) + 2) for (n, _), v in zip(_TABLE_COLS, cells)))
+    missing = [r["cell"] for r in rows if r["imbalance"] is None]
+    if missing:
+        print(f"note: no Prometheus dump for {', '.join(missing)} - imbalance is n/a")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("summary")
     s.add_argument("run_dirs", nargs="+")
+    t = sub.add_parser(
+        "table",
+        help="one row per cell: medians over seeds. Descriptive; no p-values")
+    t.add_argument("run_dirs", nargs="+")
     v = sub.add_parser("validate")
     v.add_argument("run_dir")
     c = sub.add_parser("compare")
     c.add_argument("candidate_dir")
     c.add_argument("baseline_dir")
-    c.add_argument("--metric", default="ttft_p95")
+    c.add_argument("--metric", default="ttft_p95",
+                   help="ttft_p95 (default), imbalance, ttft_slo_miss, error_rate, "
+                        "throughput_req_s, throughput_tok_s, or any of "
+                        "{ttft,e2e,itl}_{mean,p50,p90,p95,p99}")
     c.add_argument("--slo", type=float, default=TTFT_SLO_S,
                    help="TTFT objective in SECONDS for --metric ttft_slo_miss "
                         f"(default {TTFT_SLO_S}); ignored by every other metric")
@@ -553,6 +635,8 @@ def main() -> int:
         for d in a.run_dirs:
             print_summary(d)
         return 0
+    if a.cmd == "table":
+        return cmd_table(a.run_dirs)
     if a.cmd == "validate":
         seeds = read_run(a.run_dir)
         problems = invalid_seeds(seeds)

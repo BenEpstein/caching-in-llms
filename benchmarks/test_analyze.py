@@ -14,6 +14,7 @@ import pytest
 
 from analyze import (
     HARD_ERROR_RATE,
+    cmd_table,
     TTFT_SLO_S,
     goodput,
     read_seed_ttfts,
@@ -561,3 +562,52 @@ def test_compare_names_an_unknown_metric_instead_of_raising_keyerror(tmp_path):
         cmd_compare(cand, base, "goodput")
     assert "unknown metric 'goodput'" in str(e.value)
     assert "ttft_slo_miss" in str(e.value)
+
+
+# ---- table ------------------------------------------------------------------
+
+def _table_cell(tmp_path, name, seeds, *, cell=None, sweep_id=None):
+    d = _run_dir(tmp_path, name, seeds)
+    meta = {}
+    if cell:
+        meta["cell"] = cell
+    if sweep_id:
+        meta["sweep_id"] = sweep_id
+    if meta:
+        with open(os.path.join(d, "run.json"), "w") as f:
+            json.dump(meta, f)
+    return d
+
+
+def test_table_prints_one_median_row_per_cell(tmp_path, capsys):
+    a = _table_cell(tmp_path, "a", [1, 2, 3], cell="kvaware", sweep_id="s1")
+    b = _table_cell(tmp_path, "b", [1, 2, 3], cell="loadaware-b0.5", sweep_id="s1")
+    _prom(a, {"engine-a": 4.0, "engine-b": 1.0})
+    assert cmd_table([a, b]) == 0
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[0].split() == [
+        "cell", "seeds", "error_rate", "ttft_p50_s", "ttft_p95_s",
+        "e2e_p95_s", "req_per_s", "imbalance"]
+    # _run_dir gives every request in seed s a TTFT of 0.1*s, so the median over
+    # seeds 1..3 is seed 2's 0.200 for every TTFT percentile.
+    row_a = next(l for l in lines if l.startswith("kvaware"))
+    assert "0.200" in row_a and "4.00" in row_a
+    row_b = next(l for l in lines if l.startswith("loadaware-b0.5"))
+    assert "n/a" in row_b
+    assert "no Prometheus dump for loadaware-b0.5" in out
+
+
+def test_table_refuses_cells_from_different_sweeps(tmp_path):
+    """Same stance as check_comparable: cross-sweep rows confound cluster drift
+    with the policy, and a table would present them as one comparison."""
+    a = _table_cell(tmp_path, "a", [1], sweep_id="gen2")
+    b = _table_cell(tmp_path, "b", [1], sweep_id="gen3")
+    with pytest.raises(SystemExit, match="different sweeps"):
+        cmd_table([a, b])
+
+
+def test_table_names_a_cell_by_directory_when_run_json_predates_it(tmp_path, capsys):
+    d = _run_dir(tmp_path, "20260805-230541-kvaware", [1])
+    assert cmd_table([d]) == 0
+    assert "20260805-230541-kvaware" in capsys.readouterr().out

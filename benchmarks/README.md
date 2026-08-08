@@ -50,7 +50,7 @@ itself, on a cluster, continue reading.
 | `run_cell.sh` | Runs one cell. Deploys, checks the gates, warms up, measures and collects. |
 | `run_sweep.sh` | Runs all seven cells in one batch. |
 | `rate_pilot.sh` | Finds the offered rate for the sweep. |
-| `analyze.py` | Makes the summaries and the statistics. |
+| `analyze.py` | Makes the results table and the statistics. |
 | `export_summary.py` | Makes `summary-per-seed.csv` for a sweep. |
 | `plot_results.py` | Makes the 12 figures. |
 | `utilization.py` | Makes the utilization report. |
@@ -167,11 +167,11 @@ benchmarks/run_sweep.sh $RATE                         # 7 cells, approximately 2
 
 # After the sweep, on the laptop. The cluster is not necessary.
 # <sweep> is the directory that run_sweep.sh printed, results/sweep-<timestamp>.
-python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
-python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
+python3 benchmarks/analyze.py table results/<sweep>/*       # results table, one row per cell
 python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
   --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
 python3 benchmarks/utilization.py report results/<sweep>/*
+python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware   # the pre-registered test
 ```
 
 ### Step 1: install the stack
@@ -341,50 +341,75 @@ For each cell, `run_cell.sh` does these operations:
 
 ### Step 6: make the results
 
-The sweep leaves one directory for each cell. Four scripts read those directories. They do not
-need the cluster.
-
-First, collect the per-seed numbers into one small CSV. It is a few kilobytes, and it holds
-every number that the report and the figures use.
+The sweep leaves one directory for each cell. Everything in this step runs on the laptop. The
+cluster is not necessary. Three commands make the results:
 
 ```bash
-python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
+python3 benchmarks/analyze.py table results/<sweep>/*       # the results table
+python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
+  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
+python3 benchmarks/utilization.py report results/<sweep>/*
 ```
 
-Next, run the statistical test. This compares the candidate cell with the baseline cell. It
-prints the p-value and the size of the change.
+The table gives one row for each cell: the median over the seeds of the error rate, the
+latency, the throughput and the load imbalance. It looks like this:
+
+```
+cell            seeds  error_rate  ttft_p50_s  ttft_p95_s  e2e_p95_s  req_per_s  imbalance
+kvaware            20       0.43%       0.173       0.324      7.077      14.41       2.39
+loadaware-b0.5     20       0.34%       0.152       0.296      5.958      14.39       1.25
+roundrobin         20       0.08%       1.144      11.051     28.381      10.41       1.50
+```
+
+The table is descriptive. It has no p-values: the test was registered for named pairs, and a
+p-value for every pair of cells would make the threshold meaningless. For the test, read "The
+statistical test" below.
+
+`plot_results.py` makes the 12 figures. Write them to a directory for that sweep. Do not write
+them to `docs/figures/`. That directory holds the figures for the reported sweep.
+`utilization.py` gives the GPU, the CPU and the memory numbers.
+
+#### The statistical test
+
+`analyze.py compare` runs the pre-registered test on one pair of cells: the candidate first,
+then the baseline. The candidate is the cell under test. The baseline is always the `kvaware`
+cell. The command prints the per-seed pairs, the p-value and the size of the change.
 
 ```bash
 python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
 ```
 
-The command tests one metric at a time. The default metric is `ttft_p95`. Give `--metric` for a
-different one. These two are the other measurements that the report gives:
+The report runs these pairs:
+
+| Comparison | Candidate | Baseline |
+|---|---|---|
+| Headline | `loadaware-b0.5` | `kvaware` |
+| Ablation | `loadaware-b0` | `kvaware` |
+| Beta sensitivity | `loadaware-b1.0`, then `loadaware-b2.0` | `kvaware` |
+
+The `roundrobin` cell is a comparator for the figures. It is not one of the tested pairs.
+
+The command tests one metric at a time. Select it with `--metric`:
+
+| `--metric` value | Meaning |
+|---|---|
+| `ttft_p95` | The TTFT p95 of each seed. The default, and one of the two primary measurements. |
+| `imbalance` | The load imbalance of each seed. The other primary measurement. |
+| `ttft_slo_miss` | The fraction of the sent requests with no first token before the objective. Set the objective with `--slo`, in seconds. An errored request counts as a late request. |
+| `ttft_`, `e2e_`, `itl_` + `mean`, `p50`, `p90`, `p95`, `p99` | The latency statistics, for example `e2e_p99`. |
+| `throughput_req_s`, `throughput_tok_s` | The requests and the tokens for each second. |
+| `error_rate` | The error rate of each seed. |
+
+The metric `ttft_slo_miss` is 1 minus the goodput. The figure `fig12-goodput` draws the whole
+curve from 50 ms to 400 ms, so one objective is not a threshold to select.
+
+#### For the reported sweep
+
+`export_summary.py` collects the per-seed numbers into one small CSV. It holds every number
+that the report and the figures use. The repository commits this file for the reported sweep.
 
 ```bash
-python3 benchmarks/analyze.py compare <candidate> <baseline> --metric imbalance
-python3 benchmarks/analyze.py compare <candidate> <baseline> --metric ttft_slo_miss --slo 0.15
-```
-
-The metric `ttft_slo_miss` is the goodput. It is the fraction of the sent requests that did not
-get the first token before the objective. Change the objective with `--slo`, in seconds. An
-errored request counts as a late request. The figure `fig12-goodput` draws the whole curve from
-50 ms to 400 ms, so one objective is not a threshold to select.
-
-Next, make the 12 figures.
-
-```bash
-python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
-  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
-```
-
-Write the figures to a directory for that sweep. Do not write them to `docs/figures/`. That
-directory holds the figures for the reported sweep.
-
-Last, make the utilization report. This gives the GPU, the CPU and the memory numbers.
-
-```bash
-python3 benchmarks/utilization.py report results/<sweep>/*
+python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
 ```
 
 If a new sweep becomes the reported sweep, change the cell names in `scripts/reproduce.sh` in
