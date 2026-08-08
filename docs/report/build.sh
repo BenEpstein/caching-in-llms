@@ -36,7 +36,12 @@ else
   # A one-pager gets no table of contents, and its page geometry has to come from here
   # because the source is plain markdown a grader also reads on GitHub - front matter would
   # render as a stray table there.
-  opts+=(-V geometry:margin=2.5cm -V fontsize=11pt)
+  #
+  # Tighter than the report on purpose. At the report's 11pt/2.5cm this document rendered at
+  # 2 pages against a 1-page cap, and the answer is not to delete evidence the spec asks for
+  # by name (main features, default eviction policy). 10pt is the spec's own floor for figure
+  # and body text, and 2cm margins are ordinary for a single-page document.
+  opts+=(-V geometry:margin=2cm -V fontsize=10pt)
 fi
 
 pandoc "$src" "${opts[@]}" -o "$out"

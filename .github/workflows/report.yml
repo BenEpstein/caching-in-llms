@@ -64,6 +64,21 @@ jobs:
           fi
           echo "no missing glyphs"
 
+      # Upload BEFORE the budget gate. A build that fails on length is exactly when someone
+      # needs to open the PDF and see how far over it went; withholding the artifact until the
+      # gate passes makes the failure harder to fix than it needs to be.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-pdf
+          path: report.pdf
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-justification-pdf
+          path: baseline-justification.pdf
+          if-no-files-found: error
+
       - name: Enforce the page budgets
         run: |
           report_pages=$(pdfinfo report.pdf | awk '/^Pages/{print $2}')
@@ -80,15 +95,3 @@ jobs:
             fail=1
           fi
           exit $fail
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: report-pdf
-          path: report.pdf
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: baseline-justification-pdf
-          path: baseline-justification.pdf
-          if-no-files-found: error
