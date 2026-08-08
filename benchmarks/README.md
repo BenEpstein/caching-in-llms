@@ -383,20 +383,14 @@ The `roundrobin` cell is a comparator for the figures. It is not one of the test
 
 The command tests one metric at a time. Select it with `--metric`:
 
-| `--metric` value | Meaning | Status |
-|---|---|---|
-| `ttft_p95` | The TTFT p95 of each seed. The default. | Primary. A tested claim. |
-| `imbalance` | The load imbalance of each seed. | Primary. A tested claim. |
-| `ttft_slo_miss` | The fraction of the sent requests with no first token before the objective. Set the objective with `--slo`, in seconds. An errored request counts as a late request. | Reported. Not a tested claim. |
-| `ttft_`, `e2e_`, `itl_` + `mean`, `p50`, `p90`, `p95`, `p99` | The latency statistics, for example `e2e_p99`. | Exploratory. |
-| `throughput_req_s`, `throughput_tok_s` | The requests and the tokens for each second. | Exploratory. |
-| `error_rate` | The error rate of each seed. | Exploratory. |
-
-The test and the threshold of 0.025 were registered for the two primary metrics before the
-measurement, on issue [#31](https://github.com/BenEpstein/caching-in-llms/issues/31). The
-command prints the same test for every metric, but only the two primary metrics carry a
-significance claim. A p-value from any other metric is exploratory: to test many metrics and
-select the significant one is multiple testing.
+| `--metric` value | Meaning |
+|---|---|
+| `ttft_p95` | The TTFT p95 of each seed. The default, and one of the two primary measurements. |
+| `imbalance` | The load imbalance of each seed. The other primary measurement. |
+| `ttft_slo_miss` | The fraction of the sent requests with no first token before the objective. Set the objective with `--slo`, in seconds. An errored request counts as a late request. |
+| `ttft_`, `e2e_`, `itl_` + `mean`, `p50`, `p90`, `p95`, `p99` | The latency statistics, for example `e2e_p99`. |
+| `throughput_req_s`, `throughput_tok_s` | The requests and the tokens for each second. |
+| `error_rate` | The error rate of each seed. |
 
 The metric `ttft_slo_miss` is 1 minus the goodput. The figure `fig12-goodput` draws the whole
 curve from 50 ms to 400 ms, so one objective is not a threshold to select.
