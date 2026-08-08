@@ -109,7 +109,9 @@ $$\text{score}(i) = \frac{\text{matched\_tokens}(i)}{\text{prompt\_tokens}} - \b
 \qquad
 \text{relative\_load}(i) = \frac{\text{load}(i) - \overline{\text{load}}}{\max(1, \overline{\text{load}})}$$
 
-The router computes this for **every** endpoint and takes the argmax, breaking ties by URL for
+The first term is the **cache-hit benefit**: the fraction of a request's prompt tokens that
+instance already holds across its cache tiers. The second is its load penalty. The router
+computes the score for **every** endpoint and takes the argmax, breaking ties by URL for
 determinism. Three design decisions carry weight:
 
 **Both terms are dimensionless, so β carries no unit from the deployment.** The benefit is a
@@ -137,9 +139,12 @@ the sweep grid halves.
 them to *every* `route_request()` call. `KvawareRouter` uses none of it. Our scoring function
 plugs in exactly there — no new collection path, no new failure mode.
 
-**`kvaware` is left byte-identical.** The diff is additions-only: a new enum member, a factory
-branch, and a new class. The baseline arm we measure against is the unmodified upstream code
-path, not our code with a flag flipped.
+**`kvaware` is left byte-identical.** Three of the four patched files take pure additions — a
+new enum member, a factory branch, and a new class. The fourth is not an addition and is
+load-bearing: `parsers/parser.py` hard-codes `--routing-logic`'s `choices` list, so without a
+one-line widening argparse rejects the flag and the router exits before the factory ever runs.
+The baseline arm we measure against is the unmodified upstream code path, not our code with a
+flag flipped.
 
 One defect surfaced in review and is worth recording because it is invisible until an engine
 restarts: the `instance_id → URL` bridge must refresh when an engine comes back under a fresh
@@ -231,7 +236,9 @@ A secondary metric from the same cells is reported alongside them:
 | Goodput - missed requests at a 150 ms TTFT objective | **−19.0%**, CI [10.7%, 22.1%] | p = 0.0021 |
 | Same, β = 0 ablation | −3.6% (wrong way) | p = 0.8058 - null |
 
-Goodput is a secondary, not a co-primary: it was not pre-registered. It is reportable rather
+Goodput is the fraction of requests *sent* whose first token arrived within the objective; the
+denominator is requests sent, so an errored request counts as a miss rather than vanishing from
+the metric. It is a secondary, not a co-primary: it was not pre-registered. It is reportable rather
 than a threshold hunt because the objective is **swept, not pinned** - `fig12` draws 50–400 ms
 and the arms separate across the whole range, so 150 ms is a reporting choice and not a
 load-bearing threshold - and because the β = 0 ablation runs negative across that same range,
@@ -335,13 +342,22 @@ than a fitted constant.
 The latency side of this trade-off is exactly what the in-cluster re-run measures, and it is
 not reported here on WAN-polluted data.
 
+**The cost side is measurable, and it is what turns the trade-off over at β = 2.0.** The vLLM
+prefix-cache hit rate falls monotonically as β rises: 91.2% for `kvaware` and 91.3% at β = 0,
+then 90.7%, 87.9% and 86.1% at β = 0.5, 1.0 and 2.0. Up to the knee that is nearly free —
+β = 0.5 cuts imbalance 48.1% for half a percentage point of locality. Past it the exchange rate
+worsens sharply, and at β = 2.0 the lost hits surface as latency: TTFT p95 rises to 336 ms
+against the baseline's 320 ms, the only arm carrying the load term that lands worse than the
+baseline it is trying to beat. That reversal is the reason the grid stops at β = 2.0 and the
+reason β = 0.5 is a defended optimum rather than an arbitrary small number.
+
 A caution on the *other* hit-rate metric: `lmcache:lookup_hit_rate` is scraped from the engines,
 so it measures each engine against its **own** local cache rather than whether the router chose
 the instance holding the KV. It saturates near 0.95 on every arm including round-robin and does
 not discriminate between policies. Every hit-rate number in this report is the vLLM
 prefix-cache counter.
 
-![TTFT p95 against β at 16 req/s, with the cache-hit-rate trade-off. Note the hit rate is flat across this range — see the text.](../figures/fig7-beta-tradeoff.png)
+![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png)
 
 ## Resource cost
 

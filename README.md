@@ -91,8 +91,14 @@ Python ≥ 3.10. **No GPU and no cluster needed** for the test suite or for re-d
 published number:
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+The version floor is enforced, not just documented: `scripts/reproduce.sh` refuses to run below
+3.10 rather than reporting the resulting last-digit differences as drift in the committed data.
+On macOS, `python3` is 3.9 unless you install a newer one — build the venv with an explicit
+`python3.12 -m venv .venv`.
 
 ## Tests
 
