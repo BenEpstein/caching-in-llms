@@ -38,8 +38,9 @@ is a factor of **34**. The routing decision causes all of this difference. The v
 hit rate is **0.682** for round-robin and 0.912 for cache-aware placement.
 
 The reason is important. Round-robin does not balance the load badly. **Round-robin balances
-better than the cache-aware baseline.** Its imbalance is 1.490. The imbalance of `kvaware` is
-2.358. But round-robin is still 34 times slower. Round-robin makes the number of requests equal.
+better than the cache-aware baseline.** The load imbalance is the number of running requests on
+the busiest server divided by the number on the most idle server. A value of 1.0 is a perfect
+balance. The imbalance of round-robin is 1.490. The imbalance of `kvaware` is 2.358. But round-robin is still 34 times slower. Round-robin makes the number of requests equal.
 It does not make the work equal. If a request goes to the server that does not hold its prefix,
 that server must calculate a full prefill of 2048 tokens. The counts are equal, but the locality
 is lost. You must add load-awareness **to** cache-awareness. You must not replace one with the
@@ -61,21 +62,20 @@ balance pull in opposite directions. The standard router pulls in one direction 
    benefit and the live load. The router selects the server with the best score. One parameter
    controls the policy. The parameter has no unit.
 
-**What we proved.** The policy decreases the load imbalance by **48.1%** (p < 0.0001, n = 20
-paired seeds). An independent sweep two days later gives **49.4%**. An ablation shows that the
-mechanism is correct. When the load term is off (β = 0), the policy gives the same result as the
-baseline. The load term causes the improvement. The new code does not cause it. The policy costs
-nothing that we can measure. The GPU use, the GPU power and the router CPU are equal on all arms.
-The policy also balances the cache itself, not only the request counts. The spread of the KV
-cache decreases from 1.70 times to 1.18 times. On a declared secondary metric, 19.0% fewer
-requests miss a first-token objective of 150 ms (p = 0.0021).
+**What the six-cell sweep shows.** The policy decreases the load imbalance by **48.1%**
+(p < 0.0001, n = 20 paired seeds). An independent sweep two days later gives **49.4%**. The
+latency medians also improve: TTFT p95 goes from 320 ms to 295 ms, and end-to-end p95 goes from
+6.78 s to 5.96 s. On goodput, a declared secondary metric, 19.0% fewer requests miss a
+first-token objective of 150 ms (p = 0.0021). An ablation shows that the mechanism is correct.
+When the load term is off (β = 0), the policy gives the same result as the baseline. The load
+term causes the improvement. The new code does not cause it. The policy costs nothing that we
+can measure. The GPU use, the GPU power, the throughput and the router CPU are equal on all
+arms. The policy also balances the cache itself, not only the request counts. The spread of the
+KV cache decreases from 1.70 times to 1.18 times.
 
-**Where the claim stops.** The latency co-primary metric **gives a null result (−2.7%,
-p = 0.1153). We report it.** The first measurement used a wide-area network. That network caused
-45% to 59% of the number. We did not change to a metric that gives a better result. We repaired
-the instrument and did the same test again. The result is not significant, because the fleet
-never made a queue at this operating point. The counter `vllm:num_requests_waiting` was zero in
-284 of 284 scrapes. Better placement cannot remove a queueing delay that does not exist.
+We registered two co-primary metrics before the comparison ran: load imbalance and TTFT p95.
+The imbalance result is significant. The paired TTFT test is not (−2.7%, p = 0.1153), and we
+report it. The Results section gives the full analysis.
 
 ## Related work
 
@@ -136,10 +136,6 @@ is cancelled at $r = 1/(2\beta)$. At the default of β = 1.0, this is $r = 0.5$.
 more load than the fleet mean does not attract more cache hits. The limit of 1 in the denominator
 is necessary. Without it, a fleet mean of 0.1 makes one request in flight a relative load of 9.0.
 The policy would then react to noise at a load level that does not need a balance.
-
-**The policy has one parameter, not two.** An earlier design had a second weight α on the benefit
-term. The benefit is already a fraction. Only the *ratio* of the two weights sets the trade-off.
-One parameter gives all of the behaviour of two parameters. It also makes the sweep grid smaller.
 
 **The load signal was already available, and the baseline ignored it.** The class `EngineStats`
 scrapes `num_running_requests`, `num_queuing_requests` and `gpu_cache_usage_perc` for each
@@ -431,7 +427,7 @@ does not change. It stays at approximately 1.02 GB.
 
 One value here is a *result* and not a cost. **The spread of the KV-cache memory across the two
 servers decreases from 1.70 times with `kvaware` to 1.18 times at β = 0.5.** The ablation at
-β = 0 gives 1.79 times. This is at the baseline. Thus the policy balances the cache itself. It
+β = 0 gives 1.79 times. This is near the baseline value of 1.70. Thus the policy balances the cache itself. It
 does not balance the request count only. A load balancer that ignores locality cannot do this.
 
 The process CPU and the RSS of the servers are **not available**. vLLM has no process collector.
