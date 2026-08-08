@@ -11,7 +11,7 @@ itl ones, whose source column is named `itls_ms`. See the UNITS note in
 analyze.py.
 
 Usage:
-  python3 export_summary.py results/<run>... --out results/summary-per-seed.csv
+  python3 export_summary.py results/<sweep>/<run>... --out results/<sweep>/summary-per-seed.csv
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ FIELDS = [
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="+")
-    ap.add_argument("--out", default="results/summary-per-seed.csv")
+    ap.add_argument("--out", required=True, help="per-sweep CSV, e.g. results/<sweep>/summary-per-seed.csv")
     a = ap.parse_args()
 
     rows = []

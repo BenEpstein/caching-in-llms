@@ -56,7 +56,7 @@ def test_check_comparable_allows_same_sweep(tmp_path):
 
 def test_check_comparable_rejects_cross_sweep(tmp_path):
     a = _meta_run_dir(tmp_path, "a", sweep_id="gen3-7cell")
-    b = _meta_run_dir(tmp_path, "b", sweep_id="gen1-confirmatory")
+    b = _meta_run_dir(tmp_path, "b", sweep_id="gen2-confirmatory")
     with pytest.raises(SystemExit, match="sweep_id differs"):
         check_comparable(a, b)
 

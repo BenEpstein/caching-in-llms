@@ -25,7 +25,7 @@ column's name. The names carry no unit suffix and are the column headers in the
 committed summary CSV, so a reader checking a figure against that CSV has
 nothing but this note to go on. Not renamed deliberately: the names are
 load-bearing in export_summary.py, plot_results.py, load_gate.py and the
-already-committed results/summary-per-seed.csv.
+already-committed per-sweep summary-per-seed.csv.
 
 Usage:
   python3 analyze.py summary  results/<run>...

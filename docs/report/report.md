@@ -543,19 +543,19 @@ and no GPU.
 | Load driver, gates, collectors | `benchmarks/load_driver.py`, `load_gate.py`, `scarcity_gate.py`, `collectors/` |
 | Statistics (Wilcoxon + bootstrap) | `benchmarks/analyze.py` |
 | Figure generation | `benchmarks/plot_results.py` |
-| Per-seed derived table | `results/summary-per-seed.csv` |
+| Per-seed derived table | `results/gen2-confirmatory/summary-per-seed.csv` |
 | Baseline justification (guidelines §2) | `docs/baseline-justification.md` |
 
 ## Run provenance
 
 | Arm | Run directory | Rate | Seeds |
 |---|---|---|---|
-| `kvaware` (baseline) | `results/20260805-230541-kvaware` | 16 | 20 |
-| `loadaware` β = 0 (ablation) | `results/20260806-002645-loadaware-b0` | 16 | 20 |
-| `loadaware` β = 0.5 (**headline**) | `results/20260805-232541-loadaware-b0.5` | 16 | 20 |
-| `loadaware` β = 1.0 (shipped default) | `results/20260805-234559-loadaware-b1.0` | 16 | 20 |
-| `loadaware` β = 2.0 | `results/20260806-000626-loadaware-b2.0` | 16 | 20 |
-| `roundrobin` (comparator) | `results/20260806-144135-roundrobin` | 16 | 20 |
+| `kvaware` (baseline) | `results/gen2-confirmatory/20260805-230541-kvaware` | 16 | 20 |
+| `loadaware` β = 0 (ablation) | `results/gen2-confirmatory/20260806-002645-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.5 (**headline**) | `results/gen2-confirmatory/20260805-232541-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 (shipped default) | `results/gen2-confirmatory/20260805-234559-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `results/gen2-confirmatory/20260806-000626-loadaware-b2.0` | 16 | 20 |
+| `roundrobin` (comparator) | `results/gen2-confirmatory/20260806-144135-roundrobin` | 16 | 20 |
 
 These six cells are the evidence base for every **reported** number and figure, and
 `scripts/reproduce.sh` regenerates all of it from exactly these directories.
@@ -584,15 +584,15 @@ result* is an argument about measurement and the measurement is its evidence:
 
 | Arm | Run directory | Rate | Seeds |
 |---|---|---|---|
-| `kvaware` | `results/20260805-005210-kvaware` | 16 | 20 |
-| `loadaware` β = 0 | `results/20260805-011148-loadaware-b0` | 16 | 20 |
-| `loadaware` β = 0.5 | `results/20260805-013208-loadaware-b0.5` | 16 | 20 |
-| `loadaware` β = 1.0 | `results/20260805-015202-loadaware-b1.0` | 16 | 20 |
-| `loadaware` β = 2.0 | `results/20260805-021215-loadaware-b2.0` | 16 | 20 |
+| `kvaware` | `results/gen1-wan/20260805-005210-kvaware` | 16 | 20 |
+| `loadaware` β = 0 | `results/gen1-wan/20260805-011148-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.5 | `results/gen1-wan/20260805-013208-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 | `results/gen1-wan/20260805-015202-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `results/gen1-wan/20260805-021215-loadaware-b2.0` | 16 | 20 |
 
 Same arms, same frozen workload, same offered rate - driven from a laptop over the public
 internet instead of from inside the cluster. They are **not results**, and they are deliberately
-excluded from `results/summary-per-seed.csv` so that one table means one instrument. They get
+excluded from the reported sweep's `summary-per-seed.csv` so that one table means one instrument. They get
 their own full figure set (`docs/figures-wan/`), whose underlying series `reproduce.sh`
 regenerates and diffs on every run, so the instrument argument is as reproducible as the results
 it justifies. As everywhere else here, the check is on the numbers behind the figures, not on
@@ -618,9 +618,9 @@ pytest benchmarks/ tests/ -q
 # the figures. `roundrobin` is passed as --comparator, never positionally: it is the framing
 # cell for fig12, not a point on the β grid.
 python3 benchmarks/analyze.py compare \
-  results/20260805-232541-loadaware-b0.5 results/20260805-230541-kvaware
-python3 benchmarks/utilization.py report results/20260805-2* results/20260806-0*
-python3 benchmarks/plot_results.py results/20260805-2* results/20260806-0* \
-  --comparator results/20260806-144135-roundrobin \
+  results/gen2-confirmatory/20260805-232541-loadaware-b0.5 results/gen2-confirmatory/20260805-230541-kvaware
+python3 benchmarks/utilization.py report results/gen2-confirmatory/20260805-2* results/gen2-confirmatory/20260806-0*
+python3 benchmarks/plot_results.py results/gen2-confirmatory/20260805-2* results/gen2-confirmatory/20260806-0* \
+  --comparator results/gen2-confirmatory/20260806-144135-roundrobin \
   --cand loadaware-b0.5 --out docs/figures
 ```

@@ -43,7 +43,7 @@ ok()   { echo "  ok   $*"; }
 
 # Two kinds of comparison, and conflating them is dangerous:
 #
-#   verify_against  - the target is COMMITTED DATA (results/summary-per-seed.csv). Never
+#   verify_against  - the target is COMMITTED DATA (a sweep's summary-per-seed.csv). Never
 #                     written to. --update must not touch it: the generated file can be a
 #                     strict subset when a run directory is missing, so "updating" it would
 #                     silently delete real rows.
@@ -82,19 +82,18 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
   || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
 
-# Every summary-per-seed.csv in the tree: the root file for the reported generation (cited by
-# docs/report/report.md, so it does not move) plus one inside each sweep directory. Column 1 of
-# a table is the manifest of which runs belong to its sweep, so checks 1 and 3 both walk it -
-# resolved relative to the TABLE'S OWN directory, so a nested sweep's rows name paths inside
-# that sweep.
+# Every summary-per-seed.csv in the tree: one per sweep directory (#75), none at the root.
+# Column 1 of a table is the manifest of which runs belong to its sweep, so checks 1 and 3
+# both walk it - resolved relative to the TABLE'S OWN directory, so a sweep's rows name
+# paths inside that sweep.
 #
 # No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
-summaries=("$ROOT/results/summary-per-seed.csv")
+summaries=()
 while read -r extra; do summaries+=("$extra"); done < <(
   find "$ROOT/results" -mindepth 2 -name summary-per-seed.csv | sort)
+[ "${#summaries[@]}" -gt 0 ] || die "no summary-per-seed.csv found under results/*/"
 
 table_label() {  # table_label <table-path>
-  [ "$(dirname "$1")" = "$ROOT/results" ] && { echo "summary-per-seed.csv (reported)"; return; }
   echo "summary-per-seed.csv ($(basename "$(dirname "$1")"))"
 }
 
@@ -152,12 +151,12 @@ echo "==> 4/7 the reported statistics regenerate"
 # and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
 # check that verifies the wrong run reads exactly like a check that passes.
 # See benchmarks/README.md, "Reproducing the reported numbers".
-: "${HEADLINE:=results/20260805-232541-loadaware-b0.5}"
-: "${BASELINE:=results/20260805-230541-kvaware}"
-: "${ABLATION:=results/20260806-002645-loadaware-b0}"
-: "${BETA1:=results/20260805-234559-loadaware-b1.0}"
-: "${BETA2:=results/20260806-000626-loadaware-b2.0}"
-: "${COMPARATOR:=results/20260806-144135-roundrobin}"   # framing cell: fig12 ONLY, never a positional run
+: "${HEADLINE:=results/gen2-confirmatory/20260805-232541-loadaware-b0.5}"
+: "${BASELINE:=results/gen2-confirmatory/20260805-230541-kvaware}"
+: "${ABLATION:=results/gen2-confirmatory/20260806-002645-loadaware-b0}"
+: "${BETA1:=results/gen2-confirmatory/20260805-234559-loadaware-b1.0}"
+: "${BETA2:=results/gen2-confirmatory/20260806-000626-loadaware-b2.0}"
+: "${COMPARATOR:=results/gen2-confirmatory/20260806-144135-roundrobin}"   # framing cell: fig12 ONLY, never a positional run
 : "${SLO:=0.150}"   # analyze.TTFT_SLO_S; overridable like the cell paths above
 {
   echo "# headline: $(basename "$HEADLINE") vs $(basename "$BASELINE")"
@@ -197,17 +196,18 @@ figure_set() {
 }
 
 echo "==> 5/7 the numbers behind every figure regenerate"
-figure_set gen1-confirmatory "$EXPECTED/figure-data.json" "reported" \
+figure_set gen2-confirmatory "$EXPECTED/figure-data.json" "reported" \
   "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" "$ROOT/$BETA1" "$ROOT/$BETA2" \
   --comparator "$ROOT/$COMPARATOR"
 
 echo "==> 6/7 the WAN generation regenerates its own figure set"
 # Literal paths, unlike the cells above: this generation is frozen, so there is nothing to
 # repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
-figure_set gen2-wan "$EXPECTED/figure-data-wan.json" "WAN" \
-  "$ROOT/results/20260805-005210-kvaware" "$ROOT/results/20260805-011148-loadaware-b0" \
-  "$ROOT/results/20260805-013208-loadaware-b0.5" "$ROOT/results/20260805-015202-loadaware-b1.0" \
-  "$ROOT/results/20260805-021215-loadaware-b2.0"
+W="$ROOT/results/gen1-wan"
+figure_set gen1-wan "$EXPECTED/figure-data-wan.json" "WAN" \
+  "$W/20260805-005210-kvaware" "$W/20260805-011148-loadaware-b0" \
+  "$W/20260805-013208-loadaware-b0.5" "$W/20260805-015202-loadaware-b1.0" \
+  "$W/20260805-021215-loadaware-b2.0"
 
 echo "==> 7/7 the gen-3 7-cell sweep regenerates its own figure set"
 G3="$ROOT/results/gen3-7cell"

@@ -13,7 +13,7 @@ than the cache-aware baseline - imbalance 1.49 against `kvaware`'s 2.36 - and st
 slower, because it equalises request *counts*, not *work*: a request sent to the
 engine that does not hold its prefix pays a full prefill. Balanced counts, ruined locality.
 That is why load-awareness has to be added **on top of** cache-awareness rather than
-substituted for it. (`results/20260806-144135-roundrobin`, n=20, offered rate 16 - a descriptive
+substituted for it. (`results/gen2-confirmatory/20260806-144135-roundrobin`, n=20, offered rate 16 - a descriptive
 cell, not a hypothesis test.)
 
 ```
@@ -52,8 +52,8 @@ That was pre-declared falsifiable before the comparator ran.
 > back null. Goodput against a 150 ms SLO, a reported secondary, does move: **19.0% fewer misses**
 > (CI [10.7%, 22.1%], p = 0.002).
 
-Provenance: `results/20260805-230541-kvaware`, `results/20260806-002645-loadaware-b0`,
-`results/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster -
+Provenance: `results/gen2-confirmatory/20260805-230541-kvaware`, `results/gen2-confirmatory/20260806-002645-loadaware-b0`,
+`results/gen2-confirmatory/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster -
 see [Verify without a cluster](#verify-without-a-cluster).
 
 ## What we changed upstream
@@ -144,11 +144,11 @@ Every figure and both statistical tests are recomputable from committed artifact
 ```bash
 ./scripts/reproduce.sh   # all of the below, diffed against the committed baselines
 
-python3 benchmarks/export_summary.py results/20260805-2* results/20260806-* --out /tmp/summary.csv
-python3 benchmarks/analyze.py compare results/20260805-232541-loadaware-b0.5 \
-                                      results/20260805-230541-kvaware
-python3 benchmarks/plot_results.py results/20260805-2* results/20260806-0* \
-  --comparator results/20260806-144135-roundrobin --cand loadaware-b0.5 --out /tmp/figures
+python3 benchmarks/export_summary.py results/gen2-confirmatory/2026* --out /tmp/summary.csv
+python3 benchmarks/analyze.py compare results/gen2-confirmatory/20260805-232541-loadaware-b0.5 \
+                                      results/gen2-confirmatory/20260805-230541-kvaware
+python3 benchmarks/plot_results.py results/gen2-confirmatory/20260805-2* results/gen2-confirmatory/20260806-0* \
+  --comparator results/gen2-confirmatory/20260806-144135-roundrobin --cand loadaware-b0.5 --out /tmp/figures
 ```
 
 `analyze.py compare` **refuses** to pair two runs whose `run.json` records a different rate or
