@@ -544,11 +544,17 @@ with a per-cell constant in it. Load imbalance is unaffected in both, being serv
   differences (seeded, 10 000 resamples).
 - Any pairwise cell comparison is significance-capable (all cells get all 20 seeds).
 - **Why n=20.** The exact one-sided Wilcoxon's resolution is bounded by the pair count, not
-  by the effect size: the smallest attainable p is **0.125 at n=3** and **0.031 at n=5**,
-  both above the 0.025 threshold however large the effect. **n=10** is the first that
-  survives a single reversal (p=0.0107), and the published imbalance headline was 19/20 -
-  exactly one reversal. n=20 buys margin for two or three. Do not trim seeds to save
-  cluster time: below n=10 a real effect cannot reach the threshold at all.
+  by the effect size: with every pair in the right direction the smallest attainable p is
+  **0.125 at n=3** and **0.031 at n=5** - both above the 0.025 threshold however large the
+  effect, so those sizes cannot produce a significant result at all. Reversals cost more than
+  they look: taking the worst case, where a reversed seed carries the largest rank, **one**
+  reversal leaves n=10 at **p=0.042** (fails) against n=20's **0.0004**, and **two** leave
+  n=10 at **p=0.216** against n=20's **0.0060**.
+
+  That matters because the published imbalance headline had **two** reversals - it improved on
+  **18 of 20** seeds (seeds 16 and 19 went the other way). At n=10 that result could not have
+  cleared the threshold; at n=20 it clears it with room. Do not trim seeds to save cluster time.
+  Recompute any of these with `benchmarks/analyze.py`'s exact null.
 
 ## Goodput (`ttft_slo_miss`) - secondary metric
 
