@@ -26,7 +26,7 @@ workload at fixed load.
 | `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze at or just under it (see "Picking the rate") |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
-| `export_summary.py` | Derives a `summary-per-seed.csv` per sweep - committed evidence a reader can check without the raw data. Nothing reads it: figures and stats go to each cell's `run.json` and driver CSVs directly |
+| `export_summary.py` | Derives a `summary-per-seed.csv` per sweep - committed evidence a reader can check without the raw data, and the manifest `reproduce.sh` reads (column 1) to learn which runs belong to a sweep. No figure or statistic is computed from it: those read each cell's `run.json` and driver CSVs directly |
 | `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
 | `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
 | `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
@@ -151,10 +151,30 @@ point: it is reported as the cache-blind capacity floor, not as a tuned arm.
 
 β=0.25 was excluded from the grid on n=3 evidence (imbalance 2.257 against a same-hour kvaware
 control of 2.113 - no effect); that cell was pruned by #57 and the numbers are recorded here.
-It is back in the grid as a descriptive cell, and at n=20 the picture is stronger than "no
-effect": β=0.25 is **worse than the baseline** on both metrics (imbalance -21.0%, TTFT p95
--20.7% with a bootstrap CI of [-43.4%, -2.8%], entirely below zero). The useful range still
-starts at 0.5, and the response to β is non-monotonic at the low end, not merely flat.
+It is back in the grid as a descriptive cell, and at n=20 it sits **below the baseline** on both
+metrics rather than level with it (median imbalance -21.0%, TTFT p95 -20.7%). Descriptive means
+descriptive: this cell carries no pre-registered hypothesis, so read those as effect sizes with
+variance, never as a test. The useful range still starts at 0.5, and the response to β looks
+non-monotonic at the low end rather than merely flat - which is a claim for a future
+pre-registration, not one this grid settles.
+
+### Separating sweeps
+
+Every cell records a `sweep_id` in its `run.json`, and `analyze.py compare` refuses to pair two
+cells carrying different ones.
+
+It needs a key of its own because the guard's other two keys **cannot** catch a cross-sweep
+pair: separate sweeps replay the same frozen dataset at the same rate, so `rate_req_s` and
+`workload_manifest` match by construction. Pairing across sweeps therefore measures cluster
+drift plus the policy, inseparably, and still prints a p-value. Measured: a gen-3 cell against a
+gen-1 baseline returns `p=0.0000` and a 45.1% median reduction, none of it attributable.
+
+- `run_sweep.sh` mints one id per batch and exports it, so every cell in a run agrees.
+- `run_cell.sh` falls back to the results-root basename for a standalone cell, but **never** to
+  the shared `results` root - one id for every sweep ever run is a guard that passes everything.
+- Runs predating the field still pair: back-filling a batch name onto an archived directory
+  would be a provenance claim the code cannot support. The 18 committed dirs were back-filled
+  by hand from the table in `results/README.md`.
 
 ### Two eras of `beta`
 

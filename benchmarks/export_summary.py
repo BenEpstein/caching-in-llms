@@ -37,11 +37,9 @@ FIELDS = [
     # both sides. Never pool or compare across that boundary without saying which
     # side each cell is on. Which cells fall where: benchmarks/README.md, "Two
     # eras of `beta`".
-    # `sweep_id` is the batch a cell was measured in, and it is what stops a reader pooling two
-    # sweeps in pandas and pairing across windows. The file path already separates them - one
-    # table per sweep - but a path is lost the moment two tables are concat'd, and rate and
-    # workload are identical across sweeps by construction, so nothing else in the row would
-    # reveal the mix. Empty for the run dirs that predate the field.
+    # `sweep_id` travels in the row because the one-table-per-sweep layout separates batches
+    # only until someone concatenates two tables. Why cells from different sweeps must never be
+    # paired: analyze.check_comparable. Empty for run dirs that predate the field.
     "run", "sweep_id",
     "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",

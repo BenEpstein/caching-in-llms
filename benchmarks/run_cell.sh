@@ -275,15 +275,17 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
-# SWEEP_ID names the batch this cell belongs to, and `analyze.py compare` refuses to pair two
-# cells that carry different ones. Rate and workload manifest - the only things the guard used
-# to check - are IDENTICAL across separate sweeps by design, so they cannot detect that two
-# cells came from different evenings. Pairing across sweeps measures cluster drift plus the
-# policy, inseparably, and returns a confident-looking p-value while doing it.
+# SWEEP_ID names the batch this cell belongs to; `analyze.py compare` refuses to pair cells
+# carrying different ones. Why that guard needs a name of its own: benchmarks/README.md,
+# "Separating sweeps".
 #
-# Default is the results-root basename, which is what makes `run_sweep.sh <rate> results/<name>`
-# self-separating. Override only to place a cell into an existing sweep deliberately.
-SWEEP_ID="${SWEEP_ID:-$(basename "$RESULTS_ROOT")}"
+# The results-root basename is the fallback, but NEVER the shared default root: `results` as an
+# id would stamp every sweep ever run identically and let the guard pass the cross-window pairs
+# it exists to stop. A bare cell run is its own batch, so it gets its own stamped id.
+if [ -z "${SWEEP_ID:-}" ]; then
+  SWEEP_ID="$(basename "$RESULTS_ROOT")"
+  [ "$SWEEP_ID" = "results" ] && SWEEP_ID="cell-$(date +%Y%m%d-%H%M%S)"
+fi
 export CELL ARM BETA RATE MAX_TOKENS CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
 export DRIVER_NODE BENCH_IMAGE TARGET_URL SWEEP_ID
 python3 - <<'PY'

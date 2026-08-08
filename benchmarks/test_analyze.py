@@ -35,10 +35,8 @@ from analyze import (
 
 # ---- check_comparable -------------------------------------------------------
 #
-# The sweep_id guard exists because the other two keys CANNOT catch a cross-sweep pair:
-# separate sweeps replay the same frozen dataset at the same rate, so rate_req_s and
-# workload_manifest match by construction. Before the guard, pairing a cell from one evening
-# against a cell from another returned p=0.0000 and a 45% effect - drift and policy, mixed.
+# Why sweep_id needs its own key rather than falling out of the other two: analyze.py's
+# check_comparable.
 
 def _meta_run_dir(tmp_path, name, *, sweep_id=None, rate=16.0, manifest="m1"):
     d = tmp_path / name

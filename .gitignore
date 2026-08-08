@@ -35,7 +35,5 @@ __pycache__/
 .pytest_cache/
 teaching/
 
-# reproduce.sh's FIGS_OUT target in CI. Regenerated figures are a RENDERING of committed data,
-# never a new measurement - the committed sets under docs/figures*/ are the artifact. Ignored so
-# a local `FIGS_OUT=... ./scripts/reproduce.sh` cannot stage a duplicate figure tree.
+# reproduce.sh's FIGS_OUT target. The committed sets under docs/figures*/ are the artifact.
 ci-figures/

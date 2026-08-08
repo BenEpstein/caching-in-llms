@@ -11,6 +11,11 @@ set -euo pipefail
 
 RATE="${1:?usage: run_sweep.sh <rate> [results-root]}"
 RESULTS_ROOT="${2:-results}"
+
+# One id for the whole batch, minted HERE so every cell agrees on it and no two runs collide.
+# Left to run_cell.sh it would fall back to the results-root basename, which defaults to the
+# shared `results` - one id for every sweep ever run, and a guard that passes everything.
+export SWEEP_ID="${SWEEP_ID:-sweep-$(date +%Y%m%d-%H%M%S)}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Both tags are checked HERE, before the first helm upgrade, rather than left to
@@ -30,22 +35,17 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The sweep must run at or above the knee rate_pilot.sh finds: below it no engine
 # ever queues and beta has nothing to act on.
 #
-#   kept    loadaware-b0 at n=20 - the ABLATION, the only cell that isolates
-#           what beta buys, and pre-declared falsifiable. It must match the
-#           headline's n or the b<headline>-vs-b0 paired test cannot be run.
-#   kept    roundrobin - DESCRIPTIVE, not a hypothesis test. It runs in-batch so
-#           it shares a window with the arms it frames; the previous generation
-#           ran it ~16h after the baseline, which is a worse comparison. It
-#           SATURATES at the sweep rate and so is NOT at the same operating
-#           point as the other arms: report its throughput shortfall as the
-#           honest headline for that arm, NEVER the latency ratio.
-#   kept    beta=0.25 - DESCRIPTIVE, and the low end of the grid. At n=3 it
-#           measured no effect against a same-hour kvaware control (imbalance
-#           2.257 vs 2.113); n=20 is what decides whether that was the sample
-#           size or the policy. The useful range still starts at 0.5.
+#   loadaware-b0  the ABLATION, and the only cell that isolates what beta buys.
+#                 Must run at the headline's n or the b<headline>-vs-b0 paired
+#                 test cannot be run.
+#   roundrobin    DESCRIPTIVE. SATURATES at the sweep rate, so it is NOT at the
+#                 same operating point as the other arms: report its throughput
+#                 shortfall, NEVER its latency ratio.
+#   beta=0.25     DESCRIPTIVE, the low end of the grid.
 #
-# Neither added cell carries a p-value, so the pre-registered alpha=0.025 pair
-# (b0.5 vs kvaware) is untouched - no multiplicity adjustment is owed for them.
+# The two descriptive cells carry no p-value, so the pre-registered alpha=0.025
+# pair (b0.5 vs kvaware) is untouched and no multiplicity adjustment is owed.
+# Set EXTRA_CELLS="" to drop roundrobin; see its definition below.
 #
 # OSL is 64 (run_cell.sh MAX_TOKENS) and must stay there: raise it and the fleet
 # saturates, raise it further and it breaches the catastrophic error ceiling, and
@@ -82,31 +82,34 @@ SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 # over an evening on identical config - so the order is where that confound gets
 # managed.
 #
-# The default above IS the pre-registered order (#31 amendment 1) - it is set as
-# the default rather than passed by hand so the documented command cannot run
-# the wrong sequence. It is deliberate on two counts:
+# The default extends #31's pre-registered order (kvaware, b0.5, b1.0, b2.0, b0)
+# with two DESCRIPTIVE cells; #31 itself covers the five, not the seven. It is a
+# default rather than a hand-passed argument so the documented command cannot run
+# the wrong sequence. Two constraints fix it:
 #   - b0.5 runs second, adjacent to kvaware. Those two are the only cells
 #     carrying a p-value, so the pair that matters spans the least wall-clock.
-#   - b0 runs LAST OF THE LOADAWARE CELLS. It is the cell expected to behave
-#     like kvaware, so placing it at maximum separation makes it the drift
-#     sentinel: a b0 null across the whole window is evidence the window held.
-#     In slot 2 it said nothing.
-# A b0 that moves cannot separate drift from a real placement effect, which is
-# the accepted cost, declared in the pre-registration rather than discovered.
-#
-# roundrobin is appended AFTER b0 rather than inserted into the grid: it is a
-# different arm on the stock image, so it cannot serve as a drift sentinel for
-# the loadaware cells, and putting it anywhere earlier would push b0 off the
-# maximum-separation slot the sentinel depends on. Trailing it costs the
-# sentinel nothing.
+#   - b0 runs LAST OF THE LOADAWARE CELLS, at maximum separation from kvaware,
+#     which is what makes it the drift sentinel: a b0 null across the whole
+#     window is evidence the window held. In slot 2 it says nothing. A b0 that
+#     moves cannot separate drift from a real placement effect - the accepted
+#     cost, declared in the pre-registration rather than discovered.
+# roundrobin trails b0: a different arm on the stock image cannot be a sentinel
+# for the loadaware cells, and inserting it earlier would push b0 off that slot.
 #
 # There is deliberately NO closing kvaware bracket - b0-last replaces it (#27
 # removed the WAN drift it guarded) at zero extra cluster time.
+# Non-beta cells appended after the grid. Overridable like BETA_GRID, and for the same reason:
+# #31 pre-registered a FIVE-cell sweep with roundrobin explicitly out, so that run has to stay
+# reproducible from this script:
+#   BETA_GRID="0.5 1.0 2.0 0" EXTRA_CELLS="" ./run_sweep.sh 16
+# Unset-vs-empty matters here, so no colon in the expansion: EXTRA_CELLS="" means none.
+EXTRA_CELLS="${EXTRA_CELLS-roundrobin}"
+
 CELLS="kvaware"
 for b in $BETA_GRID; do
   CELLS+=" loadaware-b${b}"
 done
-CELLS+=" roundrobin"
+[ -n "$EXTRA_CELLS" ] && CELLS+=" $EXTRA_CELLS"
 
 for cell in $CELLS; do
   SEEDS="$SEEDS_FULL" "$BENCH_DIR/run_cell.sh" "$cell" "$RATE" "$RESULTS_ROOT"

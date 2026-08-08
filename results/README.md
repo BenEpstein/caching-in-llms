@@ -75,13 +75,17 @@ Figures in `docs/figures-gen3/`; the figure data is diffed by `reproduce.sh` che
 per-seed table is `results/gen3-7cell/summary-per-seed.csv` (140 rows), regenerated and diffed
 by check 3 alongside the reported one.
 
-**One table per sweep**, each beside the data it summarises, so "one table means one window"
-holds by construction rather than by remembering to filter. The root
+**One table per sweep**, each beside the data it summarises. The root
 `results/summary-per-seed.csv` is the **reported** generation's table and stays where the report
-cites it; gen-1's cells are flat in `results/` and have no sweep directory to hold one, so that
-file does double duty until they are nested. Every table now carries a `sweep_id` column - a
-file path separates two tables only until someone concatenates them, and rate and workload are
-identical across sweeps by construction, so nothing else in a row would reveal the mix.
+cites it; gen-1's cells are flat in `results/` with no sweep directory to hold one.
+
+That root table is the exception to the rule, and knowingly so: it carries **two** sweep ids -
+100 `gen1-confirmatory` rows plus 20 `gen1-roundrobin`, because the reported set includes a
+comparator measured ~16h later. Filter on `sweep_id` before pairing anything out of it. Every
+table carries that column for exactly this reason: the file path separates two tables only
+until someone concatenates them, and rate and workload are identical across sweeps by
+construction, so nothing else in a row would reveal the mix. `gen2-wan` has no table at all -
+it is superseded and backs only the instrument-problem section.
 
 ## Directory shape
 
