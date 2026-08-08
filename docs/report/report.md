@@ -353,17 +353,12 @@ are in git history. The retained WAN sweep supports the same argument on committ
 157.4 → 101.9 ms, non-engine term 124.6 → 48.5 ms, and the 45–59% share above. See
 `results/README.md`.
 
-![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png)
+![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png){width=78%}
 
 ## The ablation is the finding
 
-| Arm | Median imbalance | vs `kvaware` |
-|---|---|---|
-| `kvaware` (baseline) | 2.358 | - |
-| `loadaware` β = 0 | 2.662 | null - p = 0.9734, and the wrong way |
-| `loadaware` β = 0.5 | 1.249 | **−48.1%**, p < 0.0001 |
-
-With the load term switched off, the policy is statistically indistinguishable from the
+Against the baseline's 2.358, the ablation lands at 2.662 (null, p = 0.9734, and the wrong way)
+while β = 0.5 lands at 1.249. With the load term switched off, the policy is statistically indistinguishable from the
 baseline on imbalance *and* on latency. **The load term is the entire mechanism.** Rewriting the
 router — the multi-instance lookup, the scoring path, the instance bridge — bought nothing on
 its own; β bought everything.
@@ -420,11 +415,11 @@ the instance holding the KV. It saturates near 0.95 on every arm including round
 not discriminate between policies. Every hit-rate number in this report is the vLLM
 prefix-cache counter.
 
-![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png)
+![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=78%}
 
 ## Resource cost
 
-![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png)
+![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=78%}
 
 The policy is not buying its result by spending more hardware. Both GPUs run at 82–93% SM
 utilization on every arm and board power sits at 108–119 W per device throughout — which is
