@@ -12,7 +12,7 @@
 # that there is no knee, and a rate frozen from inside the flat region leaves
 # `vllm:num_requests_waiting` at zero on every engine - no load for a load-aware
 # router to be aware of. Where this cluster's knee landed:
-# benchmarks/README.md, "Picking the rate (step 0)".
+# benchmarks/README.md, "Step 4: find the offered rate".
 #
 # Pick the rate where achieved req/s stops tracking offered and TTFT p95 elbows.
 # A load-balancing policy can only pay off at or above the knee; below it the
@@ -23,7 +23,12 @@ set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
-BASE_URL="${BASE_URL:-https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il}"
+# shellcheck source=router_forward.sh
+. "$BENCH_DIR/router_forward.sh"
+PIDS=()
+cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
+trap cleanup EXIT
+BASE_URL="${BASE_URL:-http://localhost:8000}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 NS="${NS:-cache-llm}"
 RELEASE="${RELEASE:-stack}"
@@ -36,11 +41,14 @@ if [ $# -gt 0 ]; then RATES=("$@"); else RATES=(4 8 12 14 16 18 20); fi
 echo "==> deploying kvaware for the pilot"
 helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" \
   -f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml"
-oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
-oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
+kubectl set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
+kubectl rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   "$BENCH_DIR/cold_start.sh"
-"$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
+# After the cold start, never before: the restart in it kills any earlier forward.
+start_router_forward "$NS" "$RELEASE"
+NS="$NS" BASE_URL="$BASE_URL" MODEL="$MODEL" \
+  "$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
 
 PILOT_DIR="${PILOT_DIR:-results/rate-pilot}"
 mkdir -p "$PILOT_DIR"

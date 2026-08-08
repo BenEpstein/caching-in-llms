@@ -18,9 +18,9 @@
 #     patches/vllm_router/parsers/parser.py
 #
 # To refresh a stock copy from the pinned image:
-#   oc exec -n cache-llm deploy/stack-deployment-router -- cat $SP/<path> > patches/<path>
+#   kubectl exec -n cache-llm deploy/stack-deployment-router -- cat $SP/<path> > patches/<path>
 #
-# Only files whose basename matches a branch of `patch_target()` can be applied — the
+# Only files whose basename matches a branch of `patch_target()` can be applied - the
 # mount path must be the file's real location inside the image.
 set -euo pipefail
 
@@ -49,28 +49,28 @@ for f in "$@"; do
   b=$(basename "$f")
   [ -f "$f" ] || { echo "no such file: $f" >&2; exit 1; }
   target=$(patch_target "$b") || {
-    echo "unknown target '$b' — add it to patch_target() first" >&2; exit 1; }
+    echo "unknown target '$b' - add it to patch_target() first" >&2; exit 1; }
   cm_args+=(--from-file="$b=$f")
   mounts+=("{\"name\":\"$CM\",\"mountPath\":\"$target\",\"subPath\":\"$b\",\"readOnly\":true}")
 done
 
 echo "==> ConfigMap/$CM"
-oc create configmap "$CM" -n "$NS" "${cm_args[@]}" --dry-run=client -o yaml | oc apply -f -
+kubectl create configmap "$CM" -n "$NS" "${cm_args[@]}" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> mounting over: $*"
-oc patch deploy "$DEPLOY" -n "$NS" --type=strategic -p "{
+kubectl patch deploy "$DEPLOY" -n "$NS" --type=strategic -p "{
   \"spec\":{\"template\":{\"spec\":{
     \"volumes\":[{\"name\":\"$CM\",\"configMap\":{\"name\":\"$CM\"}}],
     \"containers\":[{\"name\":\"$CONTAINER\",\"volumeMounts\":[$(IFS=,; echo "${mounts[*]}")]}]
   }}}}"
 
 # ConfigMap content changes alone do not restart the pod; force it.
-oc rollout restart "deploy/$DEPLOY" -n "$NS"
-oc rollout status "deploy/$DEPLOY" -n "$NS" --timeout=180s
+kubectl rollout restart "deploy/$DEPLOY" -n "$NS"
+kubectl rollout status "deploy/$DEPLOY" -n "$NS" --timeout=180s
 
 echo "==> waiting for both workers to re-register (heartbeat, ~30s)"
-until [ "$(oc logs "deploy/$DEPLOY" -n "$NS" 2>/dev/null \
+until [ "$(kubectl logs "deploy/$DEPLOY" -n "$NS" 2>/dev/null \
           | grep -c 'Registered instance-worker')" -ge 2 ]; do sleep 5; done
-oc logs "deploy/$DEPLOY" -n "$NS" | grep 'Registered instance-worker' | tail -2
+kubectl logs "deploy/$DEPLOY" -n "$NS" | grep 'Registered instance-worker' | tail -2
 
 echo "==> patched router is live"

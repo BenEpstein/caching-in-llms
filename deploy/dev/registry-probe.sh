@@ -2,7 +2,7 @@
 # Is the Controller's KV registry actually populated? (issue #13)
 #
 # The Controller's `kv_pool` is in-memory and admission is one-shot per chunk, so
-# there are states where every lookup returns {} and NOTHING in the logs says so —
+# there are states where every lookup returns {} and NOTHING in the logs says so -
 # both arms of an experiment then look identical for the wrong reason. This probe
 # detects that without patching anything.
 #
@@ -19,7 +19,10 @@
 set -uo pipefail
 
 NS="${NS:-cache-llm}"
-URL="${URL:-https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il/v1/completions}"
+# Derived from BASE_URL so a caller that set ONE endpoint gets a probe against that same
+# endpoint. run_cell.sh / rate_pilot.sh export BASE_URL and nothing else, and a probe
+# silently pointing at a different cluster than the cell would gate on the wrong registry.
+URL="${URL:-${BASE_URL:-http://localhost:8000}/v1/completions}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 SEED="${1:-$$}"
 N="${2:-4}"
@@ -41,13 +44,13 @@ ids=()
 for _ in $(seq "$N"); do
   id=$(curl -k -s -m 240 -X POST "$URL" -H 'Content-Type: application/json' --data @"$REQ" \
        | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null)
-  [ -n "$id" ] || { echo "request failed — is the stack serving?" >&2; exit 1; }
+  [ -n "$id" ] || { echo "request failed - is the stack serving?" >&2; exit 1; }
   ids+=("$id")
 done
 
 best=0
-for pod in $(oc get pods -n "$NS" -o name | grep vllm | sed 's|pod/||'); do
-  log=$(oc logs "$pod" -n "$NS" --since=10m 2>/dev/null)
+for pod in $(kubectl get pods -n "$NS" -o name | grep vllm | sed 's|pod/||'); do
+  log=$(kubectl logs "$pod" -n "$NS" --since=10m 2>/dev/null)
   n=0
   for id in "${ids[@]}"; do echo "$log" | grep -qa "$id" && n=$((n+1)); done
   echo "    $pod: $n/$N"
@@ -55,10 +58,10 @@ for pod in $(oc get pods -n "$NS" -o name | grep vllm | sed 's|pod/||'); do
 done
 
 if [ "$best" -eq "$N" ]; then
-  echo "==> registry LIVE — all $N pinned to one instance"
+  echo "==> registry LIVE - all $N pinned to one instance"
   exit 0
 fi
-echo "==> registry EMPTY — requests were spread, so kvaware is running blind."
+echo "==> registry EMPTY - requests were spread, so kvaware is running blind."
 echo "    Wait for both workers to re-register (~40 s after a router restart),"
 echo "    then re-probe with a FRESH seed. Do not measure until this passes."
 exit 1

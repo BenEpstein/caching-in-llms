@@ -11,7 +11,7 @@ this fixture worse than nothing: a test that reassures without testing.
 
 So the contract below is not "close enough to vLLM". It is specifically the shape that
 produced the failure, plus the delays needed to make TTFT and ITL *known values* rather than
-merely non-zero — because "non-zero" would also have passed for a driver that timestamped the
+merely non-zero - because "non-zero" would also have passed for a driver that timestamped the
 wrong chunk.
 
 Response format per request:

@@ -31,6 +31,9 @@ CLAUDE.local.md
 # ever lands there.
 .claude/worktrees/
 __pycache__/
+# Both READMEs tell the reader to `python3 -m venv .venv` at the repo root, so every
+# person who follows the setup guide creates this.
+.venv/
 .hypothesis/
 .pytest_cache/
 teaching/

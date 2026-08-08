@@ -42,13 +42,18 @@ NS="${NS:-cache-llm}"
 RELEASE="${RELEASE:-stack}"
 CHART="${CHART:-vllm/vllm-stack}"
 CHART_VERSION="${CHART_VERSION:-0.1.11}"
-BASE_URL="${BASE_URL:-https://llm-cache-llm.apps.gapu-2.customers.k8s.co.il}"
+BASE_URL="${BASE_URL:-http://localhost:8000}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 ROUTER_DEPLOY="${ROUTER_DEPLOY:-stack-deployment-router}"
 ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
+# shellcheck source=router_forward.sh
+. "$BENCH_DIR/router_forward.sh"
+PIDS=()
+cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
+trap cleanup EXIT
 
 # Reference only - printed beside the result, never compared. The gate's bar is
 # THRESHOLD: "clearly below", not "any drop at all".
@@ -62,13 +67,13 @@ helm upgrade --install "$RELEASE" "$CHART" -n "$NS" --version "$CHART_VERSION" \
   -f "$REPO_ROOT/deploy/values-baseline-kvaware.yaml" \
   --set routerSpec.routingLogic=roundrobin
 
-if oc get deploy "$ROUTER_DEPLOY" -n "$NS" \
+if kubectl get deploy "$ROUTER_DEPLOY" -n "$NS" \
     -o jsonpath='{.spec.template.spec.volumes[*].name}' | grep -q router-patch; then
   NS="$NS" "$REPO_ROOT/deploy/dev/revert-router-patch.sh"
 fi
 # baseline arm: HF_HOME on (#21), loadaware vars off so nothing leaks
-oc set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
-oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
+kubectl set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
+kubectl rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 
 echo "==> cold, stale-free start"
 # roundrobin: no LMCache controller, so no registrations to wait for
@@ -78,8 +83,8 @@ NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
 # ---- validity rule 5: realised KV pool, from the engine's own log -----------
 echo "==> realised KV pool (validity rule 5)"
 POOL_OK=0
-for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
-  line=$(oc logs -n "$NS" "$pod" 2>/dev/null \
+for pod in $(kubectl get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
+  line=$(kubectl logs -n "$NS" "$pod" 2>/dev/null \
     | grep -m1 "GPU KV cache size" || true)
   echo "    $pod: ${line#*] }"
   [ -n "$line" ] && POOL_OK=1
@@ -96,14 +101,16 @@ done
 # is negligible, so almost the whole pool is free for retention and the hit rate
 # flatters the config. The experiment runs loaded; the gate must too.
 snapshot() {
-  for pod in $(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
-    oc exec -n "$NS" "$pod" -- curl -s localhost:8000/metrics 2>/dev/null \
+  for pod in $(kubectl get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}'); do
+    kubectl exec -n "$NS" "$pod" -- curl -s localhost:8000/metrics 2>/dev/null \
       | grep -E "^vllm:prefix_cache_(queries|hits)_total" \
       | awk -v P="$pod" '{split($0,a," "); print P, $1, a[2]}'
   done
 }
 
 echo "==> warm-up"
+# After the cold start, never before: the restart in it kills any earlier forward.
+start_router_forward "$NS" "$RELEASE"
 python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure --passes 1
 
 snapshot > /tmp/scarcity_before.txt

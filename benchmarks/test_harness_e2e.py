@@ -1,6 +1,6 @@
 """End-to-end harness test: real driver -> real CSV -> real analysis, no GPU (#28).
 
-Every other test in this repo tests a function. This one tests the *path* — because every
+Every other test in this repo tests a function. This one tests the *path* - because every
 serious measurement bug this project shipped lived in the path, not in a function, and each
 was catchable on a laptop:
 
@@ -12,7 +12,7 @@ was catchable on a laptop:
 | `fig_paired` returned silently on a missing cell | figure set quietly missing its centerpiece |
 
 None of them needed a GPU. None of them was caught. This test runs `load_driver.py` as a
-subprocess — the actual CLI a cell invokes, not an imported function — against
+subprocess - the actual CLI a cell invokes, not an imported function - against
 `fake_vllm.py`, then feeds the result through `analyze.py`.
 
 The delays are *known*, so the assertions are on values rather than on non-emptiness.

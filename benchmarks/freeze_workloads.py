@@ -7,7 +7,8 @@ a prefix of that seed list - see run_sweep.sh).
 `prefix_tokens=2048` below is the generator's REQUEST, not the result: `_filler`
 emits `approx_tokens * 0.75` words, so the tokenized prefix and prompt are both
 shorter than the knob says. The knob keeps its name so the frozen manifest's
-checksums stay valid; the tokenized lengths to quote are in benchmarks/README.md ("The frozen workload").
+checksums stay valid; the tokenized lengths to quote are in benchmarks/README.md
+("The dataset: 128 shared prefixes, Zipf s = 0.9").
 
 The JSONL files are large, so they are NOT committed; what is committed is
 `workloads/manifest.json` holding the exact config + a SHA-256 per seed file.

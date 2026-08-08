@@ -4,7 +4,7 @@
 # from the repo's Dockerfile. Built images only - the dev-loop overlay
 # (deploy/dev/apply-router-patch.sh) is never measured; see benchmarks/README.md.
 #
-# Usage — layer it on top of the baseline values:
+# Usage - layer it on top of the baseline values:
 #
 #   helm upgrade --install vllm vllm/vllm-stack -n cache-llm \
 #     -f deploy/values-baseline-kvaware.yaml \
@@ -21,7 +21,10 @@
 #   ./deploy/dev/registry-probe.sh <unused-seed>
 
 routerSpec:
-  # Must match the QUAY_IMAGE repo variable used by the build workflow.
+  # Matches the QUAY_IMAGE repo variable used by the build workflow. run_cell.sh
+  # overrides this with --set from its own ROUTER_REPO, which is also what it asserts
+  # the running pod against - so to run from another registry, set ROUTER_REPO and
+  # leave this alone. A bare `helm upgrade` with this file still uses the value here.
   repository: "quay.io/rhl193000/lmstack-router-loadaware"
   # tag: supplied per-deploy via --set routerSpec.tag=<short-sha>
 
@@ -31,11 +34,10 @@ routerSpec:
   # live fleet mean - so 1.0 is a real default and not a per-cluster tuning.
   # Chart 0.1.11 IGNORES `routerSpec.env` (hardcoded env list in
   # deployment-router.yaml) - set it after the upgrade:
-  #   oc set env deploy/stack-deployment-router LOADAWARE_BETA=1.0
+  #   kubectl set env deploy/stack-deployment-router LOADAWARE_BETA=1.0
   # benchmarks/run_cell.sh does this per sweep cell (and removes it on
   # baseline cells so a stale β cannot leak through the three-way merge).
   #
   # HF_HOME=/tmp/hf is set per cell by run_cell.sh, on BOTH arms (#21) - it
-  # cannot live here (chart 0.1.11 has no routerSpec.env). See
-  # benchmarks/README.md, "Cluster gotchas".
+  # cannot live here (chart 0.1.11 has no routerSpec.env).
   routingLogic: "loadaware"

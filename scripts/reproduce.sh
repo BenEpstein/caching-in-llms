@@ -80,7 +80,7 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 # environment mismatch, on the one check carrying the reproducibility claim. Observed on macOS
 # system Python 3.9.6: itl_mean 0.036171 against the committed 0.03617. Fail early and say why.
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
-  || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
+  || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Option 1: verify the results without hardware\"."
 
 # Every summary-per-seed.csv in the tree: one per sweep directory (#75), none at the root.
 # Column 1 of a table is the manifest of which runs belong to its sweep, so checks 1 and 3
@@ -150,7 +150,7 @@ echo "==> 4/7 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
 # and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
 # check that verifies the wrong run reads exactly like a check that passes.
-# See benchmarks/README.md, "Reproducing the reported numbers".
+# See benchmarks/README.md, "Step 6: make the results".
 : "${HEADLINE:=results/gen2-confirmatory/20260805-232541-loadaware-b0.5}"
 : "${BASELINE:=results/gen2-confirmatory/20260805-230541-kvaware}"
 : "${ABLATION:=results/gen2-confirmatory/20260806-002645-loadaware-b0}"

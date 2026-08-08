@@ -290,7 +290,7 @@ class HashRing:
 
 
 class FakeRequest:
-    """Stands in for `fastapi.Request` — only `.headers.get` is ever called."""
+    """Stands in for `fastapi.Request` - only `.headers.get` is ever called."""
 
     def __init__(self, headers=None):
         self.headers = headers or {}
@@ -360,7 +360,7 @@ routing_logic = _load_patched_routing_logic()
 
 @pytest.fixture(autouse=True)
 def _clear_router_singletons():
-    """`RoutingInterface` is a singleton — one test's router must not leak."""
+    """`RoutingInterface` is a singleton - one test's router must not leak."""
     SingletonABCMeta._instances.clear()
     yield
     SingletonABCMeta._instances.clear()

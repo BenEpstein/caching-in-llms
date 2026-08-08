@@ -99,7 +99,7 @@ def test_defaults_match_the_frozen_manifest():
     ):
         assert getattr(defaults, field) == frozen[field], (
             f"WorkloadConfig.{field} is {getattr(defaults, field)!r} but the frozen "
-            f"manifest says {frozen[field]!r} — update the default or re-freeze"
+            f"manifest says {frozen[field]!r} - update the default or re-freeze"
         )
 
 

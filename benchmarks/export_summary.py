@@ -35,8 +35,7 @@ FIELDS = [
     #   7e2dffb onward: beta * (load - fleet_mean)/max(1, mean)
     # Not comparable and not convertible; only beta=0 means the same thing on
     # both sides. Never pool or compare across that boundary without saying which
-    # side each cell is on. Which cells fall where: benchmarks/README.md, "Two
-    # eras of `beta`".
+    # side each cell is on. `git_commit` in this table is what says which side.
     # `sweep_id` travels in the row because the one-table-per-sweep layout separates batches
     # only until someone concatenates two tables. Why cells from different sweeps must never be
     # paired: analyze.check_comparable. Empty for run dirs that predate the field.

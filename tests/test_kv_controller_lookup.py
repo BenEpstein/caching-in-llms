@@ -4,7 +4,7 @@ Change 1 of the project: `KVController.lookup()` must report how much of a
 request's prefix *every* Instance holds, not just the first holder of each
 chunk. See docs/report/report.md, section "Change 1", and issue #4.
 
-No cluster, no GPU, no lmcache install — conftest.py loads the tracked patch
+No cluster, no GPU, no lmcache install - conftest.py loads the tracked patch
 file with the lmcache import surface stubbed out.
 """
 
@@ -25,7 +25,7 @@ class PrefixHashTokenDatabase:
     tokens are cut into `chunk_size` chunks (a short final chunk is kept), each
     chunk's key is a *rolling prefix hash* of everything up to and including it,
     and `process_tokens(make_key=False)` yields `(start, end, hash)` with `end`
-    the exclusive token offset — i.e. the matched-token count at that chunk.
+    the exclusive token offset - i.e. the matched-token count at that chunk.
     """
 
     def __init__(self, chunk_size=CHUNK):
@@ -124,7 +124,7 @@ def test_gap_stops_credit_at_the_gap_not_after_it():
     """A cache match is a *prefix* match: credit is contiguous from token 0.
 
     instance-b holds chunks 0 and 2 but not 1. Those chunk-2 tokens are
-    unusable — the engine cannot skip a hole in the prefix — so b must be
+    unusable - the engine cannot skip a hole in the prefix - so b must be
     credited 4 tokens, not 12.
     """
     c = make_controller()
@@ -179,7 +179,7 @@ def test_selected_instance_is_unchanged_even_with_several_holders():
     """kvaware picks `list(layout_info.keys())[0]`, and that key does not move.
 
     Both implementations insert `kv_pool[key0][0]` first, and Python keeps a
-    key's original position when it is re-assigned — so the *selected instance*
+    key's original position when it is re-assigned - so the *selected instance*
     is invariant under the patch.
     """
     c = make_controller()
