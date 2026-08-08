@@ -379,14 +379,6 @@ cell. The command prints the per-seed pairs, the p-value and the size of the cha
 python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
 ```
 
-The report runs these pairs:
-
-| Comparison | Candidate | Baseline |
-|---|---|---|
-| Headline | `loadaware-b0.5` | `kvaware` |
-| Ablation | `loadaware-b0` | `kvaware` |
-| Beta sensitivity | `loadaware-b1.0`, then `loadaware-b2.0` | `kvaware` |
-
 The `roundrobin` cell is a comparator for the figures. It is not one of the tested pairs.
 
 The command tests one metric at a time. Select it with `--metric`:
