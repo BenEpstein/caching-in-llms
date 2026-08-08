@@ -1,256 +1,212 @@
-# Load-Aware Prefix Routing for the vLLM Production Stack
+# Load-aware prefix routing for the vLLM Production Stack
 
-We extend the [vLLM Production Stack](https://github.com/vllm-project/production-stack)
-router with a **`loadaware`** placement policy that scores KV-cache-hit benefit against live
-instance load, using per-instance prefix-match information we added to
-[LMCache](https://github.com/LMCache/LMCache)'s controller.
+## What this project does
 
-In a distributed KV cache, **placement is the cache policy**: the router decides which
-instance's cache is even eligible to hit, so it sets the fleet's effective hit rate.
+A KV cache keeps the attention state of a prompt prefix. A later request with the same prefix
+does not calculate that state again. On a fleet of servers, the router decides which cache can
+give a hit. If the router sends a request to the wrong server, the cache on the correct server
+gives no benefit.
 
-And the lever is large. Round-robin placement against the same cache is **better balanced**
-than the cache-aware baseline - imbalance 1.49 against `kvaware`'s 2.36 - and still **34×**
-slower, because it equalises request *counts*, not *work*: a request sent to the
-engine that does not hold its prefix pays a full prefill. Balanced counts, ruined locality.
-That is why load-awareness has to be added **on top of** cache-awareness rather than
-substituted for it. (`results/gen2-confirmatory/20260806-144135-roundrobin`, n=20, offered rate 16 - a descriptive
-cell, not a hypothesis test.)
+The standard router sends each request to the server that holds its prefix. This makes a new
+problem. A popular prefix is on one server. All requests for that prefix go to that server. The
+server becomes busy. The other server stays idle.
+
+This project adds a new routing policy. The policy is called `loadaware`. It gives each server
+a score. The score uses the cache benefit and the current load. The router selects the server
+with the best score.
+
+The policy decreases the load imbalance between the two servers by 48.1%. An independent
+benchmark run gives 49.4%. The two results agree.
+
+## The baseline projects
+
+The project uses two open-source projects. It does not replace them. It adds to them.
+
+| Project | Function |
+|---|---|
+| [LMCache](https://github.com/LMCache/LMCache) | The KV cache layer. It stores prefixes in GPU memory, CPU memory and disk. A controller records which server holds which prefix. |
+| [vLLM Production Stack](https://github.com/vllm-project/production-stack) | The Helm chart and the router. The router selects a server for each request. |
+
+LMCache uses LRU as the default eviction policy. The router has these routing policies:
+`roundrobin`, `session`, `kvaware` and `prefixaware`. The project adds `loadaware`.
+
+For the full analysis of the baseline, refer to
+[`docs/baseline-justification.md`](docs/baseline-justification.md).
+
+## Our changes
+
+The project changes three files. The directory `patches/` holds the changed files. Each file is
+in the same path as in the container image. Each change has a `LOADAWARE PATCH` comment.
+
+| File | Change |
+|---|---|
+| `lmcache/v1/cache_controller/controllers/kv_controller.py` | The function `lookup()` gives the matched token count for each server. The standard function gives only the first server. |
+| `vllm_router/routers/routing_logic.py` | The new class `LoadAwareRouter`. It gives a score to each server. The class `KvawareRouter` does not change. |
+| `vllm_router/parsers/parser.py` | The option `--routing-logic` accepts the value `loadaware`. |
+
+### Upstream contributions
+
+| Pull request | Status |
+|---|---|
+| [production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029): expose the LMCache controller ports on the router Service | Open |
+| The `loadaware` policy into production-stack | Not sent |
+
+### The score
 
 ```
-score(instance) = matched_tokens / prompt_tokens  −  β · relative_load(instance)
+score(server) = matched_tokens / prompt_tokens  -  beta * relative_load(server)
 
-relative_load = (load − fleet_mean) / max(1, fleet_mean)
+relative_load = (load - fleet_mean) / max(1, fleet_mean)
 ```
 
-Both terms are dimensionless — a fraction of *this prompt* against a fraction of *this fleet's*
-mean — so **β is a pure exchange rate that carries no unit from the deployment**. The router
-recomputes the fleet mean per request instead of inheriting a constant from whoever tuned it
-last, which is what makes β portable across offered rates.
+Both terms are fractions. Thus `beta` does not have a unit. The router calculates the fleet
+mean for each request.
 
-## Quickstart
+### The tunable parameter
 
-Everything below runs on **any laptop — no GPU, no cluster, no network access**. It installs the
-project, runs the full test suite, and regenerates every number and figure we report from data
-committed in this repository. About two minutes end to end.
+The policy has one parameter. Set it with an environment variable.
 
-```bash
-# 1. Get it
-git clone https://github.com/BenEpstein/caching-in-llms.git
-cd caching-in-llms
-
-# 2. Install (Python >= 3.10 required; on macOS the system python3 is 3.9,
-#    so use an explicit python3.12 -m venv if `python3 -V` says 3.9)
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# 3. Run the tests - 190 of them, all offline, ~30 s
-pytest benchmarks/ tests/ -q
-
-# 4. Regenerate every reported number and figure from the committed data
-./scripts/reproduce.sh
-
-# 5. Get the two PDFs (they are build outputs, not files in the repo)
-gh run download -n report-pdf                 -R BenEpstein/caching-in-llms
-gh run download -n baseline-justification-pdf -R BenEpstein/caching-in-llms
-```
-
-**Step 4 is the one that matters.** `reproduce.sh` re-derives the statistics and the series
-behind every figure from the raw run data and **fails on any drift**, so the report cannot
-quietly disagree with its own evidence. It reads only what is in this repository — no cluster,
-no GPU, no network.
-
-For step 5 without the `gh` CLI: **Actions → Report → latest run on `main` → Artifacts**. To
-render the PDFs yourself you need `pandoc` and a LaTeX engine — see the header of
-`docs/report/build.sh`.
-
-Only re-running the benchmark itself needs hardware; see
-[Reproduce the benchmarks on a cluster](#reproduce-the-benchmarks-on-a-cluster).
-
-## Repo layout
-
-| Path | What it is |
-|---|---|
-| `patches/` | **The extension itself** — our modified router and LMCache files, mirroring their in-image paths |
-| `tests/` | Unit tests for the two changes; loads `patches/` directly with `lmcache` stubbed, so they run on any laptop |
-| `conformance/` | CI-only: runs upstream's *own* test suite against our patch, at the pinned versions |
-| `benchmarks/` | Workload generators, load driver, in-cluster Job, gates, collectors, analysis, plots. `benchmarks/README.md` is the operator's manual |
-| `results/` | One directory per sweep — `gen2-confirmatory/` is the reported one, `gen3-7cell/` its independent replication, `gen1-wan/` the superseded WAN measurements kept as evidence for the instrument argument |
-| `docs/` | `report/report.md` (the report), `baseline-justification.md` (why this baseline), and one figure set per sweep: `figures/`, `figures-gen3/`, `figures-wan/` |
-| `scripts/reproduce.sh` | Regenerates every reported number from committed data and fails on drift |
-| `deploy/` | Helm values + OpenShift notes for the cluster. `deploy/dev/` holds the ~60 s dev loop *and* two gates the measured runs call: `registry-probe.sh`, `revert-router-patch.sh` |
-| `Dockerfile` | Router image: pinned upstream base + our `patches/` overlay, built in CI |
-| `.github/workflows/` | Tests + `reproduce.sh` on every push; the two container images; the two PDFs |
-
-## Where this was measured
-
-> **All reported numbers come from an OpenShift cluster running the NVIDIA GPU Operator, with
-> 2 × NVIDIA A10 GPUs (23 GB each) and one vLLM engine pinned per GPU.** The GPU Operator
-> supplies the DCGM exporter that every GPU utilization and power number in the report is read
-> from. Nothing in this project was simulated.
-
-Full provenance is pinned inside every run's `run.json`:
-
-| | |
-|---|---|
-| Platform | **OpenShift** (`gapu-2`), namespace `cache-llm`, **NVIDIA GPU Operator** for drivers + DCGM |
-| GPUs | **2 × NVIDIA A10, 23 GB**, one engine per GPU |
-| Model | `Qwen/Qwen2.5-3B-Instruct` — ungated, no HuggingFace token needed |
-| Stack | vLLM Production Stack Helm chart + LMCache 0.3.9post2 |
-| Router image | `quay.io/rhl193000/lmstack-router-loadaware`, built in CI from this repo's `Dockerfile` |
-| Driver | Runs **as an in-cluster Job**, so no wide-area network sits inside the latency numbers |
-| Workload | 128 Zipfian (s=0.9) shared prefixes, ISL 1578, OSL 64, 500 requests × 20 seeds |
-| Offered rate | 16 req/s, chosen from a latency-knee pilot |
-
-To **re-verify** the results you need none of that — only Python ≥ 3.10 and the
-[Quickstart](#quickstart). To **re-run** the benchmark you need the cluster above and roughly
-2.5 hours for a full 7-cell sweep.
-
-Runtime dependencies are `httpx`, `pytest`, `pytest-benchmark` and `matplotlib` — everything
-else in `benchmarks/` is standard library, including the statistics (`analyze.py` implements the
-exact Wilcoxon and the bootstrap CI itself rather than pulling in SciPy). The version floor is
-enforced, not just documented: `reproduce.sh` refuses to run below Python 3.10 rather than
-reporting the resulting last-digit differences as drift in the committed data.
-
-## Result
-
-20 seeds per arm, one frozen Zipfian shared-prefix workload, replayed from inside the cluster.
-
-| Co-primary | Status |
-|---|---|
-| **Load imbalance** | **Settled.** `loadaware` β=0.5 cuts imbalance **48.1%** vs `kvaware` (CI [37.7%, 56.3%]), **18 of 20 seeds**, p < 0.0001 |
-| **TTFT p95** | **Settled as a null.** 2.7% median reduction, CI [−4.3%, 15.4%], p = 0.115 - no latency effect at this operating point |
-
-The ablation is what makes the mechanism credible: **β=0 does not move imbalance** (2.662
-against the baseline's 2.358 - if anything slightly worse, p = 0.9734), while β=0.5 sits at
-1.249. The load term is the entire mechanism - the routing rewrite on its own does nothing.
-That was pre-declared falsifiable before the comparator ran.
-
-**And it replicates.** An independent seven-cell sweep two days later, same images and same
-frozen workload, reproduces the headline at **−49.4%** (p < 0.0001) against the −48.1% above,
-with the ablation null again. Two 20-seed sweeps in different windows landing within 1.3 points
-is a stronger statement than either alone. That sweep also added β=0.25 and found the floor of
-the trend: it does not balance at all, because at β=0.25 the load term only overrides a cached
-prefix on an engine 200% above the fleet mean. `results/gen3-7cell/`, figures in
-`docs/figures-gen3/`.
-
-The re-run's *latency* reading (18.7%, p = 0.0107, where the first sweep was null) is reported
-in the report as **exploratory, not as a headline change** — it was examined after a null with
-no fresh pre-registration, which is the same thing as choosing a friendlier metric after the
-fact. The pre-registered latency result remains the null above.
-
-> **The latency null is the pre-registered result, not a fallback.** The original TTFT test was
-> measured from a laptop, and 45–59% of that number turned out to be laptop-to-cluster network,
-> with a per-cell offset larger than the effect. Rather than switch to the engine-side metric
-> that happens to look better - chosen *after* seeing the null, so exploratory by construction -
-> the instrument was fixed: the driver moved in-cluster and the originally pre-registered test
-> was re-run unchanged ([#31](https://github.com/BenEpstein/caching-in-llms/issues/31)). It came
-> back null. Goodput against a 150 ms SLO, a reported secondary, does move: **19.0% fewer misses**
-> (CI [10.7%, 22.1%], p = 0.002).
-
-Provenance: `results/gen2-confirmatory/20260805-230541-kvaware`, `results/gen2-confirmatory/20260806-002645-loadaware-b0`,
-`results/gen2-confirmatory/20260805-232541-loadaware-b0.5`. Every number above is recomputable with no cluster -
-see [Verify without a cluster](#verify-without-a-cluster).
-
-## What we changed upstream
-
-Three files, all resident in the **router pod** (both `vllm_router` and the LMCache
-`cache_controller` are installed there as plain Python). `patches/` holds our modified copies
-**mirroring their path inside the image** under `/opt/venv/lib/python3.12/site-packages/`, so
-the tree the image `COPY`s and the tree the tests import are the same bytes:
-
-| File | Change | Ticket |
-|---|---|---|
-| `lmcache/v1/cache_controller/controllers/kv_controller.py` | Multi-instance lookup: `lookup()` reports per-instance matched-token counts for every holder, not just `kv_pool[key][0]` | [#4](https://github.com/BenEpstein/caching-in-llms/issues/4) |
-| `vllm_router/routers/routing_logic.py` | `loadaware` placement policy: `LOADAWARE` enum + factory branch + a `LoadAwareRouter` scoring every endpoint. Additions only - `KvawareRouter` is byte-identical | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
-| `vllm_router/parsers/parser.py` | One-line widening of `--routing-logic`'s hard-coded `choices` list to accept `loadaware`. Without it argparse rejects the flag and the router exits before the factory runs | [#5](https://github.com/BenEpstein/caching-in-llms/issues/5) |
-
-Each file started as a verbatim copy from the router image `Dockerfile` pins by digest
-(lmcache 0.3.9post2), so `git diff` against the stock file is the real diff, and every change
-carries a `LOADAWARE PATCH` comment.
-
-## Tunable parameter
-
-One knob, read at router startup from the environment or the constructor
-(`patches/vllm_router/routers/routing_logic.py`).
-
-| Parameter | Env var | Default | Meaning |
+| Parameter | Variable | Default | Function |
 |---|---|---|---|
-| β | `LOADAWARE_BETA` | `1.0` | Exchange rate between cache benefit and relative load. **β=0 reduces the policy to pure cache-affinity** — the ablation arm |
+| beta | `LOADAWARE_BETA` | `1.0` | The exchange rate between the cache benefit and the load. A value of `0` gives cache affinity only. |
 
-With two engines the arithmetic is worth stating, because it is what the sweep grid means: one
-engine at `+r` forces the other to `−r`, so the load gap is `2·β·r`, and a full cache hit is
-exactly cancelled at `r = 1/(2β)`. At the default β=1.0 that is r=0.5 — an engine carrying 50%
-more than the fleet mean stops attracting cache-hit traffic.
-
-On a running deployment:
+To change the value on a live deployment, use this command:
 
 ```bash
 oc set env deploy/stack-deployment-router LOADAWARE_BETA=0.5
 ```
 
-There is no `α`. An earlier design had one; since the benefit term is already normalized to the
-cached fraction, α was a redundant scale factor and only β sets the trade-off.
+With two servers, a full cache hit is equal to the load penalty at `r = 1/(2*beta)`. At the
+default value of 1.0, `r` is 0.5. A server with 50% more load than the mean does not attract
+more cache hits.
 
-## Verify without a cluster
+## Repository structure
 
-`./scripts/reproduce.sh` runs all of this and diffs it against the committed baselines. To do it
-by hand:
-
-```bash
-python3 benchmarks/export_summary.py results/gen2-confirmatory/2026* --out /tmp/summary.csv
-python3 benchmarks/analyze.py compare results/gen2-confirmatory/20260805-232541-loadaware-b0.5 \
-                                      results/gen2-confirmatory/20260805-230541-kvaware
-python3 benchmarks/plot_results.py results/gen2-confirmatory/20260805-2* results/gen2-confirmatory/20260806-0* \
-  --comparator results/gen2-confirmatory/20260806-144135-roundrobin --cand loadaware-b0.5 --out /tmp/figures
-```
-
-`analyze.py compare` **refuses** to pair two runs whose `run.json` records a different rate or
-a different workload manifest — "identical workload across arms" is enforced, not assumed.
-
-### Sample logs
-
-Every run directory holds the raw measurements, not just summaries. Take the baseline cell,
-`results/gen2-confirmatory/20260805-230541-kvaware/`:
-
-| File | What it is |
+| Path | Contents |
 |---|---|
-| `driver-seed1.csv` … `driver-seed20.csv` | **One row per request** — 500 rows per seed, 10,000 per cell |
-| `prom/*.json` | Prometheus range scrapes: TTFT histograms, queue depth, prefix-cache hits/queries, KV usage, router CPU and memory |
-| `dcgm.csv` | Per-GPU utilization, memory and board power from the GPU Operator's DCGM exporter, polled through the run |
-| `run.json` | Provenance: arm, β, offered rate, router image **and its digest**, driver location, git commit, workload manifest with per-seed SHA-256 |
+| `patches/` | The three changed files. This is the extension. |
+| `tests/` | The unit tests for the changes. They run on a laptop. |
+| `conformance/` | Tests that run the upstream test suite against the changed files. CI only. |
+| `benchmarks/` | The workload generator, the load driver, the collectors and the analysis. |
+| `results/` | The measurement data. One directory for each sweep. |
+| `docs/` | The report, the baseline analysis and the figures. |
+| `deploy/` | The Helm values and the cluster notes. |
+| `scripts/reproduce.sh` | Calculates each reported number again from the data in this repository. |
+| `Dockerfile` | The router image. CI builds it. |
 
-One request, from `driver-seed1.csv`:
+## Our environment
 
-```
-index,prefix_id,send_ts,ttft_s,e2e_s,prompt_tokens,completion_tokens,status,error,itls_ms
-0,106,1785960825.985649,0.0906933001242578,1.6519070861395448,1578,64,ok,,20.21;19.11;18.65;...
-```
+The benchmark runs on this hardware and software:
 
-`ttft_s` is time-to-first-token measured client-side, `itls_ms` is every inter-token gap in the
-response, and `status`/`error` are why an errored request counts as a miss rather than
-disappearing from the metric. Percentiles are computed from these rows, never read off a
-Prometheus histogram — that is what makes exact p95 and p99 possible.
+| Item | Value |
+|---|---|
+| Platform | OpenShift, with the NVIDIA GPU Operator |
+| GPUs | 2 x NVIDIA A10, 24 GB each. The cluster reports 23 GB as available. |
+| Servers | One vLLM engine on each GPU |
+| Model | `Qwen/Qwen2.5-3B-Instruct`. The model is not gated. |
+| Software | vLLM Production Stack Helm chart 0.1.11, LMCache 0.3.9post2 |
+| Router image | `quay.io/rhl193000/lmstack-router-loadaware`. CI builds it from this repository. |
 
-Field-by-field definitions, the collectors, and what each Prometheus series is for:
-[`benchmarks/README.md`](benchmarks/README.md) § "What a run directory contains".
+The GPU Operator supplies the DCGM exporter. All GPU measurements come from that exporter.
 
-## Reproduce the benchmarks on a cluster
+## Run the benchmark
 
-Needs the [environment above](#where-this-was-measured): an OpenShift (or Kubernetes) cluster
-with the GPU Operator and two GPUs, running the vLLM Production Stack chart. Full procedure,
-deployment steps, cluster gotchas, metrics, validity rules and the pre-registered statistics are
-in [`benchmarks/README.md`](benchmarks/README.md).
+### Option 1: verify the results without hardware
+
+This procedure calculates each reported number again from the data in this repository. It needs
+no GPU and no cluster. It takes approximately two minutes.
 
 ```bash
-python3 benchmarks/freeze_workloads.py          # regenerate the SHA-pinned workload
-benchmarks/rate_pilot.sh                        # find the latency knee
-LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh <rate>
+git clone https://github.com/BenEpstein/caching-in-llms.git
+cd caching-in-llms
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+pytest benchmarks/ tests/ -q       # 190 tests
+./scripts/reproduce.sh             # calculates each reported number again
 ```
 
-The measured replay runs as an **in-cluster Job**, so client-observed latency is timed from
-inside the cluster rather than across the internet. The router image is built **in CI** from
-this repo's `Dockerfile` on every `patches/**` push and pushed SHA-tagged to
-`quay.io/rhl193000/lmstack-router-loadaware`, so the measured artifact is always reproducible
-from the tree. Measured cells only ever use built images — the `deploy/dev/` ConfigMap overlay
-is a development convenience and is never benchmarked.
+Python 3.10 or later is necessary. On macOS the default `python3` is 3.9. Use
+`python3.12 -m venv .venv` on macOS.
+
+The script `reproduce.sh` stops with an error if a number is different. Thus the report cannot
+disagree with its data.
+
+To get the two PDF documents, use these commands:
+
+```bash
+gh run download -n report-pdf                 -R BenEpstein/caching-in-llms
+gh run download -n baseline-justification-pdf -R BenEpstein/caching-in-llms
+```
+
+### Option 2: run the full benchmark on a cluster
+
+This procedure needs the environment in the table above. A full sweep of 7 cells takes
+approximately 2.5 hours.
+
+1. Install the stack with Helm. Use the values file `deploy/values-baseline-kvaware.yaml`.
+2. Build the router image. CI builds it for each change to `patches/`.
+3. Find the offered rate. Run `benchmarks/rate_pilot.sh`.
+4. Run the sweep with this command:
+
+   ```bash
+   LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
+   ```
+
+5. Make the figures and the statistics. Run `benchmarks/plot_results.py` and
+   `benchmarks/analyze.py`.
+
+For each step, for the deployment commands and for the known cluster problems, refer to
+[`benchmarks/README.md`](benchmarks/README.md).
+
+## Our runs and results
+
+The project has three benchmark sweeps. Each cell in a sweep uses 20 seeds and 500 requests for
+each seed.
+
+| Sweep | Directory | Function |
+|---|---|---|
+| Generation 1 | `results/gen1-wan/` | 5 cells. The driver was outside the cluster. Superseded. |
+| Generation 2 | `results/gen2-confirmatory/` | 6 cells. These are the reported results. |
+| Generation 3 | `results/gen3-7cell/` | 7 cells. An independent repetition. |
+
+### The results
+
+| Measurement | Result |
+|---|---|
+| Load imbalance | Decreased by 48.1%. The result is significant (p < 0.0001). 18 of 20 seeds show an improvement. |
+| Load imbalance, generation 3 | Decreased by 49.4%. The result is significant (p < 0.0001). |
+| TTFT p95 | Decreased by 2.7%. The result is not significant (p = 0.115). The report gives this null result. |
+| Goodput at 150 ms | 19.0% fewer requests are late (p = 0.0021). This is a secondary measurement. |
+| Ablation, beta = 0 | No change in the load imbalance. Thus the load term causes all of the improvement. |
+
+### The metrics that the benchmark collects
+
+| Metric | Source |
+|---|---|
+| Latency for each request: TTFT, end-to-end, inter-token | The driver CSV files |
+| Throughput: requests and tokens for each second | The driver CSV files |
+| Cache hit rate | Prometheus, `vllm:prefix_cache_hits_total` |
+| Queue depth and preemptions | Prometheus, `vllm:num_requests_waiting` |
+| KV cache use | Prometheus, `vllm:kv_cache_usage_perc` |
+| GPU use, GPU power, GPU memory | The DCGM exporter, `dcgm.csv` |
+| Router CPU and router memory | Prometheus |
+
+### The figures
+
+The script `benchmarks/plot_results.py` makes 12 figures. The report uses these four:
+
+| Figure | Contents |
+|---|---|
+| `fig6-load-balance` | The load on the busiest server against the load on the most idle server |
+| `fig7-beta-tradeoff` | The latency against the cache hit rate, for each value of beta |
+| `fig10-utilization` | The GPU use, the GPU memory, the CPU and the host memory |
+| `fig12-goodput` | The goodput against the latency objective, from 50 ms to 400 ms |
+
+The other 8 figures show the latency distributions, the percentiles, the paired seeds, the hit
+rate, the throughput and the in-flight requests. The figures are in `docs/figures/` for
+generation 2, in `docs/figures-gen3/` for generation 3 and in `docs/figures-wan/` for
+generation 1.
+
+For the full analysis, refer to the report, [`docs/report/report.md`](docs/report/report.md).
+For the method and the data, refer to [`benchmarks/README.md`](benchmarks/README.md).
