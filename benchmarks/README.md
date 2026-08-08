@@ -3,10 +3,28 @@
 > status: live · 2026-08-08 · implements the locked methodology (issue #3); the resolution
 > comment there is the spec - this README is the operator's manual.
 
-Measures **client-observed** latency for the routing-policy comparison on the gapu-2
-cluster (2×A10, vLLM Production Stack + LMCache). Pre-registered headline: *loadaware as
-shipped (β=1.0) reduces TTFT p95 vs kvaware* under a Zipfian shared-prefix
-workload at fixed load.
+Measures **client-observed** latency and per-engine load for the routing-policy comparison on
+the gapu-2 cluster (2×A10, vLLM Production Stack + LMCache), under a Zipfian shared-prefix
+workload at a fixed offered rate.
+
+The pre-registration ([#31](https://github.com/BenEpstein/caching-in-llms/issues/31) rev 2,
+signed off before the first cell) carries **two co-primaries at α=0.025**, comparing
+`loadaware` β=0.5 against `kvaware`: **load imbalance** and **TTFT p95**. As measured, imbalance
+came back −48.1% (p < 0.0001) and TTFT p95 came back a **null** (−2.7%, p = 0.1153). Both are
+reported. Everything else this harness emits is descriptive.
+
+## Start here
+
+Three entry points, depending on what you actually want:
+
+| I want to… | Do this | Needs |
+|---|---|---|
+| **Check the published numbers** | `./scripts/reproduce.sh` from the repo root | Python ≥ 3.10 |
+| **Understand the method** | Read *The frozen workload* → *Sweep design* → *Statistics* below | nothing |
+| **Re-run the benchmark** | *Deploying the stack*, then *Running it* | 2-GPU cluster, ~2.5 h |
+
+The rest of this file is the operator's manual for the third one — every gate, every failure
+mode we hit, and the rules that were fixed in advance.
 
 ## Layout
 
@@ -23,11 +41,11 @@ workload at fixed load.
 | `collectors/prom_dump.py` | Prometheus `query_range` dump for the run window |
 | `collectors/dcgm_poll.py` | GPU util/power/mem-copy CSV via the DCGM exporter |
 | `run_cell.sh` | Per-cell choreography (deploy → gates → warm-up → 20 seeds → collect); `WORKLOAD_PROFILE` picks the dataset |
-| `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
+| `run_sweep.sh` | All 7 cells, one unattended batch (**2.3 h measured** on the 2026-08-08 sweep) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze at or just under it (see "Picking the rate") |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
 | `export_summary.py` | Derives a `summary-per-seed.csv` per sweep - committed evidence a reader can check without the raw data, and the manifest `reproduce.sh` reads (column 1) to learn which runs belong to a sweep. No figure or statistic is computed from it: those read each cell's `run.json` and driver CSVs directly |
-| `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
+| `plot_results.py` | **Generates every committed figure**, one directory per sweep (`docs/figures/` is the reported one) |
 | `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
 | `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
 | `scarcity_gate.sh` | One-shot precondition probe. **Historical**: it produced the 128-prefix / s=0.9 amendment; its `PROBE_RATE` default is the retired 7.5 |
@@ -289,8 +307,10 @@ python3 benchmarks/analyze.py compare results/<...loadaware-b0.5> results/<...kv
 
 # 4. figures. --cand names the headline arm and is REQUIRED: the 4-point beta grid
 #    always yields three non-b0 cells, so nothing can infer it (#30).
-python3 benchmarks/export_summary.py results/<...> --out results/gen2-confirmatory/summary-per-seed.csv
-python3 benchmarks/plot_results.py results/<...> --cand loadaware-b0.5 --out docs/figures
+#    Figures live one directory per sweep - writing a new sweep into docs/figures/
+#    overwrites the set the report cites.
+python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
+python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 --out docs/figures-<sweep>
 
 # 5. §3 utilization: GPU, GPU memory, CPU, host memory
 python3 benchmarks/utilization.py report results/*
@@ -442,6 +462,9 @@ results/<ts>-<cell>/
 
 `analyze.py compare` refuses to pair two runs whose `run.json` rate or workload manifest
 differ - the methodology's "identical workload across arms" is enforced, not assumed.
+
+A worked example - one real request row with every column explained - is in the root
+[`README.md`](../README.md) § "Sample logs".
 
 ### What is committed vs. what stays local
 
