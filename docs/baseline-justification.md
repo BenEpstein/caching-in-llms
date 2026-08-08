@@ -1,5 +1,13 @@
 # Baseline Justification - vLLM Production Stack LoadAware Router
 
+## The idea
+
+This project adds one routing policy, `loadaware`, to the vLLM Production Stack. The stock
+router can maximize cache hits or balance load, but no shipped policy uses both signals.
+`loadaware` scores each server on the cache benefit it offers a request against its live load,
+and routes the request to the best score. This document justifies the baseline that hosts the
+extension.
+
 ## The baseline
 
 The baseline is the **vLLM Production Stack** with **LMCache**. vLLM is an open-source LLM
@@ -45,8 +53,7 @@ two that matter here:
   completely. The load signal above reaches `KvawareRouter.route_request()` on every call, and
   the code uses none of it.
 
-No shipped strategy combines the two signals. That is the policy gap this project fills: a
-`loadaware` strategy that scores each server on cache benefit against live load.
+No shipped strategy combines the two signals. That is the policy gap `loadaware` fills.
 
 ## The gap in the cache layer
 
