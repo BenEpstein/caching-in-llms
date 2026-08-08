@@ -1,5 +1,7 @@
 # Baseline Justification - vLLM Production Stack LoadAware Router
 
+Ben Epstein and Eliad Bazak
+
 ## The idea
 
 This project adds one routing policy, `loadaware`, to the vLLM Production Stack. The stock
