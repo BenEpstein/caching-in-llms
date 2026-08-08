@@ -482,20 +482,18 @@ the knob mean something.
 
 **Deduplicated-block load accounting, and why we passed.** NVIDIA's Dynamo KV-router accounts
 for load in deduplicated blocks rather than requests. We measured the dedup factor in our own
-workload (0.69 at 10.5 req/s, 0.45 at 7.5) and estimated the headroom at ~9% on imbalance and
-~5% on hit rate. Adopting it requires per-worker block tracking plus a completion hook, which
-would invalidate every run already recorded, and the gain only materializes under cache
-scarcity — which our workload never reaches (KV usage max 33%, `num_requests_waiting` 0).
-We document it as a limitation rather than a deficiency.
+workload (0.69 at 10.5 req/s) and estimated the headroom at ~9% on imbalance. It needs
+per-worker block tracking plus a completion hook, would invalidate every recorded run, and only
+pays under cache scarcity our workload never reaches (KV usage max 33%). A limitation, not a
+deficiency.
 
-**Two measurement artifacts, both biasing against us.** Backend disconnects hit a path where
-`on_request_complete` is skipped, drifting the router's own in-flight gauge by +4 to +7 on one
-engine over a run. It biases *against* the extension and is ~10× smaller than the reported
-effect, and a zero-failure cell reproduces the result. Separately, LMCache's KV registry has a
-~40 s blind window after any router restart during which admissions are lost, and a prefix
-first stored in that window stays invisible to the controller for the life of the engine
-process. Both arms would then degrade to QPS routing and look identical *for the wrong reason*.
-Every run in this report is gated on a registry probe that must pass before warm-up begins.
+**Two measurement artifacts, both biasing against us.** Backend disconnects skip
+`on_request_complete`, drifting the router's in-flight gauge by +4 to +7 on one engine over a
+run — against the extension, ~10× smaller than the reported effect, and a zero-failure cell
+reproduces the result. Separately, LMCache's KV registry loses admissions for ~40 s after any
+router restart, and a prefix first stored in that window stays invisible to the controller for
+the life of the engine process; both arms then degrade to QPS routing and look identical *for
+the wrong reason*. Every run here is gated on a registry probe that must pass before warm-up.
 
 # Conclusion and future work
 
