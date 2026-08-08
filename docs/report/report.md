@@ -220,14 +220,14 @@ that follow read as a single argument rather than a list of numbers.
 
 | # | The question it asks | What it answered |
 |---|---|---|
-| 1 | Is placement a cache policy at all, or just load balancing? | Round-robin is **better balanced** than the cache-aware baseline and still **34× slower** (hit rate 0.682 against 0.912). Placement sets the fleet's effective hit rate. This is the lever everything else operates on |
+| 1 | Is placement a cache policy at all? | Round-robin is **better balanced** than the cache-aware baseline and still **34× slower** (hit rate 0.682 against 0.912). Placement sets the fleet's effective hit rate — the lever everything else operates on |
 | 2 | Does the policy actually redistribute work? | **Yes.** Imbalance 2.358 → 1.249, **−48.1%**, p < 0.0001 over 20 paired seeds. This is the claim |
 | 3 | Does redistributing work make the fleet faster *here*? | **No.** TTFT p95 −2.7%, p = 0.1153 — a null, on the pre-registered primary. This is the boundary of the claim, not a footnote to it |
-| 4 | Is the gain the load term, or just our rewrite of the router? | **The load term.** With β = 0 the policy lands *on* the baseline (2.662 vs 2.358, p = 0.9734, if anything worse). Pre-declared falsifiable; it is what makes 2 credible |
+| 4 | Is the gain the load term, or just our rewrite? | **The load term.** At β = 0 the policy lands *on* the baseline (2.662 vs 2.358, p = 0.9734). Pre-declared falsifiable; it is what makes 2 credible |
 | 5 | What does the knob cost, and where should it sit? | Imbalance falls monotonically in β while the hit rate falls 91.2% → 86.1%. At β = 2.0 the lost locality shows up as latency. That reversal locates the knee and makes β = 0.5 a defended optimum |
-| 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number here is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
+| 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
 | 7 | Does any of it reach a user-visible objective? | Goodput, a declared secondary: **19.0% fewer** requests missing a 150 ms first token, p = 0.0021, with the β = 0 ablation null across the whole 50–400 ms sweep |
-| 8 | Does any of it hold up when run again? | **Yes.** An independent seven-cell sweep two days later reproduces the headline at **−49.4%** against −48.1%, with the ablation null again. It also adds β = 0.25, which finds the floor of the trend in 5 |
+| 8 | Does it hold up when run again? | **Yes.** An independent seven-cell sweep reproduces the headline at **−49.4%** against −48.1%, ablation null again, and adds β = 0.25 — which finds the floor of the trend in 5 |
 
 **The general picture.** 1 sets the scale of the lever, 2 shows we can pull it, 4 proves it is
 the load term doing the pulling and 5 says how hard to pull. 6 says the pull is free and 7 says
@@ -289,17 +289,10 @@ The whole grid was re-run on 2026-08-08 (02:39–05:02) as an independent seven-
 same rate, same frozen workload, same router and driver images, `results/gen3-7cell/`. Nothing
 about the policy changed; only the cell set and the window did.
 
-| | first sweep | independent re-run |
-|---|---|---|
-| `kvaware` imbalance | 2.358 | 2.452 |
-| β = 0.5 imbalance | 1.249 | 1.272 |
-| **Median reduction** | **−48.1%**, p < 0.0001 | **−49.4%**, p < 0.0001 |
-| β = 0 ablation | null, wrong way | null, wrong way (p = 0.43) |
-
-**The claim replicates and so does the ablation.** Two independent 20-seed sweeps two days
-apart put the effect within 1.3 points of each other, and in both the load term is the entire
-mechanism. The prefix-cache hit rate reproduces its shape too — 91.2%, 90.5%, 88.0%, 86.9% for
-`kvaware`, β = 0.5, 1.0, 2.0.
+**The claim replicates, and so does the ablation.** `kvaware` 2.452 against β = 0.5's 1.272 is
+a **−49.4% reduction, p < 0.0001** — within 1.3 points of the reported −48.1% — and β = 0 is
+null again (p = 0.43), so in both sweeps the load term is the entire mechanism. The
+prefix-cache hit rate reproduces its shape too: 91.2%, 90.5%, 88.0%, 86.9%.
 
 **The re-run's latency reading is reported here as exploratory and is not a change to the
 headline.** On the new sweep the TTFT p95 comparison returns 18.7% at p = 0.0107, where the
@@ -353,7 +346,7 @@ are in git history. The retained WAN sweep supports the same argument on committ
 157.4 → 101.9 ms, non-engine term 124.6 → 48.5 ms, and the 45–59% share above. See
 `results/README.md`.
 
-![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png){width=78%}
+![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png){width=70%}
 
 ## The ablation is the finding
 
@@ -376,19 +369,14 @@ the arm we ship.** Across β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs
 2.662 → 1.249 → 1.186 → 1.099 against the baseline's 2.358. The returns flatten sharply after
 β = 0.5: the first half of the grid buys 1.41 of imbalance, the rest buys 0.15.
 
-**Below that threshold the policy is not a weak version of itself — it is the baseline.** The
-independent re-run added β = 0.25, and it does not balance at all: imbalance 3.218 against that
-sweep's `kvaware` at 2.452, a difference that is not significant (p = 0.8988, CI [−46.3%,
-+3.5%]) and sits inside the spread of the cache-only arms. Its prefix-cache hit rate says why —
-**0.9119, indistinguishable from `kvaware`'s 0.9115 and the β = 0 ablation's 0.9108**, and
-nowhere near β = 0.5's 0.9049. It is placing requests exactly where pure cache affinity would.
-
-This is the design's own arithmetic, confirmed by a cell that did not exist when the arithmetic
-was written. A full cache hit is cancelled at $r = 1/(2\beta)$; at β = 0.25 that is $r = 2.0$,
-so an engine would have to carry **200% above the fleet mean** before the load term could
-override a cached prefix. On a two-engine fleet that is close to unreachable. β = 0.25 is
-therefore not a shallower operating point on the same curve — it is below the knee entirely, and
-the curve has a floor rather than a gentle approach to zero.
+**Below that threshold the policy is not a weaker version of itself — it is the baseline.** The
+re-run added β = 0.25 and it does not balance at all (imbalance 3.218 against that sweep's
+`kvaware` 2.452, not significant, p = 0.8988). Its prefix-cache hit rate says why: **0.9119,
+indistinguishable from `kvaware`'s 0.9115 and the ablation's 0.9108** — it places requests
+exactly where pure cache affinity would. The design's own arithmetic predicts this. A full cache
+hit is cancelled at $r = 1/(2\beta)$, so β = 0.25 needs an engine **200% above the fleet mean**
+before the load term can override a cached prefix, which on two engines is unreachable. The
+curve has a floor, and a cell that did not exist when the formula was written found it.
 
 That shape is why β is not simply set to the largest value on the grid. Every increment buys
 balance by diverting requests away from the engine holding their prefix, and past the knee it
@@ -415,11 +403,11 @@ the instance holding the KV. It saturates near 0.95 on every arm including round
 not discriminate between policies. Every hit-rate number in this report is the vLLM
 prefix-cache counter.
 
-![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=78%}
+![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=70%}
 
 ## Resource cost
 
-![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=78%}
+![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=70%}
 
 The policy is not buying its result by spending more hardware. Both GPUs run at 82–93% SM
 utilization on every arm and board power sits at 108–119 W per device throughout — which is
@@ -451,18 +439,14 @@ for diagnosis only.
 significance line between replicate cells (0.0291 and 0.0570). A metric that changes verdict
 between replicates of the same condition is measuring noise.
 
-**A third metric was declined most recently, and it is the one that would have helped most.**
-The independent re-run returns TTFT p95 at p = 0.0107 — below the pre-registered threshold,
-where the first sweep returned a null. It is reported under *The headline replicates* as
-exploratory rather than as a result, because it was examined after a null and carries no fresh
-pre-registration. A significant p-value found on the second look is the same object as a
-favourable metric found on the second look; the direction it happens to point does not change
-what it is.
+**The re-run's TTFT p95**, at p = 0.0107 where the first sweep returned a null. A significant
+p-value found on the second look is the same object as a favourable metric found on the second
+look; which way it points does not change what it is. It is reported under *The headline
+replicates* as exploratory.
 
-No seeds were added to any cell after a null appeared, at any operating point, and no metric was
-substituted for the pre-registered one. What *was* done, once, is a complete independent re-run
-of the whole grid — reported above in full, in the order it happened, including the reading that
-would have flattered us.
+No seeds were added to any cell after a null, at any operating point, and no metric was
+substituted for the pre-registered one. What was done once is a complete independent re-run of
+the grid, reported in the order it happened — including the reading that would have flattered us.
 
 # Discussion
 
