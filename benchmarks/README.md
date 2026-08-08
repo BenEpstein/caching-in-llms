@@ -405,6 +405,12 @@ only. Load imbalance comes from Prometheus and is not affected by the network.
 | GPU use, GPU power, GPU memory copy | `dcgm.csv` from the DCGM exporter | Each GPU |
 | Router CPU, router memory | `router_cpu_usage_percent`, `process_resident_memory_bytes` | The router |
 
+The driver CSV files are our own measurement. `load_driver.py` writes them. It runs in the
+driver image, in a pod in the cluster, and it writes one row for each request that it sends.
+One file holds one seed. Prometheus and the DCGM exporter are collectors of the cluster. This
+project does not change them. They give the fleet metrics, because the driver sees only its own
+requests.
+
 The percentiles come from the CSV rows. They do not come from a Prometheus histogram. Thus the
 p95 and the p99 values are exact.
 
@@ -420,20 +426,23 @@ because the driver CSV files are the primary measurement.
 
 `plot_results.py` makes 12 figures.
 
-| Figure | Contents |
-|---|---|
-| `fig1-ttft-p95-vs-beta` | The TTFT p95 for each value of beta |
-| `fig2-ttft-ecdf` | The distribution of the TTFT for each policy |
-| `fig3-hit-rate` | The LMCache lookup hit rate |
-| `fig4-paired-seeds` | The paired seeds. This is the data of the statistical test. |
-| `fig5-percentiles` | The TTFT percentiles for each policy |
-| `fig6-load-balance` | The busiest server against the most idle server |
-| `fig7-beta-tradeoff` | The latency against the cache hit rate |
-| `fig8-itl-percentiles` | The inter-token latency percentiles |
-| `fig9-throughput` | The tokens and the requests for each second |
-| `fig10-utilization` | The GPU use, the GPU memory, the CPU and the host memory |
-| `fig11-inflight-vs-time` | The requests in flight on each server against time |
-| `fig12-goodput` | The goodput against the latency objective, from 50 ms to 400 ms |
+| Figure | Contents | In the report |
+|---|---|---|
+| `fig1-ttft-p95-vs-beta` | The TTFT p95 for each value of beta | |
+| `fig2-ttft-ecdf` | The distribution of the TTFT for each policy | |
+| `fig3-hit-rate` | The LMCache lookup hit rate | |
+| `fig4-paired-seeds` | The paired seeds. This is the data of the statistical test. | |
+| `fig5-percentiles` | The TTFT percentiles for each policy | |
+| `fig6-load-balance` | The busiest server against the most idle server | yes |
+| `fig7-beta-tradeoff` | The latency against the cache hit rate | yes |
+| `fig8-itl-percentiles` | The inter-token latency percentiles | |
+| `fig9-throughput` | The tokens and the requests for each second | |
+| `fig10-utilization` | The GPU use, the GPU memory, the CPU and the host memory | yes |
+| `fig11-inflight-vs-time` | The requests in flight on each server against time | |
+| `fig12-goodput` | The goodput against the latency objective, from 50 ms to 400 ms | yes |
+
+The figures are in `docs/figures/` for generation 2, in `docs/figures-gen3/` for generation 3
+and in `docs/figures-wan/` for generation 1.
 
 ## Why we selected these parameters
 
