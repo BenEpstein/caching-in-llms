@@ -31,7 +31,11 @@ command -v pandoc >/dev/null || {
 opts=(--resource-path="$here:$here/..:$here/../.." --pdf-engine=xelatex)
 if [ "$(basename "$src")" = "report.md" ]; then
   # The report carries its own geometry, fontsize and glyph mappings in YAML front matter.
-  opts+=(--toc --toc-depth=2)
+  #
+  # No table of contents. The whole PDF is budgeted at 12 pages including the appendix, and a
+  # contents page costs one of them to index a document short enough to page through. The
+  # section headings do the navigating.
+  :
 else
   # A one-pager gets no table of contents, and its page geometry has to come from here
   # because the source is plain markdown a grader also reads on GitHub - front matter would
