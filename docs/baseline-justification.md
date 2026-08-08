@@ -63,6 +63,6 @@ way to reach both: that combination, not the eviction policy, is why we chose th
 
 ## Alternatives considered
 
-Semantic caches (GPTCache and similar) cache prompt→response pairs, so no distributed-placement
+Semantic caches (GPTCache and similar) cache prompt-to-response pairs, so no distributed-placement
 problem arises and the work would have been similarity-threshold tuning. vLLM's own in-engine
 prefix cache is single-instance by construction: there is no placement decision inside one engine.
