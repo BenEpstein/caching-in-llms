@@ -213,6 +213,27 @@ passes a registry probe before any measured request is sent.
 
 # Results
 
+## What each experiment tells us
+
+Seven measurements, each answering one question. They are laid out here first so the sections
+that follow read as a single argument rather than a list of numbers.
+
+| # | The question it asks | What it answered |
+|---|---|---|
+| 1 | Is placement a cache policy at all, or just load balancing? | Round-robin is **better balanced** than the cache-aware baseline and still **34× slower** (hit rate 0.682 against 0.912). Placement sets the fleet's effective hit rate. This is the lever everything else operates on |
+| 2 | Does the policy actually redistribute work? | **Yes.** Imbalance 2.358 → 1.249, **−48.1%**, p < 0.0001 over 20 paired seeds. This is the claim |
+| 3 | Does redistributing work make the fleet faster *here*? | **No.** TTFT p95 −2.7%, p = 0.1153 — a null, on the pre-registered primary. This is the boundary of the claim, not a footnote to it |
+| 4 | Is the gain the load term, or just our rewrite of the router? | **The load term.** With β = 0 the policy lands *on* the baseline (2.662 vs 2.358, p = 0.9734, if anything worse). Pre-declared falsifiable; it is what makes 2 credible |
+| 5 | What does the knob cost, and where should it sit? | Imbalance falls monotonically in β while the hit rate falls 91.2% → 86.1%. At β = 2.0 the lost locality shows up as latency. That reversal locates the knee and makes β = 0.5 a defended optimum |
+| 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number here is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
+| 7 | Does any of it reach a user-visible objective? | Goodput, a declared secondary: **19.0% fewer** requests missing a 150 ms first token, p = 0.0021, with the β = 0 ablation null across the whole 50–400 ms sweep |
+
+**The general picture.** 1 sets the scale of the lever, 2 shows we can pull it, 4 proves it is
+the load term doing the pulling and 5 says how hard to pull. 6 says the pull is free and 7 says
+it is visible from outside. 3 is where the picture stops: at this operating point the fleet
+never queued, so redistribution had no queueing delay to remove. The contribution is a
+mechanism, measured and bounded — not a speed-up we could not substantiate.
+
 ## Headline
 
 > **Status of this section.** Both co-primaries are settled. The in-cluster confirmatory re-run
