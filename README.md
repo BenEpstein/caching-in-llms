@@ -1,6 +1,6 @@
 # Load-Aware Prefix Routing for the vLLM Production Stack
 
-BGU final project. We extend the [vLLM Production Stack](https://github.com/vllm-project/production-stack)
+We extend the [vLLM Production Stack](https://github.com/vllm-project/production-stack)
 router with a **`loadaware`** placement policy that scores KV-cache-hit benefit against live
 instance load, using per-instance prefix-match information we added to
 [LMCache](https://github.com/LMCache/LMCache)'s controller.
@@ -29,29 +29,92 @@ last, which is what makes β portable across offered rates.
 
 ## Quickstart
 
-**No GPU, no cluster, no network.** This reproduces every number and figure in the report from
-data committed in this repository, in about two minutes:
+Everything below runs on **any laptop — no GPU, no cluster, no network access**. It installs the
+project, runs the full test suite, and regenerates every number and figure we report from data
+committed in this repository. About two minutes end to end.
 
 ```bash
-git clone https://github.com/BenEpstein/caching-in-llms.git && cd caching-in-llms
-python3 -m venv .venv && source .venv/bin/activate   # Python >= 3.10
+# 1. Get it
+git clone https://github.com/BenEpstein/caching-in-llms.git
+cd caching-in-llms
+
+# 2. Install (Python >= 3.10 required; on macOS the system python3 is 3.9,
+#    so use an explicit python3.12 -m venv if `python3 -V` says 3.9)
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-pytest benchmarks/ tests/ -q                          # 190 offline tests
-./scripts/reproduce.sh                                # regenerate every reported number
+# 3. Run the tests - 190 of them, all offline, ~30 s
+pytest benchmarks/ tests/ -q
+
+# 4. Regenerate every reported number and figure from the committed data
+./scripts/reproduce.sh
+
+# 5. Get the two PDFs (they are build outputs, not files in the repo)
+gh run download -n report-pdf                 -R BenEpstein/caching-in-llms
+gh run download -n baseline-justification-pdf -R BenEpstein/caching-in-llms
 ```
 
-`reproduce.sh` is the one that matters. It re-derives the statistics and the series behind every
-figure from the committed run data and **fails on any drift**, so the report cannot quietly
-disagree with its own evidence. It reads only what is in this repo.
+**Step 4 is the one that matters.** `reproduce.sh` re-derives the statistics and the series
+behind every figure from the raw run data and **fails on any drift**, so the report cannot
+quietly disagree with its own evidence. It reads only what is in this repository — no cluster,
+no GPU, no network.
 
-Where each graded deliverable lives is at the bottom: [Deliverables](#deliverables).
+For step 5 without the `gh` CLI: **Actions → Report → latest run on `main` → Artifacts**. To
+render the PDFs yourself you need `pandoc` and a LaTeX engine — see the header of
+`docs/report/build.sh`.
+
+Only re-running the benchmark itself needs hardware; see
+[Reproduce the benchmarks on a cluster](#reproduce-the-benchmarks-on-a-cluster).
+
+## Repo layout
+
+| Path | What it is |
+|---|---|
+| `patches/` | **The extension itself** — our modified router and LMCache files, mirroring their in-image paths |
+| `tests/` | Unit tests for the two changes; loads `patches/` directly with `lmcache` stubbed, so they run on any laptop |
+| `conformance/` | CI-only: runs upstream's *own* test suite against our patch, at the pinned versions |
+| `benchmarks/` | Workload generators, load driver, in-cluster Job, gates, collectors, analysis, plots. `benchmarks/README.md` is the operator's manual |
+| `results/` | One directory per sweep — `gen2-confirmatory/` is the reported one, `gen3-7cell/` its independent replication, `gen1-wan/` the superseded WAN measurements kept as evidence for the instrument argument |
+| `docs/` | `report/report.md` (the report), `baseline-justification.md` (why this baseline), and one figure set per sweep: `figures/`, `figures-gen3/`, `figures-wan/` |
+| `scripts/reproduce.sh` | Regenerates every reported number from committed data and fails on drift |
+| `deploy/` | Helm values + OpenShift notes for the cluster. `deploy/dev/` holds the ~60 s dev loop *and* two gates the measured runs call: `registry-probe.sh`, `revert-router-patch.sh` |
+| `Dockerfile` | Router image: pinned upstream base + our `patches/` overlay, built in CI |
+| `.github/workflows/` | Tests + `reproduce.sh` on every push; the two container images; the two PDFs |
+
+## Where this was measured
+
+> **All reported numbers come from an OpenShift cluster running the NVIDIA GPU Operator, with
+> 2 × NVIDIA A10 GPUs (23 GB each) and one vLLM engine pinned per GPU.** The GPU Operator
+> supplies the DCGM exporter that every GPU utilization and power number in the report is read
+> from. Nothing in this project was simulated.
+
+Full provenance is pinned inside every run's `run.json`:
+
+| | |
+|---|---|
+| Platform | **OpenShift** (`gapu-2`), namespace `cache-llm`, **NVIDIA GPU Operator** for drivers + DCGM |
+| GPUs | **2 × NVIDIA A10, 23 GB**, one engine per GPU |
+| Model | `Qwen/Qwen2.5-3B-Instruct` — ungated, no HuggingFace token needed |
+| Stack | vLLM Production Stack Helm chart + LMCache 0.3.9post2 |
+| Router image | `quay.io/rhl193000/lmstack-router-loadaware`, built in CI from this repo's `Dockerfile` |
+| Driver | Runs **as an in-cluster Job**, so no wide-area network sits inside the latency numbers |
+| Workload | 128 Zipfian (s=0.9) shared prefixes, ISL 1578, OSL 64, 500 requests × 20 seeds |
+| Offered rate | 16 req/s, chosen from a latency-knee pilot |
+
+To **re-verify** the results you need none of that — only Python ≥ 3.10 and the
+[Quickstart](#quickstart). To **re-run** the benchmark you need the cluster above and roughly
+2.5 hours for a full 7-cell sweep.
+
+Runtime dependencies are `httpx`, `pytest`, `pytest-benchmark` and `matplotlib` — everything
+else in `benchmarks/` is standard library, including the statistics (`analyze.py` implements the
+exact Wilcoxon and the bootstrap CI itself rather than pulling in SciPy). The version floor is
+enforced, not just documented: `reproduce.sh` refuses to run below Python 3.10 rather than
+reporting the resulting last-digit differences as drift in the committed data.
 
 ## Result
 
-Measured on 2×A10 (OpenShift), Qwen2.5-3B-Instruct, one frozen Zipfian shared-prefix workload,
-20 seeds per arm, replayed **from inside the cluster** so no wide-area network sits inside the
-latency numbers.
+20 seeds per arm, one frozen Zipfian shared-prefix workload, replayed from inside the cluster.
 
 | Co-primary | Status |
 |---|---|
@@ -62,6 +125,19 @@ The ablation is what makes the mechanism credible: **β=0 does not move imbalanc
 against the baseline's 2.358 - if anything slightly worse, p = 0.9734), while β=0.5 sits at
 1.249. The load term is the entire mechanism - the routing rewrite on its own does nothing.
 That was pre-declared falsifiable before the comparator ran.
+
+**And it replicates.** An independent seven-cell sweep two days later, same images and same
+frozen workload, reproduces the headline at **−49.4%** (p < 0.0001) against the −48.1% above,
+with the ablation null again. Two 20-seed sweeps in different windows landing within 1.3 points
+is a stronger statement than either alone. That sweep also added β=0.25 and found the floor of
+the trend: it does not balance at all, because at β=0.25 the load term only overrides a cached
+prefix on an engine 200% above the fleet mean. `results/gen3-7cell/`, figures in
+`docs/figures-gen3/`.
+
+The re-run's *latency* reading (18.7%, p = 0.0107, where the first sweep was null) is reported
+in the report as **exploratory, not as a headline change** — it was examined after a null with
+no fresh pre-registration, which is the same thing as choosing a friendlier metric after the
+fact. The pre-registered latency result remains the null above.
 
 > **The latency null is the pre-registered result, not a fallback.** The original TTFT test was
 > measured from a laptop, and 45–59% of that number turned out to be laptop-to-cluster network,
@@ -81,7 +157,7 @@ see [Verify without a cluster](#verify-without-a-cluster).
 Three files, all resident in the **router pod** (both `vllm_router` and the LMCache
 `cache_controller` are installed there as plain Python). `patches/` holds our modified copies
 **mirroring their path inside the image** under `/opt/venv/lib/python3.12/site-packages/`, so
-the tree the §6 image `COPY`s and the tree the tests import are the same bytes:
+the tree the image `COPY`s and the tree the tests import are the same bytes:
 
 | File | Change | Ticket |
 |---|---|---|
@@ -92,74 +168,6 @@ the tree the §6 image `COPY`s and the tree the tests import are the same bytes:
 Each file started as a verbatim copy from the router image `Dockerfile` pins by digest
 (lmcache 0.3.9post2), so `git diff` against the stock file is the real diff, and every change
 carries a `LOADAWARE PATCH` comment.
-
-## Repo layout
-
-| Path | What it is |
-|---|---|
-| `patches/` | **The extension itself** — our modified router and LMCache files, mirroring their in-image paths |
-| `tests/` | Unit tests for the two changes; loads `patches/` directly with `lmcache` stubbed, so they run on any laptop |
-| `conformance/` | CI-only: runs upstream's *own* test suite against our patch, at the pinned versions |
-| `benchmarks/` | Workload generators, load driver, in-cluster Job, gates, collectors, analysis, plots |
-| `results/` | One directory per sweep — `gen2-confirmatory/` is the reported one, `gen3-7cell/` its independent replication, `gen1-wan/` the superseded WAN measurements kept as evidence for the instrument argument |
-| `docs/` | `report/` (§6), `baseline-justification.md` (§2), and one figure set per sweep: `figures/`, `figures-gen3/`, `figures-wan/` |
-| `scripts/reproduce.sh` | Regenerates every reported number from committed data and fails on drift |
-| `deploy/` | Helm values + OpenShift notes for the 2×A10 cluster. `deploy/dev/` holds the ~60 s dev loop *and* two gates the measured runs call: `registry-probe.sh`, `revert-router-patch.sh` |
-| `Dockerfile` | Router image: pinned upstream base + our `patches/` overlay, built in CI |
-
-## Environment
-
-Two environments, and only the second one needs hardware.
-
-| | To re-verify the results | To re-run the benchmark |
-|---|---|---|
-| **Needs** | Python ≥ 3.10 and `requirements.txt` | A 2-GPU Kubernetes/OpenShift cluster |
-| **Time** | ~2 minutes | ~20 min per cell, 7 cells per sweep |
-| **Commands** | [Quickstart](#quickstart) | [Reproduce the benchmarks on a cluster](#reproduce-the-benchmarks-on-a-cluster) |
-
-**What the reported numbers were measured on**, all pinned in each run's `run.json`:
-
-| | |
-|---|---|
-| Hardware | 2 × NVIDIA A10 (23 GB), one engine per GPU, OpenShift |
-| Model | `Qwen/Qwen2.5-3B-Instruct` — ungated, no HF token needed |
-| Stack | vLLM Production Stack Helm chart + LMCache 0.3.9post2 |
-| Router image | `quay.io/rhl193000/lmstack-router-loadaware`, built in CI from this repo's `Dockerfile` |
-| Workload | 128 Zipfian (s=0.9) shared prefixes, ISL 1578, OSL 64, 500 requests × 20 seeds |
-| Offered rate | 16 req/s, chosen from a latency-knee pilot |
-
-Runtime dependencies are `httpx`, `pytest`, `pytest-benchmark` and `matplotlib` — everything
-else in `benchmarks/` is standard library, including the statistics (`analyze.py` implements the
-exact Wilcoxon and the bootstrap CI itself rather than pulling in SciPy).
-
-## Setup
-
-Python ≥ 3.10. **No GPU and no cluster needed** for the test suite or for re-deriving every
-published number:
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-The version floor is enforced, not just documented: `scripts/reproduce.sh` refuses to run below
-3.10 rather than reporting the resulting last-digit differences as drift in the committed data.
-On macOS, `python3` is 3.9 unless you install a newer one — build the venv with an explicit
-`python3.12 -m venv .venv`.
-
-## Tests
-
-```bash
-pytest benchmarks/ tests/ -q
-```
-
-190 tests, all offline. `.github/workflows/ci.yml` runs the same suite on every push, plus a
-timed micro-benchmark of the router's placement path.
-
-The cluster sweep is deliberately **not** in CI: it needs two A10 GPUs, an OpenShift namespace,
-and ~40 minutes per cell. What reruns per commit is everything that is pure computation — the
-scoring path, the workload generators, the statistics, the collectors' parsers — which is also
-where a regression would otherwise be silent.
 
 ## Tunable parameter
 
@@ -186,11 +194,10 @@ cached fraction, α was a redundant scale factor and only β sets the trade-off.
 
 ## Verify without a cluster
 
-Every figure and both statistical tests are recomputable from committed artifacts:
+`./scripts/reproduce.sh` runs all of this and diffs it against the committed baselines. To do it
+by hand:
 
 ```bash
-./scripts/reproduce.sh   # all of the below, diffed against the committed baselines
-
 python3 benchmarks/export_summary.py results/gen2-confirmatory/2026* --out /tmp/summary.csv
 python3 benchmarks/analyze.py compare results/gen2-confirmatory/20260805-232541-loadaware-b0.5 \
                                       results/gen2-confirmatory/20260805-230541-kvaware
@@ -210,7 +217,7 @@ Every run directory holds the raw measurements, not just summaries. Take the bas
 |---|---|
 | `driver-seed1.csv` … `driver-seed20.csv` | **One row per request** — 500 rows per seed, 10,000 per cell |
 | `prom/*.json` | Prometheus range scrapes: TTFT histograms, queue depth, prefix-cache hits/queries, KV usage, router CPU and memory |
-| `dcgm.csv` | Per-GPU utilization, memory and board power, polled through the run |
+| `dcgm.csv` | Per-GPU utilization, memory and board power from the GPU Operator's DCGM exporter, polled through the run |
 | `run.json` | Provenance: arm, β, offered rate, router image **and its digest**, driver location, git commit, workload manifest with per-seed SHA-256 |
 
 One request, from `driver-seed1.csv`:
@@ -230,14 +237,15 @@ Field-by-field definitions, the collectors, and what each Prometheus series is f
 
 ## Reproduce the benchmarks on a cluster
 
-Requires a 2-GPU Kubernetes/OpenShift cluster with the vLLM Production Stack chart. Full
-procedure, deployment steps, cluster gotchas, metrics, validity rules, and the
-pre-registered statistics are in [`benchmarks/README.md`](benchmarks/README.md).
+Needs the [environment above](#where-this-was-measured): an OpenShift (or Kubernetes) cluster
+with the GPU Operator and two GPUs, running the vLLM Production Stack chart. Full procedure,
+deployment steps, cluster gotchas, metrics, validity rules and the pre-registered statistics are
+in [`benchmarks/README.md`](benchmarks/README.md).
 
 ```bash
 python3 benchmarks/freeze_workloads.py          # regenerate the SHA-pinned workload
 benchmarks/rate_pilot.sh                        # find the latency knee
-LOADAWARE_TAG=<image-sha> benchmarks/run_sweep.sh <rate>
+LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh <rate>
 ```
 
 The measured replay runs as an **in-cluster Job**, so client-observed latency is timed from
@@ -246,17 +254,3 @@ this repo's `Dockerfile` on every `patches/**` push and pushed SHA-tagged to
 `quay.io/rhl193000/lmstack-router-loadaware`, so the measured artifact is always reproducible
 from the tree. Measured cells only ever use built images — the `deploy/dev/` ConfigMap overlay
 is a development convenience and is never benchmarked.
-
-## Deliverables
-
-Where each section of the project spec is answered. **Both PDFs are built by CI** on every push
-that touches their sources (`.github/workflows/report.yml`) and uploaded as workflow artifacts —
-`report-pdf` and `baseline-justification-pdf` — so neither can drift from the numbers it cites.
-
-| Spec § | Deliverable | Artifact |
-|---|---|---|
-| §2 | One-page (max) baseline justification | [`docs/baseline-justification.md`](docs/baseline-justification.md) → `baseline-justification.pdf`. The 1-page cap is a CI gate, not a claim |
-| §3 | Benchmark README + sample logs, wired into CI | [`benchmarks/README.md`](benchmarks/README.md), `benchmarks/`, `results/`, `.github/workflows/ci.yml` |
-| §4 | Extension on a feature branch, tunable parameters, unit tests | [`patches/`](patches), § "Tunable parameter" above, [`tests/`](tests) + [`conformance/`](conformance) |
-| §5 | A PDF describing the experiments, their results, and what they mean | The report's **Experimental setup**, **Results** and **Discussion**. §6 asks for "a single PDF", so §5 is not a second document — it is the middle of this one |
-| §6 | 8–12 page PDF + clean repo with install/benchmark instructions and a Dockerfile | [`docs/report/report.md`](docs/report/report.md) → `report.pdf`, this README, `Dockerfile` |
