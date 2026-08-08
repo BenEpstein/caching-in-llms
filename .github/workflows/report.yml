@@ -1,20 +1,28 @@
 name: Report
 
-# Builds the §6 deliverable PDF from docs/report/report.md and uploads it as a workflow
-# artifact. Same reasoning as the router image (issue #16): the graded artifact rebuilds
+# Builds the two PDF deliverables - the §6 report from docs/report/report.md and the §2
+# one-page justification from docs/baseline-justification.md - and uploads both as workflow
+# artifacts. Same reasoning as the router image (issue #16): the graded artifact rebuilds
 # from the repository on every push, so it can never drift from the figures and numbers
 # it cites, and no reviewer needs a LaTeX toolchain to read it.
+#
+# The §2 cap is a GATE, not a notice: "one-page (max)" is a hard number in the spec, and a limit
+# nobody enforces is a limit that gets exceeded quietly. The report's 8-12 is gated on the FLOOR
+# only - the spec reads "8-12 pages plus any appendices", so a total above 12 is expected once
+# the table of contents and Appendix A are counted, and failing on it would be wrong.
 
 on:
   push:
     paths:
       - "docs/report/**"
       - "docs/figures/**"
+      - "docs/baseline-justification.md"
       - ".github/workflows/report.yml"
   pull_request:
     paths:
       - "docs/report/**"
       - "docs/figures/**"
+      - "docs/baseline-justification.md"
   workflow_dispatch:
 
 jobs:
@@ -33,10 +41,16 @@ jobs:
             pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra \
             texlive-fonts-recommended lmodern poppler-utils
 
-      - name: Build the PDF
+      - name: Build the §6 report PDF
         run: |
           set -o pipefail
           bash docs/report/build.sh report.pdf 2>&1 | tee build.log
+
+      - name: Build the §2 one-page justification PDF
+        run: |
+          set -o pipefail
+          bash docs/report/build.sh baseline-justification.pdf ../baseline-justification.md \
+            2>&1 | tee -a build.log
 
       # A glyph the font cannot render is dropped SILENTLY - pandoc only warns, and the PDF
       # ships with blank gaps where the symbol should be. Every alpha and beta in this report
@@ -50,13 +64,34 @@ jobs:
           fi
           echo "no missing glyphs"
 
-      - name: Report page count
-        run: |
-          pages=$(pdfinfo report.pdf | awk '/^Pages/{print $2}')
-          echo "::notice title=Report length::${pages} pages (spec asks for 8-12 + appendices)"
-
+      # Upload BEFORE the budget gate. A build that fails on length is exactly when someone
+      # needs to open the PDF and see how far over it went; withholding the artifact until the
+      # gate passes makes the failure harder to fix than it needs to be.
       - uses: actions/upload-artifact@v4
         with:
           name: report-pdf
           path: report.pdf
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-justification-pdf
+          path: baseline-justification.pdf
+          if-no-files-found: error
+
+      - name: Enforce the page budgets
+        run: |
+          report_pages=$(pdfinfo report.pdf | awk '/^Pages/{print $2}')
+          just_pages=$(pdfinfo baseline-justification.pdf | awk '/^Pages/{print $2}')
+          echo "::notice title=Report length::${report_pages} pages (spec: 8-12 + appendices)"
+          echo "::notice title=§2 length::${just_pages} page(s) (spec: 1 max)"
+          fail=0
+          if [ "$just_pages" -gt 1 ]; then
+            echo "::error title=§2 over budget::baseline-justification.pdf is ${just_pages} pages, the spec caps it at 1"
+            fail=1
+          fi
+          if [ "$report_pages" -lt 8 ]; then
+            echo "::error title=Report under budget::report.pdf is ${report_pages} pages, the spec asks for 8-12 plus appendices"
+            fail=1
+          fi
+          exit $fail

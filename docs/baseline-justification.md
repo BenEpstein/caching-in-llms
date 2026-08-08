@@ -1,8 +1,8 @@
 # §2 Baseline Justification — vLLM Production Stack + LMCache
 
-> status: live · 2026-08-08 · the §2 deliverable. Verified against
-> `vllm-project/production-stack` @ `1e973a3` and `LMCache/LMCache` @ `bf20f51`. Full file/line
-> evidence: `docs/feasibility-verification.md`, deleted in #59, recoverable at `a137f5a`.
+> status: live · 2026-08-08 · the §2 deliverable, verified against `production-stack` @ `1e973a3`
+> and `LMCache` @ `bf20f51`. Full file/line evidence: `docs/feasibility-verification.md`, deleted
+> in #59, recoverable at `a137f5a`.
 
 ## Choice
 
@@ -15,14 +15,13 @@ the multi-instance router that decides *which* cache a request can hit.
 **Maturity & community support.** LMCache is the KV-cache backend vLLM itself integrates with. It
 ships an official Helm chart with a documented KV-aware tutorial, published router and engine
 images in matched version pairs, and Prometheus metrics on both tiers. It is under active
-development: we worked against live upstream TODOs and cite a concurrent upstream PR.
+development — we worked against live upstream TODOs.
 
 **Ease of modification.** Every routing strategy lives in one file,
 `src/vllm_router/routers/routing_logic.py` — a `RoutingLogic` enum, one class per strategy
 implementing `route_request()`, and an `initialize_routing_logic()` factory. Per-router unit tests
-(`test_prefixaware_router.py`, `test_roundrobin_router.py`) show how to test one without a GPU,
-and every LMCache knob is environment-variable driven, so configuration the chart does not expose
-can still be set per model.
+(`test_prefixaware_router.py`) show how to test one without a GPU, and every LMCache knob is
+environment-variable driven, so configuration the chart does not expose is still reachable.
 
 ## Main features relevant to this project
 
@@ -42,8 +41,8 @@ can still be set per model.
 FIFO and MRU** registered in `POLICY_MAPPING` and selected by the `cache_policy` config key —
 default `"LRU"`, overridable via `LMCACHE_CACHE_POLICY`. That cuts two ways: eviction is *already*
 pluggable, so a new eviction policy would have been a one-file exercise against a solved
-interface, and our experiments avoid eviction pressure by design (KV usage peaks near 0.70 and
-never exhausts), so LRU-versus-anything is not a confound in our results.
+interface, and our experiments avoid eviction pressure by design (KV usage peaks near 0.70), so
+LRU-versus-anything is not a confound.
 
 ## The gap we chose to close
 
@@ -59,10 +58,6 @@ results."* Two consequences define this project:
    there. **Replication and routing have to be co-designed.**
 
 An acknowledged gap in the cache layer, an unused load signal one layer up, and an additions-only
-way to reach both: that combination, not the eviction policy, is why we chose this baseline.
-
-## Alternatives considered
-
-Semantic caches (GPTCache and similar) cache prompt→response pairs, so no distributed-placement
-problem arises and the work would have been similarity-threshold tuning. vLLM's own in-engine
-prefix cache is single-instance by construction: there is no placement decision inside one engine.
+way to reach both: that combination, not the eviction policy, is why we chose this baseline. The
+alternatives had no such gap: semantic caches (GPTCache) key on prompt-to-response pairs, so no
+placement problem arises, and vLLM's in-engine prefix cache is single-instance by construction.

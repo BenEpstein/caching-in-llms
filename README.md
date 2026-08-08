@@ -173,10 +173,16 @@ this repo's `Dockerfile` on every `patches/**` push and pushed SHA-tagged to
 from the tree. Measured cells only ever use built images — the `deploy/dev/` ConfigMap overlay
 is a development convenience and is never benchmarked.
 
-## Documents
+## Deliverables
 
-| Doc | What it answers |
-|---|---|
-| `docs/baseline-justification.md` | Why this baseline (§2): features, default eviction policy, fit |
-| `docs/report/report.md` | The §6 report; CI builds it to PDF on every push |
-| `benchmarks/README.md` | The §3 operator's manual |
+Where each section of the project spec is answered. **Both PDFs are built by CI** on every push
+that touches their sources (`.github/workflows/report.yml`) and uploaded as workflow artifacts —
+`report-pdf` and `baseline-justification-pdf` — so neither can drift from the numbers it cites.
+
+| Spec § | Deliverable | Artifact |
+|---|---|---|
+| §2 | One-page (max) baseline justification | [`docs/baseline-justification.md`](docs/baseline-justification.md) → `baseline-justification.pdf`. The 1-page cap is a CI gate, not a claim |
+| §3 | Benchmark README + sample logs, wired into CI | [`benchmarks/README.md`](benchmarks/README.md), `benchmarks/`, `results/`, `.github/workflows/ci.yml` |
+| §4 | Extension on a feature branch, tunable parameters, unit tests | [`patches/`](patches), § "Tunable parameter" above, [`tests/`](tests) + [`conformance/`](conformance) |
+| §5 | A PDF describing the experiments, their results, and what they mean | The report's **Experimental setup**, **Results** and **Discussion**. §6 asks for "a single PDF", so §5 is not a second document — it is the middle of this one |
+| §6 | 8–12 page PDF + clean repo with install/benchmark instructions and a Dockerfile | [`docs/report/report.md`](docs/report/report.md) → `report.pdf`, this README, `Dockerfile` |
