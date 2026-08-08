@@ -108,8 +108,8 @@ There are two results of this limit. Together they give the reason for this proj
   server. You must design replication and routing together.
 
 We changed `lookup()`. It now gives the number of matched tokens for **each** server that holds
-the prefix. The credit for a prefix is **continuous for each server**. A server stops to receive
-credit at its first missing chunk. Thus a match is a real prefix that the server can use. It is
+the prefix. The credit for a prefix is **continuous for each server**. A server gets no more
+credit after its first missing chunk. Thus a match is a real prefix that the server can use. It is
 not a count of separated chunks. The change only adds code. It keeps the same return shape for
 the callers that exist.
 
@@ -215,7 +215,8 @@ each request. The metrics are TTFT, inter-token latency and end-to-end latency, 
 p90, p95 and p99. Only the driver can give percentiles. The router gives average gauges only. The
 histograms of the servers start at the server. They do not include the router time. The load
 imbalance is `vllm:num_requests_running` of the busiest server divided by the most idle server.
-The hit rate is the vLLM prefix-cache counter. The GPU use and the GPU power come from DCGM.
+The hit rate is the vLLM prefix-cache counter. The throughput comes from the request rate and
+the token rate of the driver, for each seed. The GPU use and the GPU power come from DCGM.
 
 **Statistics. We registered them before the comparison ran.** One seed replay is **one
 observation** (n = 20). The samples of each request are related through the queue. We never use
@@ -249,7 +250,7 @@ sections below give one argument and not a list of numbers.
 | 3 | Does this make the fleet faster here? | **No.** TTFT p95 is −2.7%, p = 0.1153. This is a null result on the registered primary metric. It is the limit of the claim |
 | 4 | Is the gain from the load term or from the new code? | **From the load term.** At β = 0 the policy gives the baseline result (2.662 against 2.358, p = 0.9734) |
 | 5 | What is the cost of the parameter? | The imbalance decreases with β. The hit rate decreases from 91.2% to 86.1%. At β = 2.0 the lost locality becomes latency. This gives the knee |
-| 6 | Does the gain need more hardware? | **No.** The GPU, the power and the router CPU do not change. The KV-cache spread also goes from 1.70 to 1.18 times. The policy balances the *cache* |
+| 6 | Does the gain need more hardware? | **No.** The GPU, the power, the throughput and the router CPU do not change. The KV-cache spread also goes from 1.70 to 1.18 times. The policy balances the *cache* |
 | 7 | Is there an effect that a user sees? | Secondary metric: **19.0% fewer** requests miss a first token at 150 ms, p = 0.0021. The ablation is null across the full sweep of 50 ms to 400 ms |
 | 8 | Does the result repeat? | **Yes.** An independent seven-cell sweep gives **−49.4%**. The ablation is null again |
 
@@ -418,7 +419,10 @@ includes round-robin. Each hit-rate value in this report is the vLLM prefix-cach
 
 ## Resource cost
 
-The policy does not get its result with more hardware. Both GPUs run at 82% to 93% SM use on each
+The policy does not get its result with more hardware. The throughput is equal across the
+cache-aware arms: 14.0 to 14.5 requests/s and 897 to 929 output tokens/s, as medians for each
+seed. Round-robin completes 10.4 requests/s and 665 tokens/s at the same offered rate. Thus the
+cache-blind arm loses throughput as well as latency. Both GPUs run at 82% to 93% SM use on each
 arm. The board power stays between 108 W and 119 W for each device. This is also the direct
 evidence for the compute-saturation argument in the Discussion. The CPU of the router is **0.212,
 0.213 and 0.214 core-seconds for each second** for `kvaware`, β = 0 and β = 0.5. Thus the score
