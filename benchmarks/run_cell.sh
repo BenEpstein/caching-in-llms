@@ -35,6 +35,8 @@ SEEDS="${SEEDS:-1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
+# shellcheck source=router_forward.sh
+. "$BENCH_DIR/router_forward.sh"
 
 NS="${NS:-cache-llm}"
 RELEASE="${RELEASE:-stack}"
@@ -43,8 +45,9 @@ CHART="${CHART:-vllm/vllm-stack}"
 # unpinned upgrade would silently migrate the stack mid-experiment.
 CHART_VERSION="${CHART_VERSION:-0.1.11}"
 # BASE_URL is the laptop-side endpoint, used by the warm-up and the registry probe - neither
-# is measured. The default matches the `kubectl port-forward` in benchmarks/README.md,
-# "Step 1: install the stack". Point it at an Ingress instead if you have one.
+# is measured. Left at the default, step 5 opens a port-forward and rewrites this; a
+# port-forward cannot be opened any earlier because the cold start kills it (router_forward.sh).
+# Set it to an Ingress or a route to skip the forward entirely.
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 # TARGET_URL is what the MEASURED replay hits, from inside the cluster (#27). Same target
 # Prometheus scrapes; `kubectl get svc stack-router-service` shows router-sport 80 -> 8000.
@@ -182,13 +185,18 @@ fi
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   EXPECT_REGISTRATIONS="$USES_LOOKUP" "$BENCH_DIR/cold_start.sh"
 
-# ---- 5. registry probe (#13) - only meaningful on lookup-routing arms -------
+# ---- 5. laptop -> router endpoint, opened AFTER the last router restart -----
+# The cold start above is the final restart in this cell, so a forward opened here survives the
+# probe and the warm-up. Opened any earlier it would be pointing at a pod that no longer exists.
+start_router_forward "$NS" "$RELEASE"
+
+# ---- 6. registry probe (#13) - only meaningful on lookup-routing arms -------
 if [ "$USES_LOOKUP" = 1 ]; then
   NS="$NS" BASE_URL="$BASE_URL" MODEL="$MODEL" \
     "$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
 fi
 
-# ---- 6. warm-up over the prefix pool, gated on non-empty layout_info --------
+# ---- 7. warm-up over the prefix pool, gated on non-empty layout_info --------
 WARMUP_START=$(date +%s)
 python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure
 if [ "$USES_LOOKUP" = 1 ]; then
@@ -204,7 +212,7 @@ if [ "$USES_LOOKUP" = 1 ]; then
   echo "==> warm-up gate ok ($hits cache-path routings)"
 fi
 
-# ---- 7. collectors ----------------------------------------------------------
+# ---- 8. collectors ----------------------------------------------------------
 # NOTE: no Prometheus port-forward here. prom_dump uses query_range over a past
 # window, so it only needs Prometheus reachable at DUMP time; a forward held
 # open across the whole cell has the whole cell to die in, and under `set -e` it
@@ -241,7 +249,7 @@ python3 "$BENCH_DIR/collectors/dcgm_poll.py" \
   "${DCGM_URLS[@]}" --out "$OUT/dcgm.csv" &
 PIDS+=($!)
 
-# ---- 8. measured replay: the cell's frozen seeds back-to-back ---------------
+# ---- 9. measured replay: the cell's frozen seeds back-to-back ---------------
 # The replay runs INSIDE the cluster (#27): a Job runs the SAME load_driver.py against the
 # router's ClusterIP - no route, no TLS, no WAN - so the metric is unchanged and only the
 # instrument moved. Everything else in this script still runs on the laptop. Why the WAN
@@ -257,7 +265,7 @@ NS="$NS" MODEL="$MODEL" RATE="$RATE" MAX_TOKENS="$MAX_TOKENS" SEEDS="$SEEDS" \
 # shellcheck source=/dev/null
 source "$OUT/window.env"   # CELL_START, CELL_END, DRIVER_NODE, BENCH_IMAGE
 
-# ---- 9. Prometheus dump over the measurement window -------------------------
+# ---- 10. Prometheus dump over the measurement window -------------------------
 # Forward now, not at cell start: a short-lived forward is a reliable one. Retry
 # because a single refused connection here would otherwise discard a cell whose
 # measurements are already complete and on disk.
@@ -279,7 +287,7 @@ for attempt in 1 2 3; do
 done
 [ "$prom_dumped" = 1 ] || echo "WARNING: no Prometheus dump for $OUT - driver CSVs are still valid, but the imbalance co-primary cannot be computed for this cell" >&2
 
-# ---- 10. run manifest -------------------------------------------------------
+# ---- 11. run manifest -------------------------------------------------------
 # per-seed windows are derivable from each driver CSV's send_ts column
 ROUTER_IMAGE_ID=$(kubectl get pods -n "$NS" -l "$(kubectl get deploy "$ROUTER_DEPLOY" -n "$NS" \
   -o jsonpath='{.spec.selector.matchLabels}' \
@@ -332,7 +340,7 @@ with open(os.path.join(env["OUT"], "run.json"), "w") as f:
 print(f"wrote {env['OUT']}/run.json")
 PY
 
-# ---- 11. utilization coverage gate ------------------------------------------
+# ---- 12. utilization coverage gate ------------------------------------------
 # Every utilization series checked against [CELL_START, CELL_END] and the covered
 # fraction recorded in run.json (#35). WARN-ONLY, and deliberately so: the driver
 # CSVs are the primary measurement and a cell with good latency data must not be
@@ -341,6 +349,6 @@ PY
 python3 "$BENCH_DIR/utilization.py" coverage "$OUT" --update-run-json || \
   echo "WARNING: utilization coverage step failed for $OUT (non-fatal)" >&2
 
-# ---- 12. validity gate ------------------------------------------------------
+# ---- 13. validity gate ------------------------------------------------------
 python3 "$BENCH_DIR/analyze.py" validate "$OUT"
 echo "==> cell $CELL complete: $OUT"

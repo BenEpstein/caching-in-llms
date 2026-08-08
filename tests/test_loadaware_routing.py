@@ -11,7 +11,7 @@ tests below pin that property directly (see the scale-invariance and
 fleet-size cases), because it is the whole reason the policy ships a default
 instead of a per-cluster calibration.
 
-No cluster, no GPU, no vllm_router install — conftest.py stubs the router's
+No cluster, no GPU, no vllm_router install - conftest.py stubs the router's
 import surface and loads the tracked patch file itself, so the bytes under test
 are the bytes `deploy/dev/apply-router-patch.sh` mounts into the pod.
 """
@@ -233,7 +233,7 @@ def test_no_endpoints_returns_none_for_the_caller_to_fall_back():
 
 
 def test_missing_request_stats_counts_as_no_load():
-    """At cold start `request_stats` is empty for every URL — must not KeyError.
+    """At cold start `request_stats` is empty for every URL - must not KeyError.
 
     Matches `_qps_routing`, which reads an unseen endpoint as unloaded.
     """
@@ -370,7 +370,7 @@ def test_an_engine_restart_refreshes_the_bridge_instead_of_scoring_it_cold():
     """A restarted engine registers under a **new** instance_id.
 
     The bridge only ever grows, so a count-of-entries guard would never notice
-    and every holder would read as unmapped — placement silently degenerating
+    and every holder would read as unmapped - placement silently degenerating
     to least-loaded for the life of the router, an invalidated run rather than
     a visible failure.
     """
@@ -417,7 +417,7 @@ def test_a_dead_instance_id_earns_no_phantom_credit():
 
     The Controller's `kv_pool` only drops an instance on an explicit deregister,
     so `lookup()` can still name the dead id as a holder of a full prefix. That
-    match no longer exists anywhere — crediting it would route the request to a
+    match no longer exists anywhere - crediting it would route the request to a
     cold engine on the strength of a cache that died with the old process.
     """
     router = make_router(beta=0.1)
@@ -605,7 +605,7 @@ def test_the_cli_accepts_every_routing_logic_value():
     So adding `LOADAWARE` to `RoutingLogic` is not enough on its own: argparse
     would reject `--routing-logic loadaware` and the router would exit before
     the factory is ever reached. Both files have to move together, in either
-    direction — hence the set equality.
+    direction - hence the set equality.
     """
     assert set(routing_logic_choices()) == {
         member.value for member in routing_logic.RoutingLogic

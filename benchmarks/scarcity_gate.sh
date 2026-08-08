@@ -49,6 +49,11 @@ ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
+# shellcheck source=router_forward.sh
+. "$BENCH_DIR/router_forward.sh"
+PIDS=()
+cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
+trap cleanup EXIT
 
 # Reference only - printed beside the result, never compared. The gate's bar is
 # THRESHOLD: "clearly below", not "any drop at all".
@@ -104,6 +109,8 @@ snapshot() {
 }
 
 echo "==> warm-up"
+# After the cold start, never before: the restart in it kills any earlier forward.
+start_router_forward "$NS" "$RELEASE"
 python3 "$BENCH_DIR/warmup.py" --base-url "$BASE_URL" --model "$MODEL" --insecure --passes 1
 
 snapshot > /tmp/scarcity_before.txt

@@ -81,7 +81,7 @@ def build_prefix_pool(cfg: WorkloadConfig) -> List[str]:
 def generate(cfg: WorkloadConfig) -> Iterator[Request]:
     """Yield requests with Zipf-distributed prefix popularity.
 
-    Deterministic for a given config (seeded RNG), so any run is replayable —
+    Deterministic for a given config (seeded RNG), so any run is replayable -
     the same workload can be sent to roundrobin / kvaware / loadaware setups.
     """
     prefixes = build_prefix_pool(cfg)

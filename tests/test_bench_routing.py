@@ -2,8 +2,8 @@
 
 §3 asks for benchmark scripts *and* for them to rerun in CI on every commit. The cluster
 sweep cannot: it needs two A10s, ~40 minutes per cell, and an OpenShift namespace. What
-*can* rerun per-commit is the part of this project that is pure computation — the placement
-scoring path — and that is the part where a performance regression would be silent and
+*can* rerun per-commit is the part of this project that is pure computation - the placement
+scoring path - and that is the part where a performance regression would be silent and
 harmful, because it runs **once per request, over every endpoint**, inside the router's
 event loop.
 
@@ -15,11 +15,11 @@ later.
 
 `relative_loads` deserves its own benchmark rather than being folded into the scoring one.
 Since the load term was normalized against the fleet mean, it is the piece whose cost grows
-with fleet size *and* runs before any endpoint can be scored — the router recomputes the
+with fleet size *and* runs before any endpoint can be scored - the router recomputes the
 fleet's mean load per request rather than inheriting a tuned constant.
 
-They benchmark the tracked patch files themselves, loaded by `conftest.py` — the same bytes
-`apply-router-patch.sh` mounts into the pod — not a re-typed copy.
+They benchmark the tracked patch files themselves, loaded by `conftest.py` - the same bytes
+`apply-router-patch.sh` mounts into the pod - not a re-typed copy.
 
 Run standalone:  pytest tests/test_bench_routing.py --benchmark-only
 """
@@ -65,7 +65,7 @@ def test_bench_score_endpoint(benchmark):
 
 
 def test_bench_relative_loads_two_engines(benchmark):
-    """Fleet-mean normalization at our deployed size — runs once per request.
+    """Fleet-mean normalization at our deployed size - runs once per request.
 
     This is the work the policy added over `kvaware`, which reads no load at all.
     """
@@ -78,7 +78,7 @@ def test_bench_relative_loads_two_engines(benchmark):
 def test_bench_relative_loads_scales_with_fleet_size(benchmark):
     """16 endpoints: the normalization is O(fleet) and recomputed per request.
 
-    Not a pass/fail threshold — thresholds on shared CI runners are flaky and would get
+    Not a pass/fail threshold - thresholds on shared CI runners are flaky and would get
     muted, which is worse than no test. This records the number so a 10x regression is
     visible in the run log and in pytest-benchmark's comparison output.
     """
@@ -91,7 +91,7 @@ def test_bench_full_placement_arithmetic(benchmark):
     """Normalize the fleet, then score every endpoint and take the argmax.
 
     The whole per-request cost of the policy, minus the async plumbing and the Controller
-    round-trip — which is what a regression in the arithmetic would otherwise hide.
+    round-trip - which is what a regression in the arithmetic would otherwise hide.
     """
     r = _router()
     endpoints, stats = _fleet(2)

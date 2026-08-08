@@ -23,6 +23,11 @@ set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$BENCH_DIR/.." && pwd)"
+# shellcheck source=router_forward.sh
+. "$BENCH_DIR/router_forward.sh"
+PIDS=()
+cleanup() { for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
+trap cleanup EXIT
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 NS="${NS:-cache-llm}"
@@ -40,6 +45,8 @@ kubectl set env "deploy/$ROUTER_DEPLOY" -n "$NS" HF_HOME=/tmp/hf LOADAWARE_BETA-
 kubectl rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 NS="$NS" ROUTER_DEPLOY="$ROUTER_DEPLOY" ENGINE_DEPLOY="$ENGINE_DEPLOY" \
   "$BENCH_DIR/cold_start.sh"
+# After the cold start, never before: the restart in it kills any earlier forward.
+start_router_forward "$NS" "$RELEASE"
 NS="$NS" BASE_URL="$BASE_URL" MODEL="$MODEL" \
   "$REPO_ROOT/deploy/dev/registry-probe.sh" "$(date +%s)"
 

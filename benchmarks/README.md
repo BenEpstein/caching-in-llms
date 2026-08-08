@@ -46,6 +46,7 @@ time windows. Do not compare a cell from one sweep with a cell from a different 
 | `utilization.py` | Makes the utilization report. |
 | `load_gate.py` | Shows if the offered rate causes load on the servers. |
 | `cold_start.sh` | Restarts the servers before a cell. |
+| `router_forward.sh` | Opens the port-forward from the laptop to the router. Sourced, not run. |
 | `collectors/prom_dump.py` | Gets the Prometheus data for the measurement window. |
 | `collectors/dcgm_poll.py` | Gets the GPU data from the DCGM exporter. |
 
@@ -59,17 +60,20 @@ run_sweep.sh                     one batch, seven cells
     ├── freeze_workloads.py      1. makes the workload files
     │   └── workload_gen.py
     ├── cold_start.sh            2. empties the cache and restarts the servers
-    ├── warmup.py                3. fills the cache before the measurement
-    ├── collectors/dcgm_poll.py  4. starts to record the GPU data
-    ├── bench_job.sh             5. applies the Kubernetes Job
+    ├── router_forward.sh        3. opens the port-forward, after the restart
+    ├── ../deploy/dev/registry-probe.sh
+    │                            4. checks that the KV registry has data
+    ├── warmup.py                5. fills the cache before the measurement
+    ├── collectors/dcgm_poll.py  6. starts to record the GPU data
+    ├── bench_job.sh             7. applies the Kubernetes Job
     │   └── in_pod.sh                 runs in the driver image, in the cluster
     │       ├── verify_dataset.sh     checks the workload checksums in the pod
     │       └── load_driver.py        sends the requests, one CSV row for each
-    ├── collect_job.py           6. reads the Job log, writes driver-seed<N>.csv
-    └── collectors/prom_dump.py  7. gets the Prometheus data for the window
+    ├── collect_job.py           8. reads the Job log, writes driver-seed<N>.csv
+    └── collectors/prom_dump.py  9. gets the Prometheus data for the window
 ```
 
-The result is one directory for each cell. Three scripts then read those directories. They do
+The result is one directory for each cell. Four scripts then read those directories. They do
 not need the cluster.
 
 ```
@@ -113,13 +117,16 @@ pip install -r requirements.txt
 
 ### Values you must change for your cluster
 
-`deploy/values-baseline-kvaware.yaml` holds the values of our cluster. Two of them are not
-portable. Change them before you install:
+`deploy/values-baseline-kvaware.yaml` holds the values of our cluster. One of them is not
+portable. Change it before you install:
 
 | Field | Our value | Change it to |
 |---|---|---|
 | `servingEngineSpec.modelSpec[0].storageClass` | `ocs-external-storagecluster-cephfs` | A `ReadWriteMany` storage class on your cluster. `kubectl get storageclass` lists them. |
-| `servingEngineSpec.modelSpec[0].pvcStorage` | `50Gi` | Keep it, if you have the space |
+
+The two engine pods share one model volume, so the class must be `ReadWriteMany`. A
+`ReadWriteOnce` class leaves the second pod in `Pending` with no clear reason. The volume needs
+50 GB, which is the value of `pvcStorage`.
 
 The scripts read the DCGM exporter from the namespace `nvidia-gpu-operator`, with the label
 `app=nvidia-dcgm-exporter`. This is where the GPU Operator puts it. If your exporter is
@@ -158,26 +165,36 @@ The install is complete when you see these pods. The two engine pods need approx
 minutes, because each one loads the model.
 
 ```
-NAME                                        READY   STATUS    RESTARTS   AGE
-stack-deployment-router-7d9c4b6f8d-x2klm    1/1     Running   0          6m
-stack-llm-deployment-vllm-5f7b8c9d4-2qwrt   1/1     Running   0          6m
-stack-llm-deployment-vllm-5f7b8c9d4-9zpvn   1/1     Running   0          6m
-stack-prometheus-server-6b8d7f5c4-lkj8h     2/2     Running   0          6m
+NAME                                         READY   STATUS    RESTARTS   AGE
+stack-deployment-router-5c9c9d4f6-6gxnk      1/1     Running   0          6m
+stack-grafana-7f57cd99bb-th8j7               3/3     Running   0          6m
+stack-llm-deployment-vllm-58c7ddcdd5-ctpsb   1/1     Running   0          6m
+stack-llm-deployment-vllm-58c7ddcdd5-k8qgf   1/1     Running   0          6m
+stack-prometheus-5b74f7d9d5-5bcxw            1/1     Running   0          6m
 ```
+
+The two `stack-llm-deployment-vllm` pods are the servers, one on each GPU. Grafana is optional.
+It shows the dashboards of the chart. The benchmark does not use it.
 
 The measured requests do not leave the cluster. The Job sends them to the router Service at
 `stack-router-service.cache-llm.svc.cluster.local`. Therefore you do not need an Ingress or an
 OpenShift route for the measurement.
 
 Two operations do run from your laptop: the warm-up and the registry probe. They need a URL
-that you can reach. Open a port-forward and keep it open for all of the sweep:
+that you can reach. You do not need to do anything for this. Each cell opens its own
+port-forward and closes it at the end.
+
+Do not open a port-forward by hand and leave it open. It will not survive. Every cell restarts
+the router, and a port-forward is bound to one pod, so the restart kills it. This is why the
+scripts open the forward after the restart and not before.
+
+If you have an Ingress or an OpenShift route to the router, set `BASE_URL` to its address. Those
+go to the Service, not to one pod, so they survive the restart and the scripts then make no
+port-forward at all.
 
 ```bash
-kubectl port-forward -n cache-llm svc/stack-router-service 8000:80
+export BASE_URL=https://<your-router-address>
 ```
-
-`http://localhost:8000` is the default value of `BASE_URL`, so you do not need to set it. If you
-have an Ingress, set `BASE_URL` to its address instead.
 
 ### Step 2: get the two images
 
@@ -188,7 +205,13 @@ The benchmark needs two images.
 | Router | `Dockerfile` | The router with the `loadaware` policy | `quay.io/rhl193000/lmstack-router-loadaware` |
 | Driver | `Dockerfile.bench` | Sends the requests from a pod | `quay.io/rhl193000/bench-driver` |
 
-You can use our two public images and go to step 3.
+You can use our two public images and go to step 3. Both carry the tag `acf43d1`, which is the
+git short SHA that CI built them from. Step 5 needs that tag:
+
+```bash
+export LOADAWARE_TAG=acf43d1
+export BENCH_TAG=acf43d1
+```
 
 To build your own, use the root of the repository as the build context. Both Dockerfiles copy
 files from it.
@@ -229,7 +252,7 @@ Our own reported measurements use images that CI built with the same two Dockerf
 python3 benchmarks/freeze_workloads.py
 ```
 
-The command makes the workload files again from `workloads/manifest.json`. It stops with an
+The command makes the workload files again from `benchmarks/workloads/manifest.json`. It stops with an
 error if a checksum is different. The workload files are not in the repository. The manifest is
 in the repository.
 
@@ -271,19 +294,20 @@ For each cell, `run_cell.sh` does these operations:
 4. Compares the router image with the label of the cell.
 5. Restarts the servers. Each cell starts with an empty cache.
 6. Waits for the two servers to register.
-7. Runs the registry probe.
-8. Sends the warm-up requests.
-9. Applies the Kubernetes Job. The Job sends the 20 seeds.
-10. Collects the Prometheus data, the DCGM data and the manifest.
-11. Checks the validity rules.
+7. Opens the port-forward to the router. This is after the restart, so the restart cannot kill it.
+8. Runs the registry probe.
+9. Sends the warm-up requests.
+10. Applies the Kubernetes Job. The Job sends the 20 seeds.
+11. Collects the Prometheus data, the DCGM data and the manifest.
+12. Checks the validity rules.
 
 ### Step 6: make the results
 
 The sweep leaves one directory for each cell. Four scripts read those directories. They do not
 need the cluster.
 
-First, collect the per-seed numbers into one small CSV. This file is committed, because
-`results/` holds megabytes of raw data that are not committed.
+First, collect the per-seed numbers into one small CSV. It is a few kilobytes, and it holds
+every number that the report and the figures use.
 
 ```bash
 python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
@@ -296,8 +320,8 @@ prints the p-value and the size of the change.
 python3 benchmarks/analyze.py compare results/<sweep>/<candidate> results/<sweep>/<baseline>
 ```
 
-The command tests one metric at a time. The default metric is `ttft_p95`. Give `--metric` for
-the other two:
+The command tests one metric at a time. The default metric is `ttft_p95`. Give `--metric` for a
+different one. These two are the other measurements that the report gives:
 
 ```bash
 python3 benchmarks/analyze.py compare <candidate> <baseline> --metric imbalance
@@ -420,7 +444,7 @@ receives 14.8% of the requests. The first three prefixes receive 28.0%. This giv
 but not extreme reuse. With extreme reuse, all requests go to one server, and the comparison has
 no value.
 
-The dataset is frozen. `workloads/manifest.json` holds a checksum for each seed file. Every cell
+The dataset is frozen. `benchmarks/workloads/manifest.json` holds a checksum for each seed file. Every cell
 makes the files again from the manifest and stops if a checksum is different. Thus every cell in
 every sweep replays exactly the same requests.
 
