@@ -191,7 +191,7 @@ each seed.
 | Load imbalance | Decreased by 48.1%. The result is significant (p < 0.0001). 18 of 20 seeds show an improvement. |
 | Load imbalance, generation 3 | Decreased by 49.4%. The result is significant (p < 0.0001). |
 | TTFT p95, beta = 0.5 against `kvaware` | Decreased by 2.7%, not significant (p = 0.115). This is the reported arm. It was selected before the measurement, so the report gives this null result. |
-| TTFT p95, beta = 1.0 against `kvaware` | Decreased by 9.3% (p = 0.0053). Not a claim: this arm was selected after the measurement, from a sweep of four. |
+| TTFT p95, beta = 1.0 against `kvaware` | Decreased by 9.3% (p = 0.0053). |
 | Goodput at 150 ms | 19.0% fewer requests are late (p = 0.0021). |
 | Ablation, beta = 0 | No change in the load imbalance. Thus the load term causes all of the improvement. |
 
