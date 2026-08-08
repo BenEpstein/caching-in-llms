@@ -62,18 +62,6 @@ relative_load = (load - fleet_mean) / max(1, fleet_mean)
 Both terms are fractions. Thus `beta` does not have a unit. The router calculates the fleet
 mean for each request.
 
-These three words look similar. They are not the same thing:
-
-| Term | What it is | Where you see it |
-|---|---|---|
-| Cache benefit | `matched_tokens / prompt_tokens`. The fraction of this prompt that the server holds already. | The first term of the score |
-| Relative load | `(load - fleet_mean) / max(1, fleet_mean)`. How much busier this server is than the fleet mean, for this one request. | The second term of the score |
-| Load penalty | `beta * relative_load`. The relative load after `beta` weighs it. This is the quantity that a cache benefit must exceed. | The score, and the paragraph below |
-| Load imbalance | The measured outcome: the busiest server against the most idle server, over a whole run. | The results. This is a tested claim, not a term in the score. |
-
-Relative load is an input to one routing decision. Load imbalance is what we measure afterward
-to see if the decisions were good. A reader who exchanges the two reads the results wrong.
-
 ### The tunable parameter
 
 The policy has one parameter. Set it with an environment variable.
@@ -202,28 +190,13 @@ each seed.
 |---|---|
 | Load imbalance | Decreased by 48.1%. The result is significant (p < 0.0001). 18 of 20 seeds show an improvement. |
 | Load imbalance, generation 3 | Decreased by 49.4%. The result is significant (p < 0.0001). |
-| TTFT p95 | Decreased by 2.7%. The result is not significant (p = 0.115). The report gives this null result. |
+| TTFT p95, beta = 0.5 against `kvaware` | Decreased by 2.7%, not significant (p = 0.115). This is the reported arm. It was selected before the measurement, so the report gives this null result. |
+| TTFT p95, beta = 1.0 against `kvaware` | Decreased by 9.3% (p = 0.0053). Not a claim: this arm was selected after the measurement, from a sweep of four. |
 | Goodput at 150 ms | 19.0% fewer requests are late (p = 0.0021). |
 | Ablation, beta = 0 | No change in the load imbalance. Thus the load term causes all of the improvement. |
 
-### Why the TTFT result is a null
-
-The figure `fig5-percentiles` shows lower TTFT bars for `loadaware` than for `kvaware`. This
-agrees with the table. The reported change is a decrease of 2.7%. But a direction is not a
-result.
-
-Each bar is the median of the 20 seeds. Each whisker is the spread of those seeds. The two
-policies overlap across most of that spread. The confidence interval of the change is
-[-4.3%, +15.4%] and it contains zero. Thus the decrease can come from the seed selection alone.
-
-The figure also shows that beta = 1.0 looks better than the reported arm, beta = 0.5. It is
-better: a decrease of 9.3% with p = 0.0053. This is not a claim. The reported arm was selected
-before the measurement. The sweep then measured four values of beta. To select the best of the
-four after the measurement and to report its p-value is not a valid test.
-
-The cause is in the report. At this rate the servers never made a queue.
-`vllm:num_requests_waiting` was zero in 284 of 284 samples. A load-aware router removes queueing
-delay. If there is no queue, there is no delay to remove.
+The figure `fig5-percentiles` shows lower TTFT bars for both `loadaware` arms. The bars are seed
+medians and the seed spreads overlap, which is why the reported arm is a null.
 
 ### The metrics that the benchmark collects
 
