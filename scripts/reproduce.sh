@@ -74,7 +74,7 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
   || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
 
-echo "==> 1/6 every run referenced by the summary has committed raw data"
+echo "==> 1/7 every run referenced by the summary has committed raw data"
 # Catches the worst failure mode: a reported number whose evidence is not in the repository.
 # Regenerating cannot catch it - a missing directory contributes no rows, so the output
 # shrinks and still looks well-formed.
@@ -88,7 +88,7 @@ else
   fail "$missing run(s) in summary-per-seed.csv have no committed directory"
 fi
 
-echo "==> 2/6 frozen workloads are reconstructible (both profiles)"
+echo "==> 2/7 frozen workloads are reconstructible (both profiles)"
 # Same shape as the in-cluster path: copy the committed manifest into a writable directory
 # and regenerate beside it, so this exercises the contract verify_dataset.sh depends on.
 mkdir -p "$WORK/wl"; cp "$BENCH/workloads/manifest.json" "$WORK/wl/"
@@ -104,7 +104,7 @@ else
   fail "novel frozen workload does not reconstruct from its manifest"
 fi
 
-echo "==> 3/6 summary-per-seed.csv regenerates"
+echo "==> 3/7 summary-per-seed.csv regenerates"
 # No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
 RUNS=()
 while read -r run; do
@@ -113,7 +113,7 @@ done < <(awk -F, 'NR>1 {print $1}' "$ROOT/results/summary-per-seed.csv" | sort -
 python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/summary.csv" >/dev/null
 verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary-per-seed.csv"
 
-echo "==> 4/6 the reported statistics regenerate"
+echo "==> 4/7 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
 # and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
 # check that verifies the wrong run reads exactly like a check that passes.
@@ -142,7 +142,7 @@ echo "==> 4/6 the reported statistics regenerate"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 
-echo "==> 5/6 the numbers behind every figure regenerate"
+echo "==> 5/7 the numbers behind every figure regenerate"
 python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
   "$ROOT/$BETA1" "$ROOT/$BETA2" --comparator "$ROOT/$COMPARATOR" \
   --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
@@ -151,7 +151,7 @@ nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
 if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
 else fail "expected at least 12 figures, got $nfigs"; fi
 
-echo "==> 6/6 the WAN generation regenerates its own figure set"
+echo "==> 6/7 the WAN generation regenerates its own figure set"
 # Data that no check regenerates is data that rots silently, and these five back a report
 # section. Not overridable like the cells above: this generation is frozen, so there is nothing
 # to repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
@@ -164,6 +164,24 @@ check "$WORK/figdata-wan.json" "$EXPECTED/figure-data-wan.json" "WAN figure data
 nwan=$(ls "$WORK/figs-wan" | wc -l | tr -d ' ')
 if [ "$nwan" -ge 12 ]; then ok "$nwan WAN figures rendered"
 else fail "expected at least 12 WAN figures, got $nwan"; fi
+
+echo "==> 7/7 the gen-3 7-cell sweep regenerates its own figure set"
+# Same reasoning as check 6: this generation backs no report section YET, but committed data
+# that no check regenerates is data that rots silently. Frozen like the WAN set, so the paths
+# are literal rather than overridable. Unlike the WAN set this generation HAS a roundrobin
+# cell, so it passes --comparator - roundrobin is a framing cell for fig12 and is never a
+# positional run (its 12 s p95 would flatten fig1's whole beta curve).
+G3="$ROOT/results/gen3-7cell"
+python3 "$BENCH/plot_results.py" \
+  "$G3/20260808-023919-kvaware" "$G3/20260808-042133-loadaware-b0" \
+  "$G3/20260808-040053-loadaware-b0.25" "$G3/20260808-025932-loadaware-b0.5" \
+  "$G3/20260808-031955-loadaware-b1.0" "$G3/20260808-034018-loadaware-b2.0" \
+  --comparator "$G3/20260808-044202-roundrobin" \
+  --cand "loadaware-b0.5" --out "$WORK/figs-gen3" --dump-data "$WORK/figdata-gen3.json" >/dev/null
+check "$WORK/figdata-gen3.json" "$EXPECTED/figure-data-gen3.json" "gen-3 figure data"
+ngen3=$(ls "$WORK/figs-gen3" | wc -l | tr -d ' ')
+if [ "$ngen3" -ge 12 ]; then ok "$ngen3 gen-3 figures rendered"
+else fail "expected at least 12 gen-3 figures, got $ngen3"; fi
 
 echo
 if [ "${#FAILURES[@]}" -eq 0 ]; then

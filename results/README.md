@@ -1,10 +1,12 @@
 > status: live · 2026-08-08 · index of the committed run data. The claims these runs back live in
 > `docs/report/report.md`; this file only says which directory is which.
 
-# `results/` - 11 run directories, two generations
+# `results/` - 18 run directories, three generations
 
-Two generations measured on **two different instruments**. Keeping them apart is the point of
-this file: mixing them is the one mistake this data invites.
+Three generations. Generations 1 and 2 were measured on **two different instruments**; keeping
+them apart is the point of this file, and mixing them is the one mistake this data invites.
+Generation 3 shares generation 1's instrument but is a **separate window** - pairing a gen-3
+cell against a gen-1 cell would compare two evenings, not two policies.
 
 ## Generation 1 - the reported results (in-cluster driver)
 
@@ -47,6 +49,32 @@ between two cells an hour apart - a systematic per-cell offset larger than the a
 under test, which more seeds cannot average away. In-cluster, the same term is 48.5 ms (25.8%)
 for `kvaware` and 45.2 ms (27.2%) for β=0.5.
 
+## Generation 3 - the 7-cell sweep (`results/gen3-7cell/`)
+
+Same instrument as generation 1 (in-cluster driver), same rate 16 / OSL 64 / n=20 frozen seeds,
+router `loadaware:acf43d1` and bench `bench-driver:42e6a32` - the same images generation 1 used,
+so the policy code is held constant and only the cell set differs. One unattended window,
+2026-08-08 02:39-05:02. All seven passed the validity gate (pooled error 0.05-0.66%).
+
+| Directory | Arm | Role |
+|---|---|---|
+| `20260808-023919-kvaware` | `kvaware` | baseline |
+| `20260808-025932-loadaware-b0.5` | β=0.5 | **headline** (configuration of record) |
+| `20260808-031955-loadaware-b1.0` | β=1.0 | shipped default |
+| `20260808-034018-loadaware-b2.0` | β=2.0 | top of grid |
+| `20260808-040053-loadaware-b0.25` | β=0.25 | descriptive, low end |
+| `20260808-042133-loadaware-b0` | β=0 | ablation + drift sentinel |
+| `20260808-044202-roundrobin` | `roundrobin` | cache-blind comparator |
+
+Two cells are **descriptive** and carry no p-value, so the pre-registered alpha=0.025 pair is
+unaffected: `b0.25` and `roundrobin`. `roundrobin` saturates here (10.24 req/s achieved against
+16 offered, 65%) - pass it to `plot_results.py` as `--comparator`, never positionally, and
+report its throughput shortfall rather than its latency ratio.
+
+Figures in `docs/figures-gen3/`; the figure data is diffed by `reproduce.sh` check 7. These runs
+are deliberately **not** in `summary-per-seed.csv`, which stays generation-1-only so one table
+means one window.
+
 ## Directory shape
 
 Every run has `driver-seed<N>.csv` (per-request `send_ts`, `ttft_s`, `e2e_s`, `itls_ms`,
@@ -64,7 +92,8 @@ Generation 1 additionally carries `window.env`, `driver` (location, node, image,
 ## `expected/`
 
 `reproduce.sh`'s baselines: `stats.txt`, `figure-data.json` (gen 1), `figure-data-wan.json`
-(gen 2). Regenerated and diffed on every run; a mismatch fails the build.
+(gen 2), `figure-data-gen3.json` (gen 3). Regenerated and diffed on every run; a mismatch fails
+the build.
 
 ## What is not here
 

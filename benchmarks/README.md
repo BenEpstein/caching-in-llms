@@ -97,20 +97,28 @@ requirements, and the novel profile above already measures what the cache costs.
 
 ## Sweep design
 
-**5 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
-every cell. The grid is `BETA_GRID` in `run_sweep.sh`, default `0.5 1.0 2.0 0` - the
-pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last** as the drift sentinel (#31):
+**7 cells × 20 seeds × 500 requests**, identical frozen workload and a fixed Poisson rate in
+every cell. The grid is `BETA_GRID` in `run_sweep.sh`, default `0.5 1.0 2.0 0.25 0` - the
+pre-registered order: kvaware first, b0.5 adjacent to it, **b0 last of the loadaware cells** as
+the drift sentinel (#31), with `roundrobin` trailing:
 
 | Cell | Arm | Router image |
 |---|---|---|
 | `kvaware` | baseline (headline comparator) | pinned stock |
 | `loadaware-b0` | loadaware β=0 (cache-only ablation) | CI-built, SHA-tagged |
-| `loadaware-b0.5` | loadaware β=0.5 (**configuration of record — headline**) | CI-built, SHA-tagged |
+| `loadaware-b0.25` | loadaware β=0.25 (descriptive, low end) | CI-built, SHA-tagged |
+| `loadaware-b0.5` | loadaware β=0.5 (**configuration of record - headline**) | CI-built, SHA-tagged |
 | `loadaware-b1.0` | loadaware β=1.0 (shipped default) | CI-built, SHA-tagged |
 | `loadaware-b2.0` | loadaware β=2.0 | CI-built, SHA-tagged |
+| `roundrobin` | cache-blind comparator (descriptive) | pinned stock |
 
-`roundrobin` is run separately as a descriptive framing cell, not as part of the sweep. Cell
-names outside this grid (`b0.1`, `b0.25`, `b0.034`, `b4.0`) came from the retired per-rate β
+`roundrobin` and `b0.25` are **descriptive** cells: they carry no p-value, so the pre-registered
+alpha=0.025 pair is unaffected and no multiplicity adjustment is owed for them. `roundrobin`
+saturates at the sweep rate and is therefore not at the same operating point as the other arms -
+report its throughput shortfall, never its latency ratio, and pass it to `plot_results.py` as
+`--comparator`.
+
+Cell names outside this grid (`b0.1`, `b0.034`, `b4.0`) came from the retired per-rate β
 calibration, before the load term was normalized against the fleet mean, and **can no longer be
 generated**. Their run dirs were pruned from the working tree by #57 and are in git history.
 
@@ -141,9 +149,12 @@ window; moving either knob moves the experiment out of it. `roundrobin` **satura
 10.40 req/s achieved against 16 offered (65%) in `20260806-144135-roundrobin` - which is the
 point: it is reported as the cache-blind capacity floor, not as a tuned arm.
 
-Excluded from the grid separately (no effect, not the load window): β=0.25, which at n=3
-measured imbalance 2.257 against a same-hour kvaware control of 2.113 - no effect. The useful
-range starts at 0.5. That cell was pruned by #57; the numbers are recorded here.
+β=0.25 was excluded from the grid on n=3 evidence (imbalance 2.257 against a same-hour kvaware
+control of 2.113 - no effect); that cell was pruned by #57 and the numbers are recorded here.
+It is back in the grid as a descriptive cell, and at n=20 the picture is stronger than "no
+effect": β=0.25 is **worse than the baseline** on both metrics (imbalance -21.0%, TTFT p95
+-20.7% with a bootstrap CI of [-43.4%, -2.8%], entirely below zero). The useful range still
+starts at 0.5, and the response to β is non-monotonic at the low end, not merely flat.
 
 ### Two eras of `beta`
 
