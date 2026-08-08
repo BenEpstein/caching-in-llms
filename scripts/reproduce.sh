@@ -26,6 +26,14 @@ trap 'rm -rf "$WORK"' EXIT
 UPDATE=0
 [ "${1:-}" = "--update" ] && UPDATE=1
 
+# Where the regenerated figures land, ONE DIRECTORY PER SWEEP, named for the sweep_id in each
+# cell's run.json so an artifact cannot be mistaken for another batch's. Defaults to the temp
+# dir, so a local verify run still throws them away - this script's job is to prove the figures
+# regenerate, not to produce them, and writing into docs/ by default would silently overwrite a
+# committed set. CI points it at a real path and uploads the result.
+FIGS="${FIGS_OUT:-$WORK/figs}"
+mkdir -p "$FIGS"
+
 # Accumulate failures rather than exiting on the first: stopping at problem one hides
 # problems two through five, and they then get fixed in serial.
 FAILURES=()
@@ -145,9 +153,9 @@ check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 echo "==> 5/7 the numbers behind every figure regenerate"
 python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
   "$ROOT/$BETA1" "$ROOT/$BETA2" --comparator "$ROOT/$COMPARATOR" \
-  --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
+  --cand "loadaware-b0.5" --out "$FIGS/gen1-confirmatory" --dump-data "$WORK/figdata.json" >/dev/null
 check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
-nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
+nfigs=$(ls "$FIGS/gen1-confirmatory" | wc -l | tr -d ' ')
 if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
 else fail "expected at least 12 figures, got $nfigs"; fi
 
@@ -159,9 +167,9 @@ python3 "$BENCH/plot_results.py" \
   "$ROOT/results/20260805-005210-kvaware" "$ROOT/results/20260805-011148-loadaware-b0" \
   "$ROOT/results/20260805-013208-loadaware-b0.5" "$ROOT/results/20260805-015202-loadaware-b1.0" \
   "$ROOT/results/20260805-021215-loadaware-b2.0" \
-  --cand "loadaware-b0.5" --out "$WORK/figs-wan" --dump-data "$WORK/figdata-wan.json" >/dev/null
+  --cand "loadaware-b0.5" --out "$FIGS/gen2-wan" --dump-data "$WORK/figdata-wan.json" >/dev/null
 check "$WORK/figdata-wan.json" "$EXPECTED/figure-data-wan.json" "WAN figure data"
-nwan=$(ls "$WORK/figs-wan" | wc -l | tr -d ' ')
+nwan=$(ls "$FIGS/gen2-wan" | wc -l | tr -d ' ')
 if [ "$nwan" -ge 12 ]; then ok "$nwan WAN figures rendered"
 else fail "expected at least 12 WAN figures, got $nwan"; fi
 
@@ -177,9 +185,9 @@ python3 "$BENCH/plot_results.py" \
   "$G3/20260808-040053-loadaware-b0.25" "$G3/20260808-025932-loadaware-b0.5" \
   "$G3/20260808-031955-loadaware-b1.0" "$G3/20260808-034018-loadaware-b2.0" \
   --comparator "$G3/20260808-044202-roundrobin" \
-  --cand "loadaware-b0.5" --out "$WORK/figs-gen3" --dump-data "$WORK/figdata-gen3.json" >/dev/null
+  --cand "loadaware-b0.5" --out "$FIGS/gen3-7cell" --dump-data "$WORK/figdata-gen3.json" >/dev/null
 check "$WORK/figdata-gen3.json" "$EXPECTED/figure-data-gen3.json" "gen-3 figure data"
-ngen3=$(ls "$WORK/figs-gen3" | wc -l | tr -d ' ')
+ngen3=$(ls "$FIGS/gen3-7cell" | wc -l | tr -d ' ')
 if [ "$ngen3" -ge 12 ]; then ok "$ngen3 gen-3 figures rendered"
 else fail "expected at least 12 gen-3 figures, got $ngen3"; fi
 

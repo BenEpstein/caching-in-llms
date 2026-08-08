@@ -275,8 +275,17 @@ ROUTER_IMAGE_ID=$(oc get pods -n "$NS" -l "$(oc get deploy "$ROUTER_DEPLOY" -n "
   | python3 -c 'import json,sys; print(",".join(f"{k}={v}" for k,v in json.load(sys.stdin).items()))')" \
   -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || echo unknown)
 GIT_COMMIT=$(git -C "$REPO_ROOT" rev-parse HEAD)
+# SWEEP_ID names the batch this cell belongs to, and `analyze.py compare` refuses to pair two
+# cells that carry different ones. Rate and workload manifest - the only things the guard used
+# to check - are IDENTICAL across separate sweeps by design, so they cannot detect that two
+# cells came from different evenings. Pairing across sweeps measures cluster drift plus the
+# policy, inseparably, and returns a confident-looking p-value while doing it.
+#
+# Default is the results-root basename, which is what makes `run_sweep.sh <rate> results/<name>`
+# self-separating. Override only to place a cell into an existing sweep deliberately.
+SWEEP_ID="${SWEEP_ID:-$(basename "$RESULTS_ROOT")}"
 export CELL ARM BETA RATE MAX_TOKENS CELL_START CELL_END ROUTER_IMAGE ROUTER_IMAGE_ID GIT_COMMIT OUT BENCH_DIR
-export DRIVER_NODE BENCH_IMAGE TARGET_URL
+export DRIVER_NODE BENCH_IMAGE TARGET_URL SWEEP_ID
 python3 - <<'PY'
 import json, os
 env = os.environ
@@ -285,6 +294,7 @@ sub = "workloads" if profile == "zipfian" else os.path.join("workloads", profile
 manifest = json.load(open(os.path.join(env["BENCH_DIR"], sub, "manifest.json")))
 run = {
     "cell": env["CELL"],
+    "sweep_id": env["SWEEP_ID"],
     "arm": env["ARM"],
     "beta": env["BETA"] or None,
     "rate_req_s": float(env["RATE"]),

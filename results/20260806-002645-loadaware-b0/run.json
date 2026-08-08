@@ -293,5 +293,6 @@
     "router_cpu_usage_percent": 1.0,
     "router_memory_usage_percent": 1.0,
     "vllm_kv_cache_usage_perc": 1.0
-  }
+  },
+  "sweep_id": "gen1-confirmatory"
 }

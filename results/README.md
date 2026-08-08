@@ -82,8 +82,31 @@ Every run has `driver-seed<N>.csv` (per-request `send_ts`, `ttft_s`, `e2e_s`, `i
 
 **`run.json` is what makes a comparison auditable**: arm, β, rate, measurement window, router
 image and its sha256 digest, git commit, and a per-seed SHA-256 for all 20 frozen seed files.
-`analyze.py compare` refuses to pair two runs whose `run.json` disagrees on rate or workload
-manifest.
+`analyze.py compare` refuses to pair two runs whose `run.json` disagrees on rate, workload
+manifest, or **`sweep_id`**.
+
+`sweep_id` names the batch a cell was measured in, and it is the only thing separating the
+generations at the data level. Rate and workload manifest cannot do it: every sweep replays the
+same frozen dataset at the same rate, so those two match across generations *by construction*.
+Before the field existed, pairing a gen-3 cell against a gen-1 cell returned `p=0.0000` and a
+45.1% effect - three days of cluster drift reported as a policy result. It now exits 1.
+
+| `sweep_id` | Dirs | Window |
+|---|---|---|
+| `gen1-confirmatory` | the five gen-1 cells below | 2026-08-05 23:05 → 08-06 00:47 |
+| `gen1-roundrobin` | `20260806-144135-roundrobin` | 2026-08-06 14:41 |
+| `gen2-wan` | the five WAN cells | 2026-08-05 00:52 → 02:12 |
+| `gen3-7cell` | all seven under `gen3-7cell/` | 2026-08-08 02:39 → 05:02 |
+
+gen-1's `roundrobin` gets its **own** id rather than joining the other five: it ran ~16h after
+them, so giving it their batch name would assert a shared window that never existed and would
+wave through exactly the cross-window pairing the guard exists to stop. It is a descriptive
+comparator that carries no paired test, so nothing is lost.
+
+`run_cell.sh` defaults `sweep_id` to the results-root basename, which is what makes
+`run_sweep.sh <rate> results/<name>` self-separating. The 18 directories that predate the field
+were back-filled from the table above; runs without it still pair, so third-party or archived
+directories keep working.
 
 Generation 1 additionally carries `window.env`, `driver` (location, node, image, target) and
 `workload_profile`; those three postdate generation 2, where `driver` and `workload_profile` are
