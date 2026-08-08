@@ -1,12 +1,12 @@
 {
-  "cell": "roundrobin",
-  "arm": "roundrobin",
+  "cell": "kvaware",
+  "arm": "kvaware",
   "beta": null,
   "rate_req_s": 16.0,
   "osl_tokens": 64,
   "window": {
-    "start_ts": 1786017000,
-    "end_ts": 1786017980
+    "start_ts": 1785960825,
+    "end_ts": 1785961530
   },
   "router_image": "lmcache/lmstack-router:0.1.9.dev9-g37bafbcf5.d20260107",
   "router_image_id": "docker.io/lmcache/lmstack-router@sha256:23c64ba6f14ac363be30800764f22e3b937fee2acd7280cf61100c527644f3c7",
@@ -16,7 +16,7 @@
     "image": "quay.io/rhl193000/bench-driver:42e6a32",
     "target": "http://stack-router-service.cache-llm.svc.cluster.local:80"
   },
-  "git_commit": "06781490b7fea9c48ab81d8e7b6ff99d786b5e83",
+  "git_commit": "ffe1c77719b2c1ef60790f0dcf7a7a2254a4a5ef",
   "workload_profile": "zipfian",
   "workload_manifest": {
     "seeds": {
@@ -294,5 +294,5 @@
     "router_memory_usage_percent": 1.0,
     "vllm_kv_cache_usage_perc": 1.0
   },
-  "sweep_id": "gen1-roundrobin"
+  "sweep_id": "gen2-confirmatory"
 }

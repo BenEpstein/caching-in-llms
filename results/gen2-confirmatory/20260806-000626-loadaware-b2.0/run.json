@@ -1,15 +1,15 @@
 {
-  "cell": "kvaware",
-  "arm": "kvaware",
-  "beta": null,
+  "cell": "loadaware-b2.0",
+  "arm": "loadaware",
+  "beta": "2.0",
   "rate_req_s": 16.0,
   "osl_tokens": 64,
   "window": {
-    "start_ts": 1785960825,
-    "end_ts": 1785961530
+    "start_ts": 1785964487,
+    "end_ts": 1785965194
   },
-  "router_image": "lmcache/lmstack-router:0.1.9.dev9-g37bafbcf5.d20260107",
-  "router_image_id": "docker.io/lmcache/lmstack-router@sha256:23c64ba6f14ac363be30800764f22e3b937fee2acd7280cf61100c527644f3c7",
+  "router_image": "quay.io/rhl193000/lmstack-router-loadaware:acf43d1",
+  "router_image_id": "quay.io/rhl193000/lmstack-router-loadaware@sha256:32f86258dc7254c0642a593b18fb503f8faab82943dc53ba452df471725cce4f",
   "driver": {
     "location": "in-cluster",
     "node": "gapu-2-worker1",
@@ -294,5 +294,5 @@
     "router_memory_usage_percent": 1.0,
     "vllm_kv_cache_usage_perc": 1.0
   },
-  "sweep_id": "gen1-confirmatory"
+  "sweep_id": "gen2-confirmatory"
 }

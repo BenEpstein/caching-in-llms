@@ -167,7 +167,7 @@ It needs a key of its own because the guard's other two keys **cannot** catch a 
 pair: separate sweeps replay the same frozen dataset at the same rate, so `rate_req_s` and
 `workload_manifest` match by construction. Pairing across sweeps therefore measures cluster
 drift plus the policy, inseparably, and still prints a p-value. Measured: a gen-3 cell against a
-gen-1 baseline returns `p=0.0000` and a 45.1% median reduction, none of it attributable.
+gen-2 baseline returns `p=0.0000` and a 45.1% median reduction, none of it attributable.
 
 - `run_sweep.sh` mints one id per batch and exports it, so every cell in a run agrees.
 - `run_cell.sh` falls back to the results-root basename for a standalone cell, but **never** to
@@ -289,7 +289,7 @@ python3 benchmarks/analyze.py compare results/<...loadaware-b0.5> results/<...kv
 
 # 4. figures. --cand names the headline arm and is REQUIRED: the 4-point beta grid
 #    always yields three non-b0 cells, so nothing can infer it (#30).
-python3 benchmarks/export_summary.py results/<...> --out results/summary-per-seed.csv
+python3 benchmarks/export_summary.py results/<...> --out results/gen2-confirmatory/summary-per-seed.csv
 python3 benchmarks/plot_results.py results/<...> --cand loadaware-b0.5 --out docs/figures
 
 # 5. §3 utilization: GPU, GPU memory, CPU, host memory
@@ -318,7 +318,7 @@ no GPU, no network - and exits non-zero on drift (#28). CI runs it on every push
 ```
 
 `--update` refreshes `results/expected/` only. It never writes
-`results/summary-per-seed.csv`: that file is committed evidence, and the regenerated table
+`results/gen2-confirmatory/summary-per-seed.csv`: that file is committed evidence, and the regenerated table
 is a strict subset whenever a run directory is missing, so "updating" it would silently
 delete real rows.
 
@@ -445,8 +445,8 @@ differ - the methodology's "identical workload across arms" is enforced, not ass
 
 ### What is committed vs. what stays local
 
-**`results/` is tracked in git** (changed 2026-08-03) - 496 files, ~54 MB across 11 run dirs in
-two generations; `results/README.md` is the index. Every number in the
+**`results/` is tracked in git** (changed 2026-08-03) - one directory per sweep (18 run dirs across
+three generations); `results/README.md` is the index. Every number in the
 report has to be checkable by a reader who cannot rerun the cluster, and a derived table alone
 asks that reader to take the derivation on trust, so the raw artifacts are committed too:
 
@@ -455,7 +455,7 @@ asks that reader to take the derivation on trust, so the raw artifacts are commi
 | `results/<run>/driver-seed*.csv` | client-observed per-request TTFT / E2E / ITL / tokens |
 | `results/<run>/prom/*.json`, `results/<run>/dcgm.csv` | engine + router Prometheus series and GPU utilization over the run window |
 | `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
-| `results/summary-per-seed.csv` | the derived per-seed table for the **reported** sweep: latency percentiles, throughput, error counts, and load imbalance. Each other sweep carries its own beside its data, e.g. `results/gen3-7cell/summary-per-seed.csv` - one table, one measurement window |
+| `results/gen2-confirmatory/summary-per-seed.csv` | the derived per-seed table for the **reported** sweep: latency percentiles, throughput, error counts, and load imbalance. Each other sweep carries its own beside its data, e.g. `results/gen3-7cell/summary-per-seed.csv` - one table, one measurement window |
 
 Two exclusions. `results/**/*.jsonl` - the frozen workload replay files, regenerable
 bit-identically from `benchmarks/workloads/manifest.json`, megabytes per run for no
@@ -464,7 +464,7 @@ reviewability. And `results/**/job.log` (#27) - the base64 transport that the tr
 same bytes twice. Regenerate the derived table with:
 
 ```bash
-python3 benchmarks/export_summary.py results/<run>... --out results/summary-per-seed.csv
+python3 benchmarks/export_summary.py results/<run>... --out results/gen2-confirmatory/summary-per-seed.csv
 ```
 
 The `run` column is the sort key and comes first on purpose: `cell` alone is ambiguous, since
@@ -478,7 +478,7 @@ gauges only, and its `gpu_prefix_cache_*` gauges are dead (0.0) in this build - 
 Per-request is not the same as trustworthy, though. The driver **used to** run on a laptop
 against the cluster's public route, and **45-59% of every recorded `ttft_s` was that network**.
 Measured RTT to the route host: avg 44.4 ms (min 18.7, max 132, sd 39.7). On the retained WAN
-cells (`results/20260805-0*`) the non-engine component of client TTFT swings **121 -> 195 ms
+cells (`results/gen1-wan/2026*`) the non-engine component of client TTFT swings **121 -> 195 ms
 between two cells an hour apart** while engine-side TTFT stays in a 133-159 ms band - a per-cell
 systematic offset larger than the effect under study, so more seeds cannot average it away. The
 signature is a floor shift, which is what a constant network offset looks like and not what a
@@ -553,7 +553,7 @@ them.
 - **`compare` refuses an objective the baseline never misses** on some seed - a relative
   reduction against zero is undefined, and a seed the baseline already passes perfectly
   cannot show an improvement.
-- Deliberately **absent from `results/summary-per-seed.csv`**: that table is the evidence a
+- Deliberately **absent from `results/gen2-confirmatory/summary-per-seed.csv`**: that table is the evidence a
   reader checks the report against, and baking one objective into it would read
   as an objective already chosen. The driver CSVs are committed, so any objective is
   recomputable. The per-seed miss rate at the default objective, and the full 50-400 ms

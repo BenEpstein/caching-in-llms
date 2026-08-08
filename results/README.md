@@ -1,37 +1,29 @@
 > status: live · 2026-08-08 · index of the committed run data. The claims these runs back live in
 > `docs/report/report.md`; this file only says which directory is which.
 
-# `results/` - 18 run directories, three generations
+# `results/` - 18 run directories, three sweeps, one directory each
 
-Three generations. Generations 1 and 2 were measured on **two different instruments**; keeping
-them apart is the point of this file, and mixing them is the one mistake this data invites.
-Generation 3 shares generation 1's instrument but is a **separate window** - pairing a gen-3
-cell against a gen-1 cell would compare two evenings, not two policies.
+**One directory per sweep, one `summary-per-seed.csv` beside the runs it summarises** (#75).
+Generations are numbered in the order they were measured. Generation 1 and the others were
+measured on **two different instruments**; keeping them apart is the point of this file, and
+mixing them is the one mistake this data invites. Generation 3 shares generation 2's
+instrument but is a **separate window** - pairing a gen-3 cell against a gen-2 cell would
+compare two evenings, not two policies.
 
-## Generation 1 - the reported results (in-cluster driver)
+| Directory | `sweep_id` | Cells | Window | Instrument |
+|---|---|---|---|---|
+| `gen1-wan/` | `gen1-wan` | 5 | 2026-08-05 00:52 → 02:12 | laptop over WAN (superseded) |
+| `gen2-confirmatory/` | `gen2-confirmatory` | 6 | 2026-08-05 23:05 → 08-06 00:47 (+ roundrobin 08-06 14:41) | in-cluster driver |
+| `gen3-7cell/` | `gen3-7cell` | 7 | 2026-08-08 02:39 → 05:02 | in-cluster driver |
 
-Every reported number and figure comes from these six. `summary-per-seed.csv` is derived from
-**these only**, so one table means one instrument. n=20 paired seeds, rate 16.
-
-| Directory | Arm | Role |
-|---|---|---|
-| `20260805-230541-kvaware` | `kvaware` | baseline |
-| `20260806-002645-loadaware-b0` | β=0 | ablation |
-| `20260805-232541-loadaware-b0.5` | β=0.5 | **headline** |
-| `20260805-234559-loadaware-b1.0` | β=1.0 | shipped default |
-| `20260806-000626-loadaware-b2.0` | β=2.0 | top of grid |
-| `20260806-144135-roundrobin` | `roundrobin` | cache-blind comparator |
-
-`roundrobin` is a framing cell for fig12, **not** a point on the β grid: pass it to
-`plot_results.py` as `--comparator`, never positionally.
-
-## Generation 2 - the instrument problem (laptop driver, superseded)
+## Generation 1 - the instrument problem (`gen1-wan/`, superseded)
 
 `20260805-005210-kvaware`, `-011148-loadaware-b0`, `-013208-loadaware-b0.5`,
 `-015202-loadaware-b1.0`, `-021215-loadaware-b2.0`.
 
-Same arms, workload and rate, driven from a laptop over the public internet. **Not results** - the evidence for *An instrument problem, not a result* in the report, and deliberately excluded
-from `summary-per-seed.csv`. Figures in `docs/figures-wan/`; their figure data is diffed by
+Driven from a laptop over the public internet. **Not results** - the evidence for *An
+instrument problem, not a result* in the report. No `summary-per-seed.csv`: it is superseded
+and backs only that section. Figures in `docs/figures-wan/`; their figure data is diffed by
 `reproduce.sh` check 6.
 
 The decomposition they exist to establish, recomputable from these directories alone:
@@ -49,10 +41,32 @@ between two cells an hour apart - a systematic per-cell offset larger than the a
 under test, which more seeds cannot average away. In-cluster, the same term is 48.5 ms (25.8%)
 for `kvaware` and 45.2 ms (27.2%) for β=0.5.
 
-## Generation 3 - the 7-cell sweep (`results/gen3-7cell/`)
+## Generation 2 - the reported results (`gen2-confirmatory/`)
 
-Same instrument as generation 1 (in-cluster driver), same rate 16 / OSL 64 / n=20 frozen seeds,
-router `loadaware:acf43d1` and bench `bench-driver:42e6a32` - the same images generation 1 used,
+Every reported number and figure comes from these six. Its `summary-per-seed.csv` (120 rows)
+is derived from **these only**, so one table means one instrument. n=20 paired seeds, rate 16.
+
+| Directory | Arm | Role |
+|---|---|---|
+| `20260805-230541-kvaware` | `kvaware` | baseline |
+| `20260806-002645-loadaware-b0` | β=0 | ablation |
+| `20260805-232541-loadaware-b0.5` | β=0.5 | **headline** |
+| `20260805-234559-loadaware-b1.0` | β=1.0 | shipped default |
+| `20260806-000626-loadaware-b2.0` | β=2.0 | top of grid |
+| `20260806-144135-roundrobin` | `roundrobin` | cache-blind comparator |
+
+⚠️ **`roundrobin` shares this sweep's id but not its window**: it was measured ~14 h after the
+other five (2026-08-06 14:41). The `sweep_id` guard in `analyze.py compare` therefore will
+**not** refuse a paired test against it - the protection is convention: `roundrobin` is a
+framing cell for fig12, passed to `plot_results.py` as `--comparator`, **never positionally**,
+and it enters no paired test. Folding it into the sweep was decided on
+[#75](https://github.com/BenEpstein/caching-in-llms/issues/75); the window provenance survives
+in its `run.json` timestamps.
+
+## Generation 3 - the 7-cell sweep (`gen3-7cell/`)
+
+Same instrument as generation 2 (in-cluster driver), same rate 16 / OSL 64 / n=20 frozen seeds,
+router `loadaware:acf43d1` and bench `bench-driver:42e6a32` - the same images generation 2 used,
 so the policy code is held constant and only the cell set differs. One unattended window,
 2026-08-08 02:39-05:02. All seven passed the validity gate (pooled error 0.05-0.66%).
 
@@ -72,20 +86,8 @@ unaffected: `b0.25` and `roundrobin`. `roundrobin` saturates here (10.24 req/s a
 report its throughput shortfall rather than its latency ratio.
 
 Figures in `docs/figures-gen3/`; the figure data is diffed by `reproduce.sh` check 7. Its
-per-seed table is `results/gen3-7cell/summary-per-seed.csv` (140 rows), regenerated and diffed
-by check 3 alongside the reported one.
-
-**One table per sweep**, each beside the data it summarises. The root
-`results/summary-per-seed.csv` is the **reported** generation's table and stays where the report
-cites it; gen-1's cells are flat in `results/` with no sweep directory to hold one.
-
-That root table is the exception to the rule, and knowingly so: it carries **two** sweep ids -
-100 `gen1-confirmatory` rows plus 20 `gen1-roundrobin`, because the reported set includes a
-comparator measured ~16h later. Filter on `sweep_id` before pairing anything out of it. Every
-table carries that column for exactly this reason: the file path separates two tables only
-until someone concatenates them, and rate and workload are identical across sweeps by
-construction, so nothing else in a row would reveal the mix. `gen2-wan` has no table at all -
-it is superseded and backs only the instrument-problem section.
+per-seed table is `gen3-7cell/summary-per-seed.csv` (140 rows), regenerated and diffed by
+check 3 alongside the reported one.
 
 ## Directory shape
 
@@ -100,35 +102,23 @@ manifest, or **`sweep_id`**.
 `sweep_id` names the batch a cell was measured in, and it is the only thing separating the
 generations at the data level. Rate and workload manifest cannot do it: every sweep replays the
 same frozen dataset at the same rate, so those two match across generations *by construction*.
-Before the field existed, pairing a gen-3 cell against a gen-1 cell returned `p=0.0000` and a
+Before the field existed, pairing a gen-3 cell against a gen-2 cell returned `p=0.0000` and a
 45.1% effect - three days of cluster drift reported as a policy result. It now exits 1.
 
-| `sweep_id` | Dirs | Window |
-|---|---|---|
-| `gen1-confirmatory` | the five gen-1 cells below | 2026-08-05 23:05 → 08-06 00:47 |
-| `gen1-roundrobin` | `20260806-144135-roundrobin` | 2026-08-06 14:41 |
-| `gen2-wan` | the five WAN cells | 2026-08-05 00:52 → 02:12 |
-| `gen3-7cell` | all seven under `gen3-7cell/` | 2026-08-08 02:39 → 05:02 |
+`run_sweep.sh` defaults its results root to `results/$SWEEP_ID/`, so every future sweep lands
+in its own directory with a matching id - the layout above is what the scripts now produce,
+not a convention to remember. The 18 directories that predate the field were back-filled;
+runs without it still pair, so third-party or archived directories keep working.
 
-gen-1's `roundrobin` gets its **own** id rather than joining the other five: it ran ~16h after
-them, so giving it their batch name would assert a shared window that never existed and would
-wave through exactly the cross-window pairing the guard exists to stop. It is a descriptive
-comparator that carries no paired test, so nothing is lost.
-
-`run_cell.sh` defaults `sweep_id` to the results-root basename, which is what makes
-`run_sweep.sh <rate> results/<name>` self-separating. The 18 directories that predate the field
-were back-filled from the table above; runs without it still pair, so third-party or archived
-directories keep working.
-
-Generation 1 additionally carries `window.env`, `driver` (location, node, image, target) and
-`workload_profile`; those three postdate generation 2, where `driver` and `workload_profile` are
-`null`. Generation 1 also carries two extra `lmcache_*` series.
+Generation 2 additionally carries `window.env`, `driver` (location, node, image, target) and
+`workload_profile`; those three postdate generation 1, where `driver` and `workload_profile`
+are `null`. Generation 2 also carries two extra `lmcache_*` series.
 
 ## `expected/`
 
-`reproduce.sh`'s baselines: `stats.txt`, `figure-data.json` (gen 1), `figure-data-wan.json`
-(gen 2), `figure-data-gen3.json` (gen 3). Regenerated and diffed on every run; a mismatch fails
-the build.
+`reproduce.sh`'s baselines: `stats.txt`, `figure-data.json` (gen 2, reported),
+`figure-data-wan.json` (gen 1), `figure-data-gen3.json` (gen 3). Regenerated and diffed on
+every run; a mismatch fails the build.
 
 ## What is not here
 
@@ -136,6 +126,8 @@ The 2026-08-03 characterization sweeps (7.5–16 req/s), the 2026-08-04 absolute
 pilots, probes and aborted runs were pruned by
 [#57](https://github.com/BenEpstein/caching-in-llms/issues/57). They used the pre-normalization
 policy or a worse instrument. They are in git history - `git log - results/` finds them.
+The flat pre-#75 layout (`results/<run>/` with the generations interleaved) is also in history;
+paths in CHANGELOG entries and closed tickets from before 2026-08-08 use it.
 
 Two numbers in the report are measured on the 2026-08-04 cells and are **not** recomputable
 here: the 240.6 ms TTFT p10 floor and the ~226 → ~21 ms non-engine collapse. Tracked on

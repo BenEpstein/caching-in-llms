@@ -10,12 +10,14 @@
 set -euo pipefail
 
 RATE="${1:?usage: run_sweep.sh <rate> [results-root]}"
-RESULTS_ROOT="${2:-results}"
+RESULTS_ROOT="${2:-}"
 
 # One id for the whole batch, minted HERE so every cell agrees on it and no two runs collide.
 # Left to run_cell.sh it would fall back to the results-root basename, which defaults to the
 # shared `results` - one id for every sweep ever run, and a guard that passes everything.
 export SWEEP_ID="${SWEEP_ID:-sweep-$(date +%Y%m%d-%H%M%S)}"
+# One directory per sweep (#75): the tree carries the grouping, not just run.json metadata.
+RESULTS_ROOT="${RESULTS_ROOT:-results/$SWEEP_ID}"
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Both tags are checked HERE, before the first helm upgrade, rather than left to
