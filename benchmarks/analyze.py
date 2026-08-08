@@ -538,8 +538,11 @@ _TABLE_COLS = [
     ("error_rate", "{:.2%}"),
     ("ttft_p50_s", "{:.3f}"),
     ("ttft_p95_s", "{:.3f}"),
+    ("ttft_p99_s", "{:.3f}"),
+    ("itl_p95_s", "{:.3f}"),
     ("e2e_p95_s", "{:.3f}"),
     ("req_per_s", "{:.2f}"),
+    ("tok_per_s", "{:.0f}"),
     ("imbalance", "{:.2f}"),
 ]
 
@@ -583,8 +586,11 @@ def cmd_table(run_dirs: List[str]) -> int:
             "error_rate": error_rate(seeds),
             "ttft_p50_s": med("ttft_p50"),
             "ttft_p95_s": med("ttft_p95"),
+            "ttft_p99_s": med("ttft_p99"),
+            "itl_p95_s": med("itl_p95"),
             "e2e_p95_s": med("e2e_p95"),
             "req_per_s": med("throughput_req_s"),
+            "tok_per_s": med("throughput_tok_s"),
             "imbalance": percentile(imb, 50) if imb else None,
         })
     if len(sweeps) > 1:

@@ -351,14 +351,15 @@ python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
 python3 benchmarks/utilization.py report results/<sweep>/*
 ```
 
-The table gives one row for each cell: the median over the seeds of the error rate, the
-latency, the throughput and the load imbalance. It looks like this:
+The table gives one row for each cell: the median over the seeds of the error rate, the TTFT,
+the inter-token latency, the end-to-end latency, the throughput and the load imbalance. It
+looks like this:
 
 ```
-cell            seeds  error_rate  ttft_p50_s  ttft_p95_s  e2e_p95_s  req_per_s  imbalance
-kvaware            20       0.43%       0.173       0.324      7.077      14.41       2.39
-loadaware-b0.5     20       0.34%       0.152       0.296      5.958      14.39       1.25
-roundrobin         20       0.08%       1.144      11.051     28.381      10.41       1.50
+cell            seeds  error_rate  ttft_p50_s  ttft_p95_s  ttft_p99_s  itl_p95_s  e2e_p95_s  req_per_s  tok_per_s  imbalance
+kvaware            20       0.43%       0.173       0.324       0.415      0.151      7.077      14.41        922       2.39
+loadaware-b0.5     20       0.34%       0.152       0.296       0.368      0.143      5.958      14.39        921       1.25
+roundrobin         20       0.08%       1.144      11.051      13.309      0.912     28.381      10.41        666       1.50
 ```
 
 The table is descriptive. It has no p-values: the test was registered for named pairs, and a

@@ -587,8 +587,8 @@ def test_table_prints_one_median_row_per_cell(tmp_path, capsys):
     out = capsys.readouterr().out
     lines = out.splitlines()
     assert lines[0].split() == [
-        "cell", "seeds", "error_rate", "ttft_p50_s", "ttft_p95_s",
-        "e2e_p95_s", "req_per_s", "imbalance"]
+        "cell", "seeds", "error_rate", "ttft_p50_s", "ttft_p95_s", "ttft_p99_s",
+        "itl_p95_s", "e2e_p95_s", "req_per_s", "tok_per_s", "imbalance"]
     # _run_dir gives every request in seed s a TTFT of 0.1*s, so the median over
     # seeds 1..3 is seed 2's 0.200 for every TTFT percentile.
     row_a = next(l for l in lines if l.startswith("kvaware"))
