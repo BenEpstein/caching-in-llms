@@ -61,7 +61,7 @@ opposite directions, and the stock router only pulls one way.
    load and takes the argmax.
 
 Our headline result is that this **cuts load imbalance by 48.1% (p < 0.0001, n = 20 paired
-seeds)**. The latency co-primary **returned a null (−2.7%, p = 0.1153) and we report it**: the
+seeds)**, reproduced at 49.4% by an independent sweep two days later. The latency co-primary **returned a null (−2.7%, p = 0.1153) and we report it**: the
 first attempt was measured over a wide-area network that contributed 45–59% of the number, so
 rather than substitute a metric that flatters us, the instrument was rebuilt and the original
 test re-run unchanged. It did not reach significance, because at this operating point the fleet
@@ -227,6 +227,7 @@ that follow read as a single argument rather than a list of numbers.
 | 5 | What does the knob cost, and where should it sit? | Imbalance falls monotonically in β while the hit rate falls 91.2% → 86.1%. At β = 2.0 the lost locality shows up as latency. That reversal locates the knee and makes β = 0.5 a defended optimum |
 | 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number here is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
 | 7 | Does any of it reach a user-visible objective? | Goodput, a declared secondary: **19.0% fewer** requests missing a 150 ms first token, p = 0.0021, with the β = 0 ablation null across the whole 50–400 ms sweep |
+| 8 | Does any of it hold up when run again? | **Yes.** An independent seven-cell sweep two days later reproduces the headline at **−49.4%** against −48.1%, with the ablation null again. It also adds β = 0.25, which finds the floor of the trend in 5 |
 
 **The general picture.** 1 sets the scale of the lever, 2 shows we can pull it, 4 proves it is
 the load term doing the pulling and 5 says how hard to pull. 6 says the pull is free and 7 says
@@ -276,10 +277,37 @@ The β grid at the operating point, medians across 20 seeds each:
 | `loadaware` β = 1.0 (shipped default) | 1.186 | −53.7%, p < 0.0001 |
 | `loadaware` β = 2.0 | 1.099 | −53.9%, p < 0.0001 |
 
-Imbalance falls monotonically with β and clears the Bonferroni-corrected threshold of 0.025 by
-orders of magnitude. Note that it keeps falling past the headline arm: β is not being tuned to
-the best imbalance number, it is being set where imbalance is bought at an acceptable price in
-locality.
+Imbalance falls monotonically with β across the tested grid and clears the Bonferroni-corrected
+threshold of 0.025 by orders of magnitude. Note that it keeps falling past the headline arm: β is
+not being tuned to the best imbalance number, it is being set where imbalance is bought at an
+acceptable price in locality. A later sweep added a β = 0.25 cell and found the floor of that
+trend — see *Parameter sensitivity*.
+
+## The headline replicates
+
+The whole grid was re-run on 2026-08-08 (02:39–05:02) as an independent seven-cell sweep at the
+same rate, same frozen workload, same router and driver images, `results/gen3-7cell/`. Nothing
+about the policy changed; only the cell set and the window did.
+
+| | first sweep | independent re-run |
+|---|---|---|
+| `kvaware` imbalance | 2.358 | 2.452 |
+| β = 0.5 imbalance | 1.249 | 1.272 |
+| **Median reduction** | **−48.1%**, p < 0.0001 | **−49.4%**, p < 0.0001 |
+| β = 0 ablation | null, wrong way | null, wrong way (p = 0.43) |
+
+**The claim replicates and so does the ablation.** Two independent 20-seed sweeps two days
+apart put the effect within 1.3 points of each other, and in both the load term is the entire
+mechanism. The prefix-cache hit rate reproduces its shape too — 91.2%, 90.5%, 88.0%, 86.9% for
+`kvaware`, β = 0.5, 1.0, 2.0.
+
+**The re-run's latency reading is reported here as exploratory and is not a change to the
+headline.** On the new sweep the TTFT p95 comparison returns 18.7% at p = 0.0107, where the
+first returned a null. We are not promoting it, for the reason stated under *What we declined to
+claim*: it was examined *after* a null, with no fresh pre-registration, which makes it
+exploratory by construction no matter which way it points. Its own bootstrap interval agrees
+that caution is warranted — [−3.2%, +29.2%] includes zero. The pre-registered latency result of
+this report remains the null.
 
 ## An instrument problem, not a result
 
@@ -348,10 +376,24 @@ artefact.
 
 ## Parameter sensitivity
 
-**Imbalance falls monotonically with β, and keeps falling past the arm we ship.** Across
-β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs 2.662 → 1.249 → 1.186 → 1.099 against the
-baseline's 2.358. The returns flatten sharply after β = 0.5: the first half of the grid buys
-1.41 of imbalance, the rest buys 0.15.
+**Imbalance falls monotonically with β once β is large enough to bind, and keeps falling past
+the arm we ship.** Across β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs
+2.662 → 1.249 → 1.186 → 1.099 against the baseline's 2.358. The returns flatten sharply after
+β = 0.5: the first half of the grid buys 1.41 of imbalance, the rest buys 0.15.
+
+**Below that threshold the policy is not a weak version of itself — it is the baseline.** The
+independent re-run added β = 0.25, and it does not balance at all: imbalance 3.218 against that
+sweep's `kvaware` at 2.452, a difference that is not significant (p = 0.8988, CI [−46.3%,
++3.5%]) and sits inside the spread of the cache-only arms. Its prefix-cache hit rate says why —
+**0.9119, indistinguishable from `kvaware`'s 0.9115 and the β = 0 ablation's 0.9108**, and
+nowhere near β = 0.5's 0.9049. It is placing requests exactly where pure cache affinity would.
+
+This is the design's own arithmetic, confirmed by a cell that did not exist when the arithmetic
+was written. A full cache hit is cancelled at $r = 1/(2\beta)$; at β = 0.25 that is $r = 2.0$,
+so an engine would have to carry **200% above the fleet mean** before the load term could
+override a cached prefix. On a two-engine fleet that is close to unreachable. β = 0.25 is
+therefore not a shallower operating point on the same curve — it is below the knee entirely, and
+the curve has a floor rather than a gentle approach to zero.
 
 That shape is why β is not simply set to the largest value on the grid. Every increment buys
 balance by diverting requests away from the engine holding their prefix, and past the knee it
@@ -414,7 +456,18 @@ for diagnosis only.
 significance line between replicate cells (0.0291 and 0.0570). A metric that changes verdict
 between replicates of the same condition is measuring noise.
 
-No seeds were added after any null appeared, at any operating point.
+**A third metric was declined most recently, and it is the one that would have helped most.**
+The independent re-run returns TTFT p95 at p = 0.0107 — below the pre-registered threshold,
+where the first sweep returned a null. It is reported under *The headline replicates* as
+exploratory rather than as a result, because it was examined after a null and carries no fresh
+pre-registration. A significant p-value found on the second look is the same object as a
+favourable metric found on the second look; the direction it happens to point does not change
+what it is.
+
+No seeds were added to any cell after a null appeared, at any operating point, and no metric was
+substituted for the pre-registered one. What *was* done, once, is a complete independent re-run
+of the whole grid — reported above in full, in the order it happened, including the reading that
+would have flattered us.
 
 # Discussion
 
@@ -529,6 +582,25 @@ and no GPU.
 
 These six cells are the evidence base for every **reported** number and figure, and
 `scripts/reproduce.sh` regenerates all of it from exactly these directories.
+
+The **independent re-run** behind *The headline replicates* is a seven-cell sweep in its own
+directory, with its own per-seed summary table and its own figure set:
+
+| Arm | Run directory (under `results/gen3-7cell/`) | Rate | Seeds |
+|---|---|---|---|
+| `kvaware` | `20260808-023919-kvaware` | 16 | 20 |
+| `loadaware` β = 0 | `20260808-042133-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.25 | `20260808-040053-loadaware-b0.25` | 16 | 20 |
+| `loadaware` β = 0.5 | `20260808-025932-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 | `20260808-031955-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `20260808-034018-loadaware-b2.0` | 16 | 20 |
+| `roundrobin` | `20260808-044202-roundrobin` | 16 | 20 |
+
+Figures in `docs/figures-gen3/`. It is kept separate rather than pooled with the six above:
+pooling two windows would inflate `n` without the seeds being exchangeable, and the point of a
+replication is that it was analysed on its own. `reproduce.sh` walks every
+`summary-per-seed.csv` in the tree, so this sweep regenerates from committed data on the same
+terms as the reported one.
 
 The superseded **WAN sweep** is kept alongside them, because *An instrument problem, not a
 result* is an argument about measurement and the measurement is its evidence:
