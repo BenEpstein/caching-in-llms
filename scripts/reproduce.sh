@@ -66,6 +66,14 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
   fi
 }
 
+# The repo documents Python >= 3.10 (README "Setup", requirements.txt). Below that floor the
+# regenerated numbers can differ in the last digit, and this script reports that as "figure data
+# no longer regenerates from committed data" - a data-integrity failure that is really an
+# environment mismatch, on the one check carrying the reproducibility claim. Observed on macOS
+# system Python 3.9.6: itl_mean 0.036171 against the committed 0.03617. Fail early and say why.
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
+  || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
+
 echo "==> 1/5 every run referenced by the summary has committed raw data"
 # Catches the worst failure mode: a reported number whose evidence is not in the repository.
 # Regenerating cannot catch it - a missing directory contributes no rows, so the output
