@@ -112,14 +112,35 @@ else
   fail "novel frozen workload does not reconstruct from its manifest"
 fi
 
-echo "==> 3/7 summary-per-seed.csv regenerates"
+echo "==> 3/7 every summary-per-seed.csv regenerates"
+# ONE TABLE PER SWEEP. Each lives beside the data it summarises - the root file for the reported
+# generation (cited by docs/report/report.md, so it does not move), and one inside each sweep
+# directory. Driving the regeneration off column 1 of each table means a table also serves as
+# the manifest of which runs belong to its sweep: a run dir that quietly vanishes shows up as a
+# missing row rather than as a silently shorter file.
+#
+# Each table is resolved relative to ITS OWN directory, not to results/, so a nested sweep's
+# rows name paths inside that sweep.
+#
 # No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
-RUNS=()
-while read -r run; do
-  [ -d "$ROOT/results/$run" ] && RUNS+=("$ROOT/results/$run")
-done < <(awk -F, 'NR>1 {print $1}' "$ROOT/results/summary-per-seed.csv" | sort -u)
-python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/summary.csv" >/dev/null
-verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary-per-seed.csv"
+summaries=("$ROOT/results/summary-per-seed.csv")
+while read -r extra; do summaries+=("$extra"); done < <(
+  find "$ROOT/results" -mindepth 2 -name summary-per-seed.csv | sort)
+for table in "${summaries[@]}"; do
+  base="$(dirname "$table")"
+  label="summary-per-seed.csv (${base#$ROOT/results/})"
+  [ "$base" = "$ROOT/results" ] && label="summary-per-seed.csv (reported)"
+  RUNS=()
+  while read -r run; do
+    [ -d "$base/$run" ] && RUNS+=("$base/$run")
+  done < <(awk -F, 'NR>1 {print $1}' "$table" | sort -u)
+  if [ "${#RUNS[@]}" -eq 0 ]; then
+    fail "$label: no run directories resolved from column 1"
+    continue
+  fi
+  python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/$(basename "$base")-summary.csv" >/dev/null
+  verify_against "$WORK/$(basename "$base")-summary.csv" "$table" "$label"
+done
 
 echo "==> 4/7 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5

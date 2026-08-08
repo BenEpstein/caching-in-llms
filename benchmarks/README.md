@@ -26,7 +26,7 @@ workload at fixed load.
 | `run_sweep.sh` | All 5 cells, one unattended batch (~3 h) |
 | `rate_pilot.sh` | Step 0: find the TTFT-p95 knee on kvaware; freeze at or just under it (see "Picking the rate") |
 | `analyze.py` | Per-seed summaries, validity gate, pre-registered Wilcoxon + bootstrap CI |
-| `export_summary.py` | Derives `results/summary-per-seed.csv` — the table every figure and test reads |
+| `export_summary.py` | Derives a `summary-per-seed.csv` per sweep - committed evidence a reader can check without the raw data. Nothing reads it: figures and stats go to each cell's `run.json` and driver CSVs directly |
 | `plot_results.py` | **Generates every committed figure** in `docs/figures/` |
 | `utilization.py` | §3 utilization (GPU, GPU memory, CPU, host memory) with a series-coverage gate |
 | `load_gate.py` | Is the offered rate actually degrading anything? Run before a sweep is funded |
@@ -435,7 +435,7 @@ asks that reader to take the derivation on trust, so the raw artifacts are commi
 | `results/<run>/driver-seed*.csv` | client-observed per-request TTFT / E2E / ITL / tokens |
 | `results/<run>/prom/*.json`, `results/<run>/dcgm.csv` | engine + router Prometheus series and GPU utilization over the run window |
 | `results/<run>/run.json` | arm, β, rate, router image + imageID, git commit, workload manifest with per-seed SHA-256 - the provenance of every cell |
-| `results/summary-per-seed.csv` | the derived per-seed table: latency percentiles, throughput, error counts, and load imbalance |
+| `results/summary-per-seed.csv` | the derived per-seed table for the **reported** sweep: latency percentiles, throughput, error counts, and load imbalance. Each other sweep carries its own beside its data, e.g. `results/gen3-7cell/summary-per-seed.csv` - one table, one measurement window |
 
 Two exclusions. `results/**/*.jsonl` - the frozen workload replay files, regenerable
 bit-identically from `benchmarks/workloads/manifest.json`, megabytes per run for no

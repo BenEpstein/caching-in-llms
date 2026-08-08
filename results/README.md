@@ -71,9 +71,17 @@ unaffected: `b0.25` and `roundrobin`. `roundrobin` saturates here (10.24 req/s a
 16 offered, 65%) - pass it to `plot_results.py` as `--comparator`, never positionally, and
 report its throughput shortfall rather than its latency ratio.
 
-Figures in `docs/figures-gen3/`; the figure data is diffed by `reproduce.sh` check 7. These runs
-are deliberately **not** in `summary-per-seed.csv`, which stays generation-1-only so one table
-means one window.
+Figures in `docs/figures-gen3/`; the figure data is diffed by `reproduce.sh` check 7. Its
+per-seed table is `results/gen3-7cell/summary-per-seed.csv` (140 rows), regenerated and diffed
+by check 3 alongside the reported one.
+
+**One table per sweep**, each beside the data it summarises, so "one table means one window"
+holds by construction rather than by remembering to filter. The root
+`results/summary-per-seed.csv` is the **reported** generation's table and stays where the report
+cites it; gen-1's cells are flat in `results/` and have no sweep directory to hold one, so that
+file does double duty until they are nested. Every table now carries a `sweep_id` column - a
+file path separates two tables only until someone concatenates them, and rate and workload are
+identical across sweeps by construction, so nothing else in a row would reveal the mix.
 
 ## Directory shape
 

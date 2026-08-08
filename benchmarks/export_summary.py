@@ -37,7 +37,13 @@ FIELDS = [
     # both sides. Never pool or compare across that boundary without saying which
     # side each cell is on. Which cells fall where: benchmarks/README.md, "Two
     # eras of `beta`".
-    "run", "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
+    # `sweep_id` is the batch a cell was measured in, and it is what stops a reader pooling two
+    # sweeps in pandas and pairing across windows. The file path already separates them - one
+    # table per sweep - but a path is lost the moment two tables are concat'd, and rate and
+    # workload are identical across sweeps by construction, so nothing else in the row would
+    # reveal the mix. Empty for the run dirs that predate the field.
+    "run", "sweep_id",
+    "cell", "arm", "alpha", "beta", "rate_req_s", "osl_tokens", "git_commit", "router_image",
     "seed", "ok", "errors", "error_rate",
     "ttft_mean", "ttft_p50", "ttft_p90", "ttft_p95", "ttft_p99",
     "itl_p50", "itl_p95", "itl_p99",
@@ -64,6 +70,7 @@ def main() -> None:
             seed = s["seed"]
             rows.append({
                 "run": os.path.basename(run_dir.rstrip("/")),
+                "sweep_id": run.get("sweep_id", ""),
                 "cell": run["cell"], "arm": run["arm"],
                 "alpha": run.get("alpha"), "beta": run.get("beta"),
                 "osl_tokens": run.get("osl_tokens"),
