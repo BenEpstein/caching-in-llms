@@ -1,1 +1,0 @@
-{"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {"__name__": "process_resident_memory_bytes", "instance": "stack-router-service:80", "job": "router"}, "values": [[1785602721, "951603200"], [1785602726, "951603200"], [1785602731, "951603200"], [1785602736, "951603200"]]}]}}

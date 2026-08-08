@@ -243,9 +243,9 @@ def test_healthy_short_cell_does_not_false_warn(cell):
     """The gate must not cry wolf on pilots and demos.
 
     Samples land up to one sampling interval inside the window at each end, so a
-    measure with no edge tolerance caps at 1 - step/window: `results/demo-a`
-    (150 s) scored exactly 96.7% on perfect data, spending 3.3 of the 5-point
-    budget on quantization alone.
+    measure with no edge tolerance caps at 1 - step/window: a 150 s demo run
+    scored exactly 96.7% on perfect data, spending 3.3 of the 5-point budget on
+    quantization alone.
     """
     short_end = START + 150.0
     (cell / "run.json").write_text(json.dumps(

@@ -74,7 +74,7 @@ _diff_or_fail() {  # _diff_or_fail <generated> <reference> <label>
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' \
   || die "needs Python >= 3.10, found $(python3 -V 2>&1). See README, \"Setup\"."
 
-echo "==> 1/5 every run referenced by the summary has committed raw data"
+echo "==> 1/6 every run referenced by the summary has committed raw data"
 # Catches the worst failure mode: a reported number whose evidence is not in the repository.
 # Regenerating cannot catch it - a missing directory contributes no rows, so the output
 # shrinks and still looks well-formed.
@@ -88,7 +88,7 @@ else
   fail "$missing run(s) in summary-per-seed.csv have no committed directory"
 fi
 
-echo "==> 2/5 frozen workloads are reconstructible (both profiles)"
+echo "==> 2/6 frozen workloads are reconstructible (both profiles)"
 # Same shape as the in-cluster path: copy the committed manifest into a writable directory
 # and regenerate beside it, so this exercises the contract verify_dataset.sh depends on.
 mkdir -p "$WORK/wl"; cp "$BENCH/workloads/manifest.json" "$WORK/wl/"
@@ -104,7 +104,7 @@ else
   fail "novel frozen workload does not reconstruct from its manifest"
 fi
 
-echo "==> 3/5 summary-per-seed.csv regenerates"
+echo "==> 3/6 summary-per-seed.csv regenerates"
 # No `mapfile` or any other bash-4 builtin: macOS ships bash 3.2. Portable read loop instead.
 RUNS=()
 while read -r run; do
@@ -113,7 +113,7 @@ done < <(awk -F, 'NR>1 {print $1}' "$ROOT/results/summary-per-seed.csv" | sort -
 python3 "$BENCH/export_summary.py" "${RUNS[@]}" --out "$WORK/summary.csv" >/dev/null
 verify_against "$WORK/summary.csv" "$ROOT/results/summary-per-seed.csv" "summary-per-seed.csv"
 
-echo "==> 4/5 the reported statistics regenerate"
+echo "==> 4/6 the reported statistics regenerate"
 # The CONFIRMATORY sweep (#31, 2026-08-05 23:05 -> 2026-08-06 00:47), which is the run §5
 # and §6 report. These must name whatever sweep `docs/figures/` was last generated from: a
 # check that verifies the wrong run reads exactly like a check that passes.
@@ -142,7 +142,7 @@ echo "==> 4/5 the reported statistics regenerate"
 } > "$WORK/stats.txt"
 check "$WORK/stats.txt" "$EXPECTED/stats.txt" "reported statistics"
 
-echo "==> 5/5 the numbers behind every figure regenerate"
+echo "==> 5/6 the numbers behind every figure regenerate"
 python3 "$BENCH/plot_results.py" "$ROOT/$BASELINE" "$ROOT/$ABLATION" "$ROOT/$HEADLINE" \
   "$ROOT/$BETA1" "$ROOT/$BETA2" --comparator "$ROOT/$COMPARATOR" \
   --cand "loadaware-b0.5" --out "$WORK/figs" --dump-data "$WORK/figdata.json" >/dev/null
@@ -150,6 +150,20 @@ check "$WORK/figdata.json" "$EXPECTED/figure-data.json" "figure data"
 nfigs=$(ls "$WORK/figs" | wc -l | tr -d ' ')
 if [ "$nfigs" -ge 12 ]; then ok "$nfigs figures rendered"
 else fail "expected at least 12 figures, got $nfigs"; fi
+
+echo "==> 6/6 the WAN generation regenerates its own figure set"
+# Data that no check regenerates is data that rots silently, and these five back a report
+# section. Not overridable like the cells above: this generation is frozen, so there is nothing
+# to repoint. No --comparator - the WAN sweep has no roundrobin cell and fig12 omits that curve.
+python3 "$BENCH/plot_results.py" \
+  "$ROOT/results/20260805-005210-kvaware" "$ROOT/results/20260805-011148-loadaware-b0" \
+  "$ROOT/results/20260805-013208-loadaware-b0.5" "$ROOT/results/20260805-015202-loadaware-b1.0" \
+  "$ROOT/results/20260805-021215-loadaware-b2.0" \
+  --cand "loadaware-b0.5" --out "$WORK/figs-wan" --dump-data "$WORK/figdata-wan.json" >/dev/null
+check "$WORK/figdata-wan.json" "$EXPECTED/figure-data-wan.json" "WAN figure data"
+nwan=$(ls "$WORK/figs-wan" | wc -l | tr -d ' ')
+if [ "$nwan" -ge 12 ]; then ok "$nwan WAN figures rendered"
+else fail "expected at least 12 WAN figures, got $nwan"; fi
 
 echo
 if [ "${#FAILURES[@]}" -eq 0 ]; then
