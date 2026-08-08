@@ -15,7 +15,7 @@ the multi-instance router that decides *which* cache a request can hit.
 **Maturity & community support.** LMCache is the KV-cache backend vLLM itself integrates with. It
 ships an official Helm chart with a documented KV-aware tutorial, published router and engine
 images in matched version pairs, and Prometheus metrics on both tiers. It is under active
-development: we worked against live upstream TODOs and cite a concurrent upstream PR.
+development — we worked against live upstream TODOs.
 
 **Ease of modification.** Every routing strategy lives in one file,
 `src/vllm_router/routers/routing_logic.py` — a `RoutingLogic` enum, one class per strategy
@@ -41,8 +41,8 @@ environment-variable driven, so configuration the chart does not expose is still
 FIFO and MRU** registered in `POLICY_MAPPING` and selected by the `cache_policy` config key —
 default `"LRU"`, overridable via `LMCACHE_CACHE_POLICY`. That cuts two ways: eviction is *already*
 pluggable, so a new eviction policy would have been a one-file exercise against a solved
-interface, and our experiments avoid eviction pressure by design (KV usage peaks near 0.70 and
-never exhausts), so LRU-versus-anything is not a confound in our results.
+interface, and our experiments avoid eviction pressure by design (KV usage peaks near 0.70), so
+LRU-versus-anything is not a confound.
 
 ## The gap we chose to close
 
@@ -59,6 +59,5 @@ results."* Two consequences define this project:
 
 An acknowledged gap in the cache layer, an unused load signal one layer up, and an additions-only
 way to reach both: that combination, not the eviction policy, is why we chose this baseline. The
-alternatives had no such gap to close — semantic caches (GPTCache and similar) key on
-prompt-to-response pairs, so no distributed-placement problem arises, and vLLM's own in-engine
-prefix cache is single-instance by construction: there is no placement decision inside one engine.
+alternatives had no such gap: semantic caches (GPTCache) key on prompt-to-response pairs, so no
+placement problem arises, and vLLM's in-engine prefix cache is single-instance by construction.
