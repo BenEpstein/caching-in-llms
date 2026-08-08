@@ -55,10 +55,3 @@ only the **first** server that holds it. Upstream marks this in code: *"TODO: im
 matching logic, return multi results."* The consequence: no router above the controller can
 compare servers on cache benefit, because the match information is incomplete. This project
 extends the lookup to per-server match info and adds the `loadaware` strategy on top.
-
-## Alternatives considered
-
-**GPTCache** is a semantic cache. It keys on full prompt-response pairs, so there is no
-prefix-placement problem to route around. **vLLM's built-in prefix cache** works inside a
-single server and has no cross-server view. Neither exposes the multi-server routing gap this
-project targets, so neither supports the extension.
