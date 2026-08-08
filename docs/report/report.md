@@ -61,7 +61,7 @@ opposite directions, and the stock router only pulls one way.
    load and takes the argmax.
 
 Our headline result is that this **cuts load imbalance by 48.1% (p < 0.0001, n = 20 paired
-seeds)**. The latency co-primary **returned a null (−2.7%, p = 0.1153) and we report it**: the
+seeds)**, reproduced at 49.4% by an independent sweep two days later. The latency co-primary **returned a null (−2.7%, p = 0.1153) and we report it**: the
 first attempt was measured over a wide-area network that contributed 45–59% of the number, so
 rather than substitute a metric that flatters us, the instrument was rebuilt and the original
 test re-run unchanged. It did not reach significance, because at this operating point the fleet
@@ -220,13 +220,14 @@ that follow read as a single argument rather than a list of numbers.
 
 | # | The question it asks | What it answered |
 |---|---|---|
-| 1 | Is placement a cache policy at all, or just load balancing? | Round-robin is **better balanced** than the cache-aware baseline and still **34× slower** (hit rate 0.682 against 0.912). Placement sets the fleet's effective hit rate. This is the lever everything else operates on |
+| 1 | Is placement a cache policy at all? | Round-robin is **better balanced** than the cache-aware baseline and still **34× slower** (hit rate 0.682 against 0.912). Placement sets the fleet's effective hit rate — the lever everything else operates on |
 | 2 | Does the policy actually redistribute work? | **Yes.** Imbalance 2.358 → 1.249, **−48.1%**, p < 0.0001 over 20 paired seeds. This is the claim |
 | 3 | Does redistributing work make the fleet faster *here*? | **No.** TTFT p95 −2.7%, p = 0.1153 — a null, on the pre-registered primary. This is the boundary of the claim, not a footnote to it |
-| 4 | Is the gain the load term, or just our rewrite of the router? | **The load term.** With β = 0 the policy lands *on* the baseline (2.662 vs 2.358, p = 0.9734, if anything worse). Pre-declared falsifiable; it is what makes 2 credible |
+| 4 | Is the gain the load term, or just our rewrite? | **The load term.** At β = 0 the policy lands *on* the baseline (2.662 vs 2.358, p = 0.9734). Pre-declared falsifiable; it is what makes 2 credible |
 | 5 | What does the knob cost, and where should it sit? | Imbalance falls monotonically in β while the hit rate falls 91.2% → 86.1%. At β = 2.0 the lost locality shows up as latency. That reversal locates the knee and makes β = 0.5 a defended optimum |
-| 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number here is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
+| 6 | Is the gain bought with more hardware? | **No.** GPU utilization, power and router CPU are flat across arms. One number is a result rather than a cost check: KV-cache spread falls 1.70× → 1.18×, so the policy balances the *cache*, not just request counts |
 | 7 | Does any of it reach a user-visible objective? | Goodput, a declared secondary: **19.0% fewer** requests missing a 150 ms first token, p = 0.0021, with the β = 0 ablation null across the whole 50–400 ms sweep |
+| 8 | Does it hold up when run again? | **Yes.** An independent seven-cell sweep reproduces the headline at **−49.4%** against −48.1%, ablation null again, and adds β = 0.25 — which finds the floor of the trend in 5 |
 
 **The general picture.** 1 sets the scale of the lever, 2 shows we can pull it, 4 proves it is
 the load term doing the pulling and 5 says how hard to pull. 6 says the pull is free and 7 says
@@ -276,10 +277,30 @@ The β grid at the operating point, medians across 20 seeds each:
 | `loadaware` β = 1.0 (shipped default) | 1.186 | −53.7%, p < 0.0001 |
 | `loadaware` β = 2.0 | 1.099 | −53.9%, p < 0.0001 |
 
-Imbalance falls monotonically with β and clears the Bonferroni-corrected threshold of 0.025 by
-orders of magnitude. Note that it keeps falling past the headline arm: β is not being tuned to
-the best imbalance number, it is being set where imbalance is bought at an acceptable price in
-locality.
+Imbalance falls monotonically with β across the tested grid and clears the Bonferroni-corrected
+threshold of 0.025 by orders of magnitude. Note that it keeps falling past the headline arm: β is
+not being tuned to the best imbalance number, it is being set where imbalance is bought at an
+acceptable price in locality. A later sweep added a β = 0.25 cell and found the floor of that
+trend — see *Parameter sensitivity*.
+
+## The headline replicates
+
+The whole grid was re-run on 2026-08-08 (02:39–05:02) as an independent seven-cell sweep at the
+same rate, same frozen workload, same router and driver images, `results/gen3-7cell/`. Nothing
+about the policy changed; only the cell set and the window did.
+
+**The claim replicates, and so does the ablation.** `kvaware` 2.452 against β = 0.5's 1.272 is
+a **−49.4% reduction, p < 0.0001** — within 1.3 points of the reported −48.1% — and β = 0 is
+null again (p = 0.43), so in both sweeps the load term is the entire mechanism. The
+prefix-cache hit rate reproduces its shape too: 91.2%, 90.5%, 88.0%, 86.9%.
+
+**The re-run's latency reading is reported here as exploratory and is not a change to the
+headline.** On the new sweep the TTFT p95 comparison returns 18.7% at p = 0.0107, where the
+first returned a null. We are not promoting it, for the reason stated under *What we declined to
+claim*: it was examined *after* a null, with no fresh pre-registration, which makes it
+exploratory by construction no matter which way it points. Its own bootstrap interval agrees
+that caution is warranted — [−3.2%, +29.2%] includes zero. The pre-registered latency result of
+this report remains the null.
 
 ## An instrument problem, not a result
 
@@ -325,17 +346,12 @@ are in git history. The retained WAN sweep supports the same argument on committ
 157.4 → 101.9 ms, non-engine term 124.6 → 48.5 ms, and the 45–59% share above. See
 `results/README.md`.
 
-![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png)
+![Load balance across the two engines: what the policy actually changes.](../figures/fig6-load-balance.png){width=70%}
 
 ## The ablation is the finding
 
-| Arm | Median imbalance | vs `kvaware` |
-|---|---|---|
-| `kvaware` (baseline) | 2.358 | - |
-| `loadaware` β = 0 | 2.662 | null - p = 0.9734, and the wrong way |
-| `loadaware` β = 0.5 | 1.249 | **−48.1%**, p < 0.0001 |
-
-With the load term switched off, the policy is statistically indistinguishable from the
+Against the baseline's 2.358, the ablation lands at 2.662 (null, p = 0.9734, and the wrong way)
+while β = 0.5 lands at 1.249. With the load term switched off, the policy is statistically indistinguishable from the
 baseline on imbalance *and* on latency. **The load term is the entire mechanism.** Rewriting the
 router — the multi-instance lookup, the scoring path, the instance bridge — bought nothing on
 its own; β bought everything.
@@ -348,10 +364,19 @@ artefact.
 
 ## Parameter sensitivity
 
-**Imbalance falls monotonically with β, and keeps falling past the arm we ship.** Across
-β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs 2.662 → 1.249 → 1.186 → 1.099 against the
-baseline's 2.358. The returns flatten sharply after β = 0.5: the first half of the grid buys
-1.41 of imbalance, the rest buys 0.15.
+**Imbalance falls monotonically with β once β is large enough to bind, and keeps falling past
+the arm we ship.** Across β ∈ {0, 0.5, 1.0, 2.0} the median imbalance runs
+2.662 → 1.249 → 1.186 → 1.099 against the baseline's 2.358. The returns flatten sharply after
+β = 0.5: the first half of the grid buys 1.41 of imbalance, the rest buys 0.15.
+
+**Below that threshold the policy is not a weaker version of itself — it is the baseline.** The
+re-run added β = 0.25 and it does not balance at all (imbalance 3.218 against that sweep's
+`kvaware` 2.452, not significant, p = 0.8988). Its prefix-cache hit rate says why: **0.9119,
+indistinguishable from `kvaware`'s 0.9115 and the ablation's 0.9108** — it places requests
+exactly where pure cache affinity would. The design's own arithmetic predicts this. A full cache
+hit is cancelled at $r = 1/(2\beta)$, so β = 0.25 needs an engine **200% above the fleet mean**
+before the load term can override a cached prefix, which on two engines is unreachable. The
+curve has a floor, and a cell that did not exist when the formula was written found it.
 
 That shape is why β is not simply set to the largest value on the grid. Every increment buys
 balance by diverting requests away from the engine holding their prefix, and past the knee it
@@ -378,11 +403,11 @@ the instance holding the KV. It saturates near 0.95 on every arm including round
 not discriminate between policies. Every hit-rate number in this report is the vLLM
 prefix-cache counter.
 
-![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png)
+![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=58%}
 
 ## Resource cost
 
-![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png)
+![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=58%}
 
 The policy is not buying its result by spending more hardware. Both GPUs run at 82–93% SM
 utilization on every arm and board power sits at 108–119 W per device throughout — which is
@@ -414,7 +439,14 @@ for diagnosis only.
 significance line between replicate cells (0.0291 and 0.0570). A metric that changes verdict
 between replicates of the same condition is measuring noise.
 
-No seeds were added after any null appeared, at any operating point.
+**The re-run's TTFT p95**, at p = 0.0107 where the first sweep returned a null. A significant
+p-value found on the second look is the same object as a favourable metric found on the second
+look; which way it points does not change what it is. It is reported under *The headline
+replicates* as exploratory.
+
+No seeds were added to any cell after a null, at any operating point, and no metric was
+substituted for the pre-registered one. What was done once is a complete independent re-run of
+the grid, reported in the order it happened — including the reading that would have flattered us.
 
 # Discussion
 
@@ -450,20 +482,18 @@ the knob mean something.
 
 **Deduplicated-block load accounting, and why we passed.** NVIDIA's Dynamo KV-router accounts
 for load in deduplicated blocks rather than requests. We measured the dedup factor in our own
-workload (0.69 at 10.5 req/s, 0.45 at 7.5) and estimated the headroom at ~9% on imbalance and
-~5% on hit rate. Adopting it requires per-worker block tracking plus a completion hook, which
-would invalidate every run already recorded, and the gain only materializes under cache
-scarcity — which our workload never reaches (KV usage max 33%, `num_requests_waiting` 0).
-We document it as a limitation rather than a deficiency.
+workload (0.69 at 10.5 req/s) and estimated the headroom at ~9% on imbalance. It needs
+per-worker block tracking plus a completion hook, would invalidate every recorded run, and only
+pays under cache scarcity our workload never reaches (KV usage max 33%). A limitation, not a
+deficiency.
 
-**Two measurement artifacts, both biasing against us.** Backend disconnects hit a path where
-`on_request_complete` is skipped, drifting the router's own in-flight gauge by +4 to +7 on one
-engine over a run. It biases *against* the extension and is ~10× smaller than the reported
-effect, and a zero-failure cell reproduces the result. Separately, LMCache's KV registry has a
-~40 s blind window after any router restart during which admissions are lost, and a prefix
-first stored in that window stays invisible to the controller for the life of the engine
-process. Both arms would then degrade to QPS routing and look identical *for the wrong reason*.
-Every run in this report is gated on a registry probe that must pass before warm-up begins.
+**Two measurement artifacts, both biasing against us.** Backend disconnects skip
+`on_request_complete`, drifting the router's in-flight gauge by +4 to +7 on one engine over a
+run — against the extension, ~10× smaller than the reported effect, and a zero-failure cell
+reproduces the result. Separately, LMCache's KV registry loses admissions for ~40 s after any
+router restart, and a prefix first stored in that window stays invisible to the controller for
+the life of the engine process; both arms then degrade to QPS routing and look identical *for
+the wrong reason*. Every run here is gated on a registry probe that must pass before warm-up.
 
 # Conclusion and future work
 
@@ -529,6 +559,25 @@ and no GPU.
 
 These six cells are the evidence base for every **reported** number and figure, and
 `scripts/reproduce.sh` regenerates all of it from exactly these directories.
+
+The **independent re-run** behind *The headline replicates* is a seven-cell sweep in its own
+directory, with its own per-seed summary table and its own figure set:
+
+| Arm | Run directory (under `results/gen3-7cell/`) | Rate | Seeds |
+|---|---|---|---|
+| `kvaware` | `20260808-023919-kvaware` | 16 | 20 |
+| `loadaware` β = 0 | `20260808-042133-loadaware-b0` | 16 | 20 |
+| `loadaware` β = 0.25 | `20260808-040053-loadaware-b0.25` | 16 | 20 |
+| `loadaware` β = 0.5 | `20260808-025932-loadaware-b0.5` | 16 | 20 |
+| `loadaware` β = 1.0 | `20260808-031955-loadaware-b1.0` | 16 | 20 |
+| `loadaware` β = 2.0 | `20260808-034018-loadaware-b2.0` | 16 | 20 |
+| `roundrobin` | `20260808-044202-roundrobin` | 16 | 20 |
+
+Figures in `docs/figures-gen3/`. It is kept separate rather than pooled with the six above:
+pooling two windows would inflate `n` without the seeds being exchangeable, and the point of a
+replication is that it was analysed on its own. `reproduce.sh` walks every
+`summary-per-seed.csv` in the tree, so this sweep regenerates from committed data on the same
+terms as the reported one.
 
 The superseded **WAN sweep** is kept alongside them, because *An instrument problem, not a
 result* is an argument about measurement and the measurement is its evidence:
