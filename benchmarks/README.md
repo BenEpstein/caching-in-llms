@@ -25,6 +25,16 @@ Generation 2 and generation 3 use the same instrument and the same images. They 
 time windows. Do not compare a cell from one sweep with a cell from a different sweep. The tool
 `analyze.py` refuses to do this. It compares the `sweep_id` value in each `run.json` file.
 
+To check the reported numbers without a cluster, do the Python setup in "On your laptop"
+below, then run one command:
+
+```bash
+./scripts/reproduce.sh
+```
+
+The section "The data is in the repository" explains what it checks. To run the benchmark
+itself, on a cluster, continue reading.
+
 ## The files
 
 | File | Function |
@@ -40,7 +50,7 @@ time windows. Do not compare a cell from one sweep with a cell from a different 
 | `run_cell.sh` | Runs one cell. Deploys, checks the gates, warms up, measures and collects. |
 | `run_sweep.sh` | Runs all seven cells in one batch. |
 | `rate_pilot.sh` | Finds the offered rate for the sweep. |
-| `analyze.py` | Makes the summaries and the statistics. |
+| `analyze.py` | Makes the results table and the statistics. |
 | `export_summary.py` | Makes `summary-per-seed.csv` for a sweep. |
 | `plot_results.py` | Makes the 12 figures. |
 | `utilization.py` | Makes the utilization report. |
@@ -135,6 +145,35 @@ files are the primary measurement.
 
 ## How to run the benchmark
 
+This is the full run with our public images. Each command is explained in the steps below.
+
+```bash
+# One time for each cluster. Set the storage class first (see the section above).
+kubectl create namespace cache-llm
+helm repo add vllm https://vllm-project.github.io/production-stack
+helm install stack vllm/vllm-stack -n cache-llm --version 0.1.11 \
+  -f deploy/values-baseline-kvaware.yaml
+kubectl apply -n cache-llm -f deploy/prometheus.yaml
+kubectl get pods -n cache-llm -w          # Ctrl-C when the 5 pods are Running
+benchmarks/rate_pilot.sh                  # find the knee rate of your cluster (step 4)
+
+# One time for each run.
+export LOADAWARE_TAG=acf43d1 BENCH_TAG=acf43d1        # our CI-built images (step 2)
+RATE=16                                               # our knee; use the rate from the pilot
+python3 benchmarks/freeze_workloads.py                # early workload check (step 3)
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 $RATE results/smoke   # 5-minute test (step 5)
+rm -rf results/smoke
+benchmarks/run_sweep.sh $RATE                         # 7 cells, approximately 2.3 hours
+
+# After the sweep, on the laptop. The cluster is not necessary.
+# <sweep> is the directory that run_sweep.sh printed, results/sweep-<timestamp>.
+python3 benchmarks/analyze.py table results/<sweep>/*       # results table, one row per cell
+python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
+  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
+python3 benchmarks/utilization.py report results/<sweep>/*
+python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware   # the pre-registered test
+```
+
 ### Step 1: install the stack
 
 ```bash
@@ -161,7 +200,7 @@ Now wait for the pods:
 kubectl get pods -n cache-llm -w
 ```
 
-The install is complete when you see these pods. The two engine pods need approximately five
+The install is complete when you see these pods. The two engine pods need approximately 5
 minutes, because each one loads the model.
 
 ```
@@ -180,21 +219,13 @@ This install gives the baseline router. That is correct for the sweep. The first
 `kvaware`, and each cell installs its own arm before it measures. To deploy the `loadaware`
 router by itself, outside a benchmark, refer to `README.md`, "Deploy the stack".
 
-The measured requests do not leave the cluster. The Job sends them to the router Service at
-`stack-router-service.cache-llm.svc.cluster.local`. Therefore you do not need an Ingress or an
-OpenShift route for the measurement.
+You do not need an Ingress or an OpenShift route. The Job sends the measured requests to the
+router Service, inside the cluster. The warm-up and the registry probe run from your laptop.
+For them, each cell opens its own port-forward and closes it at the end. Do not open a
+port-forward by hand. Every cell restarts the router, and the restart kills a port-forward.
 
-Two operations do run from your laptop: the warm-up and the registry probe. They need a URL
-that you can reach. You do not need to do anything for this. Each cell opens its own
-port-forward and closes it at the end.
-
-Do not open a port-forward by hand and leave it open. It will not survive. Every cell restarts
-the router, and a port-forward is bound to one pod, so the restart kills it. This is why the
-scripts open the forward after the restart and not before.
-
-If you have an Ingress or an OpenShift route to the router, set `BASE_URL` to its address. Those
-go to the Service, not to one pod, so they survive the restart and the scripts then make no
-port-forward at all.
+If you have an Ingress or a route to the router, set `BASE_URL` to its address. A route goes to
+the Service, not to one pod, so it survives the restart. The scripts then make no port-forward.
 
 ```bash
 export BASE_URL=https://<your-router-address>
@@ -202,23 +233,25 @@ export BASE_URL=https://<your-router-address>
 
 ### Step 2: get the two images
 
-The benchmark needs two images.
-
-| Image | Dockerfile | Function | Our public image |
-|---|---|---|---|
-| Router | `Dockerfile` | The router with the `loadaware` policy | `quay.io/rhl193000/lmstack-router-loadaware` |
-| Driver | `Dockerfile.bench` | Sends the requests from a pod | `quay.io/rhl193000/bench-driver` |
-
-You can use our two public images and go to step 3. Both carry the tag `acf43d1`, which is the
-git short SHA that CI built them from. Step 5 needs that tag:
+The benchmark needs two images. The scripts point to our public images. Thus you set only the
+tag:
 
 ```bash
 export LOADAWARE_TAG=acf43d1
 export BENCH_TAG=acf43d1
 ```
 
-To build your own, use the root of the repository as the build context. Both Dockerfiles copy
-files from it.
+The tag `acf43d1` is the git short SHA that CI built the images from. Our reported measurements
+use these images.
+
+| Image | Dockerfile | Function | Our public image |
+|---|---|---|---|
+| Router | `Dockerfile` | The router with the `loadaware` policy | `quay.io/rhl193000/lmstack-router-loadaware` |
+| Driver | `Dockerfile.bench` | Sends the requests from a pod | `quay.io/rhl193000/bench-driver` |
+
+#### To build your own images (optional)
+
+Use the root of the repository as the build context. Both Dockerfiles copy files from it.
 
 ```bash
 export REG=docker.io/<your-username>
@@ -232,23 +265,13 @@ podman push $REG/lmstack-router-loadaware:$TAG
 podman push $REG/bench-driver:$TAG
 ```
 
-Make both repositories public on Docker Hub. The cluster pulls them with no credentials. For a
-private repository you must add an image pull secret to the namespace yourself. The scripts do
-not make one.
+Make both repositories public. The cluster pulls them with no credentials. For a private
+repository, add an image pull secret to the namespace yourself. The scripts do not make one.
 
-Then give the two names and the tag to the sweep in step 5:
+Then give the names and the tag to the sweep in step 5.
 
-| Variable | Value |
-|---|---|
-| `ROUTER_REPO` | `docker.io/<your-username>/lmstack-router-loadaware` |
-| `BENCH_REPO` | `docker.io/<your-username>/bench-driver` |
-| `LOADAWARE_TAG` and `BENCH_TAG` | The tag you built, for example the git short SHA |
-
-The tag is your record of what you measured. Use the git short SHA, not `latest`. Each cell
-writes the image and its digest into `run.json`, so a floating tag makes the measurement
-impossible to audit later.
-
-Our own reported measurements use images that CI built with the same two Dockerfiles.
+Do not use `latest` as the tag. Each cell writes the image and its digest into `run.json`. A
+floating tag makes the measurement impossible to audit later.
 
 ### Step 3: make the workload
 
@@ -272,27 +295,23 @@ is between 14 and 16 requests for each second.
 
 ### Step 5: run the sweep
 
-Run one cell with two seeds first. It takes approximately 5 minutes.
+Run one cell with two seeds first. It takes approximately 5 minutes. The two tags come from
+the exports in step 2.
 
 ```bash
-LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> \
-  SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
 ```
 
-This runs the whole choreography of one cell: the image check, the cold start, the registry
-probe, the warm-up gate, the Job and the collectors. A wrong tag, a missing Prometheus or a
-storage class that the second pod cannot use fails here in 5 minutes, and not two hours into
+This runs the full sequence of one cell, the 12 operations listed below. A wrong tag, a
+missing Prometheus or a bad storage class fails here, in 5 minutes, and not two hours into
 the sweep. Delete `results/smoke` when it passes. It is not a measurement: two seeds cannot
 give a result.
 
 Then run the sweep:
 
 ```bash
-LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
+benchmarks/run_sweep.sh 16
 ```
-
-The variable `LOADAWARE_TAG` is the tag of the router image. The variable `BENCH_TAG` is the tag
-of the driver image. Both are necessary.
 
 If you built your own images in step 2, give their names also:
 
@@ -322,50 +341,68 @@ For each cell, `run_cell.sh` does these operations:
 
 ### Step 6: make the results
 
-The sweep leaves one directory for each cell. Four scripts read those directories. They do not
-need the cluster.
+The sweep leaves one directory for each cell. Everything in this step runs on the laptop. The
+cluster is not necessary. Three commands make the results:
 
-First, collect the per-seed numbers into one small CSV. It is a few kilobytes, and it holds
-every number that the report and the figures use.
+```bash
+python3 benchmarks/analyze.py table results/<sweep>/*       # the results table
+python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
+  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
+python3 benchmarks/utilization.py report results/<sweep>/*
+```
+
+The table gives one row for each cell: the median over the seeds of the error rate, the TTFT,
+the inter-token latency, the end-to-end latency, the throughput and the load imbalance. It
+looks like this:
+
+```
+cell            seeds  error_rate  ttft_p50_s  ttft_p95_s  ttft_p99_s  itl_p95_s  e2e_p95_s  req_per_s  tok_per_s  imbalance
+kvaware            20       0.43%       0.173       0.324       0.415      0.151      7.077      14.41        922       2.39
+loadaware-b0.5     20       0.34%       0.152       0.296       0.368      0.143      5.958      14.39        921       1.25
+roundrobin         20       0.08%       1.144      11.051      13.309      0.912     28.381      10.41        666       1.50
+```
+
+The table is descriptive. It has no p-values: the test was registered for named pairs, and a
+p-value for every pair of cells would make the threshold meaningless. For the test, read "The
+statistical test" below.
+
+`plot_results.py` makes the 12 figures. Write them to a directory for that sweep. Do not write
+them to `docs/figures/`. That directory holds the figures for the reported sweep.
+`utilization.py` gives the GPU, the CPU and the memory numbers.
+
+#### The statistical test
+
+`analyze.py compare` runs the pre-registered test on one pair of cells: the candidate first,
+then the baseline. The candidate is the cell under test. The baseline is always the `kvaware`
+cell. The command prints the per-seed pairs, the p-value and the size of the change.
+
+```bash
+python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
+```
+
+The `roundrobin` cell is a comparator for the figures. It is not one of the tested pairs.
+
+The command tests one metric at a time. Select it with `--metric`:
+
+| `--metric` value | Meaning |
+|---|---|
+| `ttft_p95` | The TTFT p95 of each seed. The default, and one of the two primary measurements. |
+| `imbalance` | The load imbalance of each seed. The other primary measurement. |
+| `ttft_slo_miss` | The fraction of the sent requests with no first token before the objective. Set the objective with `--slo`, in seconds. An errored request counts as a late request. |
+| `ttft_`, `e2e_`, `itl_` + `mean`, `p50`, `p90`, `p95`, `p99` | The latency statistics, for example `e2e_p99`. |
+| `throughput_req_s`, `throughput_tok_s` | The requests and the tokens for each second. |
+| `error_rate` | The error rate of each seed. |
+
+The metric `ttft_slo_miss` is 1 minus the goodput. The figure `fig12-goodput` draws the whole
+curve from 50 ms to 400 ms, so one objective is not a threshold to select.
+
+#### For the reported sweep
+
+`export_summary.py` collects the per-seed numbers into one small CSV. It holds every number
+that the report and the figures use. The repository commits this file for the reported sweep.
 
 ```bash
 python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
-```
-
-Next, run the statistical test. This compares the candidate cell with the baseline cell. It
-prints the p-value and the size of the change.
-
-```bash
-python3 benchmarks/analyze.py compare results/<sweep>/<candidate> results/<sweep>/<baseline>
-```
-
-The command tests one metric at a time. The default metric is `ttft_p95`. Give `--metric` for a
-different one. These two are the other measurements that the report gives:
-
-```bash
-python3 benchmarks/analyze.py compare <candidate> <baseline> --metric imbalance
-python3 benchmarks/analyze.py compare <candidate> <baseline> --metric ttft_slo_miss --slo 0.15
-```
-
-The metric `ttft_slo_miss` is the goodput. It is the fraction of the sent requests that did not
-get the first token before the objective. Change the objective with `--slo`, in seconds. An
-errored request counts as a late request. The figure `fig12-goodput` draws the whole curve from
-50 ms to 400 ms, so one objective is not a threshold to select.
-
-Next, make the 12 figures.
-
-```bash
-python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
-  --comparator results/<sweep>/<roundrobin> --out docs/figures-<sweep>
-```
-
-Write the figures to a directory for that sweep. Do not write them to `docs/figures/`. That
-directory holds the figures for the reported sweep.
-
-Last, make the utilization report. This gives the GPU, the CPU and the memory numbers.
-
-```bash
-python3 benchmarks/utilization.py report results/<sweep>/*
 ```
 
 If a new sweep becomes the reported sweep, change the cell names in `scripts/reproduce.sh` in
@@ -413,6 +450,10 @@ requests.
 
 The percentiles come from the CSV rows. They do not come from a Prometheus histogram. Thus the
 p95 and the p99 values are exact.
+
+The load imbalance is the mean in-flight count of the busiest server divided by the mean
+in-flight count of the most idle server. Each seed gives one value, over the send window of
+that seed. A value of 1.0 is even.
 
 Two values are not available. vLLM has no `process_*` collector. Therefore the host CPU and the
 host memory of the servers cannot be measured. The report gives them as missing. It does not

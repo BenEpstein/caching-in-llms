@@ -62,6 +62,19 @@ relative_load = (load - fleet_mean) / max(1, fleet_mean)
 Both terms are fractions. Thus `beta` does not have a unit. The router calculates the fleet
 mean for each request.
 
+### The words of the score
+
+| Word | Meaning |
+|---|---|
+| Cache benefit | The fraction of the prompt that a server has in its cache. The first term of the score. |
+| Load penalty | The count of the requests in flight on a server: prefill plus decode. The queue does not enter the score. |
+| Relative load | The load penalty as a signed fraction of the fleet mean. A value of 0.0 is the fleet average. A value of +1.0 is two times the average. This is the term that `beta` weighs. |
+| Load imbalance | The outcome that the benchmark measures, not a term of the score. A value of 1.0 is even. `benchmarks/README.md`, "The metrics", gives the definition. |
+
+"Relative load" and "load imbalance" are not the same. Relative load is an input of the
+policy, for each request. Load imbalance is the measured outcome, and one of the two tested
+claims. The policy weighs the first to decrease the second.
+
 ### The tunable parameter
 
 The policy has one parameter. Set it with an environment variable.

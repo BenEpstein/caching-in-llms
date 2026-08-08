@@ -811,7 +811,9 @@ def main() -> None:
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
-    cells = [load(r) for r in args.runs]
+    # The documented invocation is `results/<sweep>/*`, and a sweep dir also
+    # holds summary-per-seed.csv - files are not cells.
+    cells = [load(r) for r in args.runs if os.path.isdir(r)]
 
     rates = {c["rate"] for c in cells}
     if len(rates) > 1:
