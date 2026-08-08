@@ -63,6 +63,19 @@ against the baseline's 2.358 - if anything slightly worse, p = 0.9734), while β
 1.249. The load term is the entire mechanism - the routing rewrite on its own does nothing.
 That was pre-declared falsifiable before the comparator ran.
 
+**And it replicates.** An independent seven-cell sweep two days later, same images and same
+frozen workload, reproduces the headline at **−49.4%** (p < 0.0001) against the −48.1% above,
+with the ablation null again. Two 20-seed sweeps in different windows landing within 1.3 points
+is a stronger statement than either alone. That sweep also added β=0.25 and found the floor of
+the trend: it does not balance at all, because at β=0.25 the load term only overrides a cached
+prefix on an engine 200% above the fleet mean. `results/gen3-7cell/`, figures in
+`docs/figures-gen3/`.
+
+The re-run's *latency* reading (18.7%, p = 0.0107, where the first sweep was null) is reported
+in the report as **exploratory, not as a headline change** — it was examined after a null with
+no fresh pre-registration, which is the same thing as choosing a friendlier metric after the
+fact. The pre-registered latency result remains the null above.
+
 > **The latency null is the pre-registered result, not a fallback.** The original TTFT test was
 > measured from a laptop, and 45–59% of that number turned out to be laptop-to-cluster network,
 > with a per-cell offset larger than the effect. Rather than switch to the engine-side metric
@@ -251,7 +264,17 @@ is a development convenience and is never benchmarked.
 
 Where each section of the project spec is answered. **Both PDFs are built by CI** on every push
 that touches their sources (`.github/workflows/report.yml`) and uploaded as workflow artifacts —
-`report-pdf` and `baseline-justification-pdf` — so neither can drift from the numbers it cites.
+so neither can drift from the numbers it cites.
+
+The repository holds the markdown; the PDFs are build outputs. To get them:
+
+```bash
+gh run download -n report-pdf                 -R BenEpstein/caching-in-llms
+gh run download -n baseline-justification-pdf -R BenEpstein/caching-in-llms
+```
+
+Or from the browser: **Actions → Report → most recent run on `main` → Artifacts**. To build them
+yourself you need `pandoc` and a LaTeX engine — see the header of `docs/report/build.sh`.
 
 | Spec § | Deliverable | Artifact |
 |---|---|---|
