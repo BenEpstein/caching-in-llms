@@ -69,11 +69,11 @@ mean for each request.
 | Cache benefit | The fraction of the prompt that a server has in its cache. The first term of the score. |
 | Load penalty | The count of the requests in flight on a server: prefill plus decode. The queue does not enter the score. |
 | Relative load | The load penalty as a signed fraction of the fleet mean. A value of 0.0 is the fleet average. A value of +1.0 is two times the average. This is the term that `beta` weighs. |
-| Load imbalance | The outcome that the benchmark measures. It is the mean load of the busiest server divided by the mean load of the most idle server, in the measurement window. A value of 1.0 is even. |
+| Load imbalance | The outcome that the benchmark measures, not a term of the score. A value of 1.0 is even. `benchmarks/README.md`, "The metrics", gives the definition. |
 
 "Relative load" and "load imbalance" are not the same. Relative load is an input of the
-policy, calculated for each request. Load imbalance is the measured outcome, and one of the
-two tested claims. The policy weighs the first to decrease the second.
+policy, for each request. Load imbalance is the measured outcome, and one of the two tested
+claims. The policy weighs the first to decrease the second.
 
 ### The tunable parameter
 

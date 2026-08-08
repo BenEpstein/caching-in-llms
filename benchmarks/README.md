@@ -25,14 +25,15 @@ Generation 2 and generation 3 use the same instrument and the same images. They 
 time windows. Do not compare a cell from one sweep with a cell from a different sweep. The tool
 `analyze.py` refuses to do this. It compares the `sweep_id` value in each `run.json` file.
 
-To check the reported numbers without a cluster, run one command:
+To check the reported numbers without a cluster, do the Python setup in "On your laptop"
+below, then run one command:
 
 ```bash
 ./scripts/reproduce.sh
 ```
 
-It calculates every number in the report again from the data in the repository, and stops with
-an error if a number is different. To run the benchmark itself, on a cluster, continue reading.
+The section "The data is in the repository" explains what it checks. To run the benchmark
+itself, on a cluster, continue reading.
 
 ## The files
 
@@ -153,21 +154,23 @@ helm repo add vllm https://vllm-project.github.io/production-stack
 helm install stack vllm/vllm-stack -n cache-llm --version 0.1.11 \
   -f deploy/values-baseline-kvaware.yaml
 kubectl apply -n cache-llm -f deploy/prometheus.yaml
-kubectl get pods -n cache-llm -w          # wait for 5 pods, approximately 5 minutes
+kubectl get pods -n cache-llm -w          # Ctrl-C when the 5 pods are Running
+benchmarks/rate_pilot.sh                  # find the knee rate of your cluster (step 4)
 
 # One time for each run.
 export LOADAWARE_TAG=acf43d1 BENCH_TAG=acf43d1        # our CI-built images (step 2)
-python3 benchmarks/freeze_workloads.py                # make the workload (step 3)
-benchmarks/rate_pilot.sh                              # find your rate; ours is 16 (step 4)
-SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke   # 5-minute test (step 5)
+RATE=16                                               # our knee; use the rate from the pilot
+python3 benchmarks/freeze_workloads.py                # early workload check (step 3)
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 $RATE results/smoke   # 5-minute test (step 5)
 rm -rf results/smoke
-benchmarks/run_sweep.sh 16                            # 7 cells, approximately 2.3 hours
+benchmarks/run_sweep.sh $RATE                         # 7 cells, approximately 2.3 hours
 
 # After the sweep, on the laptop. The cluster is not necessary.
+# <sweep> is the directory that run_sweep.sh printed, results/sweep-<timestamp>.
 python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
-python3 benchmarks/analyze.py compare results/<sweep>/<candidate> results/<sweep>/<baseline>
+python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
 python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
-  --comparator results/<sweep>/<roundrobin> --out docs/figures-<sweep>
+  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
 python3 benchmarks/utilization.py report results/<sweep>/*
 ```
 
@@ -230,7 +233,7 @@ export BASE_URL=https://<your-router-address>
 
 ### Step 2: get the two images
 
-The benchmark needs two images. The scripts point to our public images. Thus you only set the
+The benchmark needs two images. The scripts point to our public images. Thus you set only the
 tag:
 
 ```bash
@@ -265,11 +268,10 @@ podman push $REG/bench-driver:$TAG
 Make both repositories public. The cluster pulls them with no credentials. For a private
 repository, add an image pull secret to the namespace yourself. The scripts do not make one.
 
-Then give the names and the tag to the sweep in step 5: set `ROUTER_REPO`, `BENCH_REPO`,
-`LOADAWARE_TAG` and `BENCH_TAG`.
+Then give the names and the tag to the sweep in step 5.
 
-Use the git short SHA as the tag, not `latest`. Each cell writes the image and its digest into
-`run.json`. A floating tag makes the measurement impossible to audit later.
+Do not use `latest` as the tag. Each cell writes the image and its digest into `run.json`. A
+floating tag makes the measurement impossible to audit later.
 
 ### Step 3: make the workload
 
@@ -293,22 +295,22 @@ is between 14 and 16 requests for each second.
 
 ### Step 5: run the sweep
 
-Run one cell with two seeds first. It takes approximately 5 minutes.
+Run one cell with two seeds first. It takes approximately 5 minutes. The two tags come from
+the exports in step 2.
 
 ```bash
-LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> \
-  SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
 ```
 
-This runs the full sequence of one cell: the image check, the cold start, the registry probe,
-the warm-up gate, the Job and the collectors. A wrong tag, a missing Prometheus or a bad
-storage class fails here, in 5 minutes, and not two hours into the sweep. Delete
-`results/smoke` when it passes. It is not a measurement: two seeds cannot give a result.
+This runs the full sequence of one cell, the 12 operations listed below. A wrong tag, a
+missing Prometheus or a bad storage class fails here, in 5 minutes, and not two hours into
+the sweep. Delete `results/smoke` when it passes. It is not a measurement: two seeds cannot
+give a result.
 
 Then run the sweep:
 
 ```bash
-LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
+benchmarks/run_sweep.sh 16
 ```
 
 If you built your own images in step 2, give their names also:
@@ -353,7 +355,7 @@ Next, run the statistical test. This compares the candidate cell with the baseli
 prints the p-value and the size of the change.
 
 ```bash
-python3 benchmarks/analyze.py compare results/<sweep>/<candidate> results/<sweep>/<baseline>
+python3 benchmarks/analyze.py compare results/<sweep>/*-loadaware-b0.5 results/<sweep>/*-kvaware
 ```
 
 The command tests one metric at a time. The default metric is `ttft_p95`. Give `--metric` for a
@@ -373,7 +375,7 @@ Next, make the 12 figures.
 
 ```bash
 python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
-  --comparator results/<sweep>/<roundrobin> --out docs/figures-<sweep>
+  --comparator results/<sweep>/*-roundrobin --out docs/figures-<sweep>
 ```
 
 Write the figures to a directory for that sweep. Do not write them to `docs/figures/`. That
@@ -432,8 +434,8 @@ The percentiles come from the CSV rows. They do not come from a Prometheus histo
 p95 and the p99 values are exact.
 
 The load imbalance is the mean in-flight count of the busiest server divided by the mean
-in-flight count of the most idle server, in the measurement window. A value of 1.0 is even.
-The root `README.md` defines the terms of the score, in "The words of the score".
+in-flight count of the most idle server. Each seed gives one value, over the send window of
+that seed. A value of 1.0 is even.
 
 Two values are not available. vLLM has no `process_*` collector. Therefore the host CPU and the
 host memory of the servers cannot be measured. The report gives them as missing. It does not
