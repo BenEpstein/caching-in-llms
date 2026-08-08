@@ -267,6 +267,8 @@ load-bearing threshold - and because the β = 0 ablation runs negative across th
 which no measurement artefact produces. It is reported *beside* the TTFT null, never in place
 of it.
 
+![**Secondary, post-hoc metric — not a claim.** Goodput against the TTFT objective, swept 50–400 ms rather than evaluated at one point. The shaded band is what the load term buys over the baseline; the grey band below is what is lost when it is switched off, and the ablation runs the wrong way across the entire range. `roundrobin` is the cache-blind floor both cache-aware policies stand on. The marker is at the **documented 150 ms objective, not at the best point of the sweep** — the lower panel is the same difference on its own scale.](../figures/fig12-goodput.png){width=60%}
+
 The β grid at the operating point, medians across 20 seeds each:
 
 | Arm | Imbalance | vs `kvaware` |
