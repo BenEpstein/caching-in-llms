@@ -403,11 +403,11 @@ the instance holding the KV. It saturates near 0.95 on every arm including round
 not discriminate between policies. Every hit-rate number in this report is the vLLM
 prefix-cache counter.
 
-![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=70%}
+![TTFT p95 against β at 16 req/s, against the cache-hit-rate cost. The hit rate falls monotonically as β rises, 91.2% to 86.1%, which is the mechanism behind the β = 2.0 latency reversal — see the text.](../figures/fig7-beta-tradeoff.png){width=58%}
 
 ## Resource cost
 
-![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=70%}
+![Resource utilization by arm. Equal is the expected outcome: the policy changes *where* requests go, not how much work there is.](../figures/fig10-utilization.png){width=58%}
 
 The policy is not buying its result by spending more hardware. Both GPUs run at 82–93% SM
 utilization on every arm and board power sits at 108–119 W per device throughout — which is
