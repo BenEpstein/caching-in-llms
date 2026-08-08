@@ -7,8 +7,7 @@ Ben Epstein and Eliad Bazak
 This project adds one routing policy, `loadaware`, to the vLLM Production Stack. The stock
 router can maximize cache hits or balance load, but no shipped policy uses both signals.
 `loadaware` scores each server on the cache benefit it offers a request against its live load,
-and routes the request to the best score. This document justifies the baseline that hosts the
-extension.
+and routes the request to the best score.
 
 ## The baseline
 
@@ -23,8 +22,7 @@ request, and therefore which cached data a request can hit.
 
 **Maturity and community support.** LMCache is the KV-cache backend that vLLM itself
 integrates with. It ships an official Helm chart, a documented KV-aware routing tutorial,
-router and engine images in matched version pairs, and Prometheus metrics on both tiers. Both
-projects are under active development.
+router and engine images in matched version pairs, and Prometheus metrics on both tiers.
 
 **Ease of modification.** Every routing strategy lives in one file,
 `src/vllm_router/routers/routing_logic.py`: a `RoutingLogic` enum, one class per strategy with
@@ -43,7 +41,6 @@ the extension.
 - **Prefix-addressed KV cache.** LMCache stores KV data in chunks keyed by prompt prefix. A
   central controller tracks which server holds which chunk (`kv_controller.py`,
   `registry.find_kv`).
-- **Multi-tier storage.** KV data can spill from GPU memory to CPU memory and disk.
 - **A live load signal per server.** `EngineStats` scrapes `num_running_requests`,
   `num_queuing_requests`, and `gpu_cache_usage_perc` from each server. The router passes these
   values to every `route_request()` call.
