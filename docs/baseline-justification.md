@@ -33,8 +33,8 @@ Helm chart does not expose is still reachable.
 **Measurable in a live deployment.** The stack installs with one Helm command and exposes
 per-request metrics on both tiers through Prometheus. The `--routing-logic` flag swaps the
 routing policy while the deployment, model, and workload stay identical. This supports a
-controlled vanilla-against-extended comparison on a live cluster, which is how we evaluated
-the extension.
+controlled vanilla-against-extended comparison on a live cluster, which is how we will
+evaluate the extension.
 
 ## Main features relevant to this project
 
