@@ -25,6 +25,15 @@ Generation 2 and generation 3 use the same instrument and the same images. They 
 time windows. Do not compare a cell from one sweep with a cell from a different sweep. The tool
 `analyze.py` refuses to do this. It compares the `sweep_id` value in each `run.json` file.
 
+To check the reported numbers without a cluster, run one command:
+
+```bash
+./scripts/reproduce.sh
+```
+
+It calculates every number in the report again from the data in the repository, and stops with
+an error if a number is different. To run the benchmark itself, on a cluster, continue reading.
+
 ## The files
 
 | File | Function |
@@ -135,6 +144,33 @@ files are the primary measurement.
 
 ## How to run the benchmark
 
+This is the full run with our public images. Each command is explained in the steps below.
+
+```bash
+# One time for each cluster. Set the storage class first (see the section above).
+kubectl create namespace cache-llm
+helm repo add vllm https://vllm-project.github.io/production-stack
+helm install stack vllm/vllm-stack -n cache-llm --version 0.1.11 \
+  -f deploy/values-baseline-kvaware.yaml
+kubectl apply -n cache-llm -f deploy/prometheus.yaml
+kubectl get pods -n cache-llm -w          # wait for 5 pods, approximately 5 minutes
+
+# One time for each run.
+export LOADAWARE_TAG=acf43d1 BENCH_TAG=acf43d1        # our CI-built images (step 2)
+python3 benchmarks/freeze_workloads.py                # make the workload (step 3)
+benchmarks/rate_pilot.sh                              # find your rate; ours is 16 (step 4)
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke   # 5-minute test (step 5)
+rm -rf results/smoke
+benchmarks/run_sweep.sh 16                            # 7 cells, approximately 2.3 hours
+
+# After the sweep, on the laptop. The cluster is not necessary.
+python3 benchmarks/export_summary.py results/<sweep>/* --out results/<sweep>/summary-per-seed.csv
+python3 benchmarks/analyze.py compare results/<sweep>/<candidate> results/<sweep>/<baseline>
+python3 benchmarks/plot_results.py results/<sweep>/* --cand loadaware-b0.5 \
+  --comparator results/<sweep>/<roundrobin> --out docs/figures-<sweep>
+python3 benchmarks/utilization.py report results/<sweep>/*
+```
+
 ### Step 1: install the stack
 
 ```bash
@@ -161,7 +197,7 @@ Now wait for the pods:
 kubectl get pods -n cache-llm -w
 ```
 
-The install is complete when you see these pods. The two engine pods need approximately five
+The install is complete when you see these pods. The two engine pods need approximately 5
 minutes, because each one loads the model.
 
 ```
@@ -180,21 +216,13 @@ This install gives the baseline router. That is correct for the sweep. The first
 `kvaware`, and each cell installs its own arm before it measures. To deploy the `loadaware`
 router by itself, outside a benchmark, refer to `README.md`, "Deploy the stack".
 
-The measured requests do not leave the cluster. The Job sends them to the router Service at
-`stack-router-service.cache-llm.svc.cluster.local`. Therefore you do not need an Ingress or an
-OpenShift route for the measurement.
+You do not need an Ingress or an OpenShift route. The Job sends the measured requests to the
+router Service, inside the cluster. The warm-up and the registry probe run from your laptop.
+For them, each cell opens its own port-forward and closes it at the end. Do not open a
+port-forward by hand. Every cell restarts the router, and the restart kills a port-forward.
 
-Two operations do run from your laptop: the warm-up and the registry probe. They need a URL
-that you can reach. You do not need to do anything for this. Each cell opens its own
-port-forward and closes it at the end.
-
-Do not open a port-forward by hand and leave it open. It will not survive. Every cell restarts
-the router, and a port-forward is bound to one pod, so the restart kills it. This is why the
-scripts open the forward after the restart and not before.
-
-If you have an Ingress or an OpenShift route to the router, set `BASE_URL` to its address. Those
-go to the Service, not to one pod, so they survive the restart and the scripts then make no
-port-forward at all.
+If you have an Ingress or a route to the router, set `BASE_URL` to its address. A route goes to
+the Service, not to one pod, so it survives the restart. The scripts then make no port-forward.
 
 ```bash
 export BASE_URL=https://<your-router-address>
@@ -202,23 +230,25 @@ export BASE_URL=https://<your-router-address>
 
 ### Step 2: get the two images
 
-The benchmark needs two images.
-
-| Image | Dockerfile | Function | Our public image |
-|---|---|---|---|
-| Router | `Dockerfile` | The router with the `loadaware` policy | `quay.io/rhl193000/lmstack-router-loadaware` |
-| Driver | `Dockerfile.bench` | Sends the requests from a pod | `quay.io/rhl193000/bench-driver` |
-
-You can use our two public images and go to step 3. Both carry the tag `acf43d1`, which is the
-git short SHA that CI built them from. Step 5 needs that tag:
+The benchmark needs two images. The scripts point to our public images. Thus you only set the
+tag:
 
 ```bash
 export LOADAWARE_TAG=acf43d1
 export BENCH_TAG=acf43d1
 ```
 
-To build your own, use the root of the repository as the build context. Both Dockerfiles copy
-files from it.
+The tag `acf43d1` is the git short SHA that CI built the images from. Our reported measurements
+use these images.
+
+| Image | Dockerfile | Function | Our public image |
+|---|---|---|---|
+| Router | `Dockerfile` | The router with the `loadaware` policy | `quay.io/rhl193000/lmstack-router-loadaware` |
+| Driver | `Dockerfile.bench` | Sends the requests from a pod | `quay.io/rhl193000/bench-driver` |
+
+#### To build your own images (optional)
+
+Use the root of the repository as the build context. Both Dockerfiles copy files from it.
 
 ```bash
 export REG=docker.io/<your-username>
@@ -232,23 +262,14 @@ podman push $REG/lmstack-router-loadaware:$TAG
 podman push $REG/bench-driver:$TAG
 ```
 
-Make both repositories public on Docker Hub. The cluster pulls them with no credentials. For a
-private repository you must add an image pull secret to the namespace yourself. The scripts do
-not make one.
+Make both repositories public. The cluster pulls them with no credentials. For a private
+repository, add an image pull secret to the namespace yourself. The scripts do not make one.
 
-Then give the two names and the tag to the sweep in step 5:
+Then give the names and the tag to the sweep in step 5: set `ROUTER_REPO`, `BENCH_REPO`,
+`LOADAWARE_TAG` and `BENCH_TAG`.
 
-| Variable | Value |
-|---|---|
-| `ROUTER_REPO` | `docker.io/<your-username>/lmstack-router-loadaware` |
-| `BENCH_REPO` | `docker.io/<your-username>/bench-driver` |
-| `LOADAWARE_TAG` and `BENCH_TAG` | The tag you built, for example the git short SHA |
-
-The tag is your record of what you measured. Use the git short SHA, not `latest`. Each cell
-writes the image and its digest into `run.json`, so a floating tag makes the measurement
-impossible to audit later.
-
-Our own reported measurements use images that CI built with the same two Dockerfiles.
+Use the git short SHA as the tag, not `latest`. Each cell writes the image and its digest into
+`run.json`. A floating tag makes the measurement impossible to audit later.
 
 ### Step 3: make the workload
 
@@ -279,20 +300,16 @@ LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> \
   SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
 ```
 
-This runs the whole choreography of one cell: the image check, the cold start, the registry
-probe, the warm-up gate, the Job and the collectors. A wrong tag, a missing Prometheus or a
-storage class that the second pod cannot use fails here in 5 minutes, and not two hours into
-the sweep. Delete `results/smoke` when it passes. It is not a measurement: two seeds cannot
-give a result.
+This runs the full sequence of one cell: the image check, the cold start, the registry probe,
+the warm-up gate, the Job and the collectors. A wrong tag, a missing Prometheus or a bad
+storage class fails here, in 5 minutes, and not two hours into the sweep. Delete
+`results/smoke` when it passes. It is not a measurement: two seeds cannot give a result.
 
 Then run the sweep:
 
 ```bash
 LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
 ```
-
-The variable `LOADAWARE_TAG` is the tag of the router image. The variable `BENCH_TAG` is the tag
-of the driver image. Both are necessary.
 
 If you built your own images in step 2, give their names also:
 
@@ -413,6 +430,10 @@ requests.
 
 The percentiles come from the CSV rows. They do not come from a Prometheus histogram. Thus the
 p95 and the p99 values are exact.
+
+The load imbalance is the mean in-flight count of the busiest server divided by the mean
+in-flight count of the most idle server, in the measurement window. A value of 1.0 is even.
+The root `README.md` defines the terms of the score, in "The words of the score".
 
 Two values are not available. vLLM has no `process_*` collector. Therefore the host CPU and the
 host memory of the servers cannot be measured. The report gives them as missing. It does not
