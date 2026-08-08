@@ -405,10 +405,6 @@ def check_comparable(cand_dir: str, base_dir: str) -> None:
         # p-value. Guarded only when BOTH runs carry the field: `sweep_id` postdates the runs
         # committed before it, and back-filling a batch name onto them is a claim about
         # provenance this check has no business inventing.
-        # Known limit (#75): gen2-confirmatory's roundrobin cell shares the sweep_id but was
-        # measured 14 hours after the other five, so this guard will NOT refuse pairing
-        # against it. Roundrobin is a framing comparator (--comparator), never a positional
-        # cell in a paired test; that rule is convention here, enforced nowhere.
         if a.get("sweep_id") and b.get("sweep_id") and a["sweep_id"] != b["sweep_id"]:
             raise SystemExit(
                 f"runs are not comparable: sweep_id differs "
