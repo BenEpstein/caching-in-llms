@@ -50,7 +50,7 @@ METRICS = [
     # The driver's client-side ttft_s carries the laptop->cluster WAN as a
     # per-cell constant offset, so it stays in the CSVs as user-observed
     # latency but cannot compare arms measured at different times. See
-    # benchmarks/README.md, "Which latency source is trustworthy".
+    # benchmarks/README.md, "The measurement runs inside the cluster".
     "vllm:time_to_first_token_seconds_bucket",
     "vllm:time_to_first_token_seconds_sum",
     "vllm:time_to_first_token_seconds_count",
@@ -64,7 +64,7 @@ METRICS = [
     "lmcache:request_cache_hit_rate_count",
     # §3 utilization (#35). Every series from here down is READ by
     # utilization.py; which number comes from where is in benchmarks/README.md,
-    # "Utilization (§3)" (the process_* pair only ever returns the router).
+    # "The metrics" (the process_* pair only ever returns the router).
     # Deliberately not a wider
     # net: #35 exists because series were collected and read by nothing, and
     # adding more unread ones reproduces the thing it fixed.

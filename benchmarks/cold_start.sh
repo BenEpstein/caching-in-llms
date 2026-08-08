@@ -26,23 +26,23 @@ ENGINE_DEPLOY="${ENGINE_DEPLOY:-stack-llm-deployment-vllm}"
 REPLICAS="${REPLICAS:-2}"
 
 echo "==> draining engines to 0 (no live engine may register with the new router)"
-oc scale "deploy/$ENGINE_DEPLOY" -n "$NS" --replicas=0
+kubectl scale "deploy/$ENGINE_DEPLOY" -n "$NS" --replicas=0
 for _ in $(seq 120); do
-  n=$(oc get pods -n "$NS" -l model=llm --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  n=$(kubectl get pods -n "$NS" -l model=llm --no-headers 2>/dev/null | wc -l | tr -d ' ')
   [ "$n" = 0 ] && break
   sleep 5
 done
-[ "$(oc get pods -n "$NS" -l model=llm --no-headers 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
+[ "$(kubectl get pods -n "$NS" -l model=llm --no-headers 2>/dev/null | wc -l | tr -d ' ')" = 0 ] \
   || { echo "engines did not drain" >&2; exit 1; }
 
 echo "==> restarting the router into an empty cluster (kv_pool starts clean)"
-oc rollout restart "deploy/$ROUTER_DEPLOY" -n "$NS"
-oc rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
+kubectl rollout restart "deploy/$ROUTER_DEPLOY" -n "$NS"
+kubectl rollout status "deploy/$ROUTER_DEPLOY" -n "$NS" --timeout=10m
 ROUTER_UP_TS=$(date +%s)
 
 echo "==> bringing engines back to $REPLICAS"
-oc scale "deploy/$ENGINE_DEPLOY" -n "$NS" --replicas="$REPLICAS"
-oc rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
+kubectl scale "deploy/$ENGINE_DEPLOY" -n "$NS" --replicas="$REPLICAS"
+kubectl rollout status "deploy/$ENGINE_DEPLOY" -n "$NS" --timeout=30m
 
 # A `--routing-logic roundrobin` router never instantiates the LMCache controller,
 # so no worker ever registers and there is no stale id to guard against either.
@@ -55,7 +55,7 @@ fi
 echo "==> waiting for exactly $REPLICAS worker registrations"
 for _ in $(seq 60); do
   since=$(( $(date +%s) - ROUTER_UP_TS )); [ "$since" -lt 1 ] && since=1
-  registered=$(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
+  registered=$(kubectl logs "deploy/$ROUTER_DEPLOY" -n "$NS" --since="${since}s" 2>/dev/null \
     | grep -c "Registered instance-worker" || true)
   [ "$registered" -ge "$REPLICAS" ] && break
   sleep 5
@@ -65,9 +65,9 @@ done
 
 # (b) as an assertion: a stale id here means the drain raced, and the run would
 # carry KeyError 500s.
-live=$(oc get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}')
+live=$(kubectl get pods -n "$NS" -l model=llm -o jsonpath='{.items[*].metadata.name}')
 stale=0
-for id in $(oc logs "deploy/$ROUTER_DEPLOY" -n "$NS" 2>/dev/null \
+for id in $(kubectl logs "deploy/$ROUTER_DEPLOY" -n "$NS" 2>/dev/null \
     | grep -o "Registered instance-worker ('[^']*'" | grep -o "'[^']*'" | tr -d "'" | sort -u); do
   case " $live " in *" $id "*) ;; *) echo "    STALE registration: $id" >&2; stale=1 ;; esac
 done

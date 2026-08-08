@@ -1,11 +1,11 @@
 # Plain single-pod Prometheus (no operator, no CRDs) for the cache-llm namespace.
 # Why the kube-prometheus-stack subchart's Prometheus is disabled instead:
 # deploy/values-baseline-kvaware.yaml, under `kube-prometheus-stack`.
-# Storage is an emptyDir — experiment truth lives in exported CSVs, not TSDB history.
+# Storage is an emptyDir - experiment truth lives in exported CSVs, not TSDB history.
 #
 # Scrapes:
 #   - vLLM engine pods  (label model=llm, port 8000, /metrics)
-#   - router            (via service DNS,  port 80,  /metrics — includes
+#   - router            (via service DNS,  port 80,  /metrics - includes
 #                        lmcache cache_controller_* gauges)
 apiVersion: v1
 kind: ServiceAccount

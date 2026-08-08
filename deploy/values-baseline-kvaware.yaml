@@ -2,8 +2,8 @@
 # Cluster: gapu-2 (OpenShift), 2x NVIDIA A10 23GB.
 # Derived from production-stack tutorials/assets/values-17-kv-aware.yaml.
 #
-# NOTE: model + hf_token secret are set at install time; see "Deploying the stack"
-# in benchmarks/README.md.
+# NOTE: model + hf_token secret are set at install time; see "Step 1: install the
+# stack" in benchmarks/README.md.
 
 servingEngineSpec:
   runtimeClassName: ""
@@ -17,10 +17,10 @@ servingEngineSpec:
       # IMPORTANT: engine lmcache version must stay protocol-compatible with the
       # router image's lmcache (controller<->worker ZMQ schema skew breaks
       # registration SILENTLY). lmstack-router:latest carries lmcache 0.3.11;
-      # v0.5.1rc2 (lmcache 0.5.1rc2) is too far ahead — v0.3.9post2 is the
+      # v0.5.1rc2 (lmcache 0.5.1rc2) is too far ahead - v0.3.9post2 is the
       # closest official engine release to the router's 0.3.11.
       tag: "v0.3.9post2"
-      modelURL: "Qwen/Qwen2.5-3B-Instruct"  # ungated — no HF token needed
+      modelURL: "Qwen/Qwen2.5-3B-Instruct"  # ungated - no HF token needed
       replicaCount: 2               # one per GPU node
       # GPU workers are heavily over-requested by idle platform pods (worker0: only ~5Gi
       # requestable) but actual free RAM is ~22Gi+. Small requests for schedulability,
@@ -86,7 +86,7 @@ routerSpec:
   # lmcache==0.3.9post2 (2025-11-14..2026-01-14 window, commit 37bafbcf) so the
   # controller protocol EXACTLY matches the v0.3.9post2 engines. ":latest"
   # carries lmcache 0.3.11 whose controller cannot decode 0.3.9post2 workers
-  # (and no official engine image carries 0.3.11 — they leapfrog each other).
+  # (and no official engine image carries 0.3.11 - they leapfrog each other).
   tag: "0.1.9.dev9-g37bafbcf5.d20260107"
   resources:
     requests:
@@ -97,7 +97,7 @@ routerSpec:
       memory: "4G"
   routingLogic: "kvaware"
   lmcacheControllerPort: 9000
-  # NOTE: no lmcacheControllerReplyPort / HeartbeatPort — the 0.1.9-era router
+  # NOTE: no lmcacheControllerReplyPort / HeartbeatPort - the 0.1.9-era router
   # predates those flags (single-socket controller on 9000; registration and
   # KV events all flow through the pull port, which the chart Service exposes).
   sessionKey: "x-user-id"
@@ -106,7 +106,6 @@ routerSpec:
   # HF_HOME=/tmp/hf is set per cell by run_cell.sh, on BOTH arms (#21) -
   # KvawareRouter carries the identical try/except, so this is not an
   # arm-specific fix. It cannot live here (chart 0.1.11 has no routerSpec.env).
-  # See benchmarks/README.md, "Cluster gotchas".
 
   # kvaware router init (LMCache controller + transformers imports) takes ~20s;
   # the default startup probe (5s delay, 3x5s failures) kills it mid-boot.
@@ -125,7 +124,7 @@ routerSpec:
 
 # ---------------------------------------------------------------------------
 # Observability: Prometheus + Grafana with the 3 shipped dashboards
-# (vllm, lmcache, model metrics). Lean footprint — cluster memory is tight.
+# (vllm, lmcache, model metrics). Lean footprint - cluster memory is tight.
 # ---------------------------------------------------------------------------
 grafanaDashboards:
   enabled: true
@@ -143,7 +142,7 @@ kube-prometheus-stack:
   # The cluster has an OLDER prometheus-operator CRD (owned by the Run:AI install);
   # the subchart's Prometheus CR uses fields that CRD doesn't know
   # (.spec.enableOTLPReceiver) -> server-side apply fails. CRDs are cluster-scoped,
-  # not ours to upgrade. So: no operator, no Prometheus CR — we run a plain
+  # not ours to upgrade. So: no operator, no Prometheus CR - we run a plain
   # single-pod Prometheus instead (deploy/prometheus.yaml) and keep only Grafana
   # + the dashboard configmaps from this subchart.
   prometheusOperator:
@@ -163,7 +162,7 @@ kube-prometheus-stack:
         datasources:
           - name: Prometheus
             # the shipped vLLM/LMCache dashboards hardcode datasource uid
-            # "prometheus" — without this pin Grafana assigns a random uid
+            # "prometheus" - without this pin Grafana assigns a random uid
             # and the dashboards show "datasource not found"
             uid: prometheus
             type: prometheus

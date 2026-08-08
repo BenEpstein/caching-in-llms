@@ -616,8 +616,8 @@ def goodput_curves(cells: List[Dict], cand: str, base: str, ablation: str,
 
     `comparator` is an already-loaded cell passed in from outside, NOT a name
     looked up in `cells`, and that is load-bearing. roundrobin is a descriptive
-    framing cell rather than part of the beta grid (benchmarks/README.md, "Sweep
-    design"). Putting it in `cells` puts it in EVERY figure, and its tail then
+    framing cell rather than part of the beta grid (benchmarks/README.md, "Step 5:
+    run the sweep"). Putting it in `cells` puts it in EVERY figure, and its tail then
     compresses the y-axis of fig1 - the centerpiece - until the whole beta curve
     is a flat line on the floor. It reaches exactly one figure by construction,
     and a sweep with no roundrobin cell still plots.

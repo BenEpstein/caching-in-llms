@@ -89,7 +89,7 @@ ERROR_BIAS_ABS = 0.01       # ...or by more than 1 percentage point absolute
 # A DEFAULT, NOT A FIXED THRESHOLD. This is the tunable parameter of the metric
 # (§4), overridable per invocation with `compare --slo`. No single value is
 # load-bearing: fig12 sweeps the objective, and a report quoting one objective
-# must quote the sweep beside it - see benchmarks/README.md ("Goodput").
+# must quote the sweep beside it - see benchmarks/README.md, "Step 6: make the results".
 #
 # Deliberately absent from export_summary.py's committed per-seed table: that CSV
 # is the evidence a reader checks the report against, and baking one objective

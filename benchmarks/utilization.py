@@ -2,7 +2,7 @@
 
 Which series answers which §3 requirement, why DCGM is the GPU source of record,
 and why engine host-CPU is UNAVAILABLE rather than substituted: benchmarks/README.md,
-"Utilization (§3): where each number comes from". The LMCache memory gauges arrived
+"The metrics". The LMCache memory gauges arrived
 with this module (#35), so they exist only on cells run from that commit onward.
 
 Coverage: every series is checked against the cell's measured window and the

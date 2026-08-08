@@ -52,8 +52,8 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # OSL is 64 (run_cell.sh MAX_TOKENS) and must stay there: raise it and the fleet
 # saturates, raise it further and it breaches the catastrophic error ceiling, and
 # imbalance is NON-monotonic in load, so the window where load-aware routing can
-# help closes at BOTH ends. Evidence: benchmarks/README.md, "Why the operating
-# point is rate 16 / OSL 64".
+# help closes at BOTH ends. Evidence: benchmarks/README.md, "The rate: 16 requests
+# for each second" and "The output length: 64 tokens".
 #
 # ---- the beta grid ----------------------------------------------------------
 #
@@ -67,7 +67,11 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #
 # The grid brackets the measured tradeoff (#22), with one point either side of
 # it; a decade-wide grid would spend most of the cluster time confirming a
-# collapse already measured. See benchmarks/README.md, "Two eras of `beta`".
+# collapse already measured.
+#
+# β MEANS TWO DIFFERENT THINGS ACROSS HISTORY - check git_commit before pooling
+# cells: before 7e2dffb it multiplied the absolute in-flight count, from 7e2dffb
+# onward the fleet-relative load. Only β=0 means the same thing on both sides.
 BETA_GRID="${BETA_GRID:-0.5 1.0 2.0 0.25 0}"
 SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 
@@ -75,7 +79,7 @@ SEEDS_FULL="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20"
 # Wilcoxon's resolution is bounded by the pair count, not by the effect size, so
 # small n cannot reach the alpha=0.025 threshold however large the effect; n=20
 # is what buys margin for a reversal or two. The derivation is in
-# benchmarks/README.md, "Statistics (pre-registered)". Seeds are nearly free
+# benchmarks/README.md, "The seeds: 20 seeds, 500 requests for each seed". Seeds are nearly free
 # against the fixed per-cell setup above: do NOT trim them - it saves little and
 # spends the whole reversal budget to do it.
 #

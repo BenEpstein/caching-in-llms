@@ -125,7 +125,7 @@ def parse(lines: Iterable[str], expected_seeds: Iterable[str]) -> Tuple[Dict[str
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--log", required=True, help="output of `oc logs job/<name>`")
+    p.add_argument("--log", required=True, help="output of `kubectl logs job/<name>`")
     p.add_argument("--out", required=True, help="the cell's results directory")
     p.add_argument("--seeds", required=True, help='space-separated, e.g. "1 2 3"')
     p.add_argument("--bench-image", default="unknown", help="recorded in window.env for run.json")
