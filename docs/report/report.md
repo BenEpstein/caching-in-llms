@@ -80,7 +80,7 @@ latency medians also improve: TTFT p95 goes from 320 ms to 295 ms, and end-to-en
 6.78 s to 5.96 s. On goodput, a declared secondary metric, 19.0% fewer requests miss a
 first-token objective of 150 ms (p = 0.0021). An ablation shows that the mechanism is correct.
 When the load term is off (β = 0), the policy gives the same result as the baseline. The load
-term causes the improvement. The new code does not cause it. The policy costs nothing that we
+term, and not the new code, causes the improvement. The policy costs nothing that we
 can measure. The GPU use, the GPU power, the throughput and the router CPU are equal on all
 arms. The policy also balances the cache itself, not only the request counts. The spread of the
 KV cache decreases from 1.70 times to 1.18 times.
@@ -213,7 +213,7 @@ important in that condition.
 
 **Operating point.** The requests arrive open-loop as a Poisson process at **16 req/s**. A pilot
 selected that rate. At that rate the latency leaves its plateau. The TTFT p95 is 2.69 times its
-idle value. The ITL p95 is 4.55 times its idle value. This was more important than we expected.
+idle value. The ITL p95 is 4.55 times its idle value.
 An earlier sweep at 10.5 req/s gave `num_requests_waiting` = 0.00 on both servers. Nothing made a
 queue. A load-aware router had no load to see. **The selection of the operating point is a part
 of the experiment.**
@@ -301,7 +301,7 @@ shows 50 ms to 400 ms. The arms are different across the full range. Second, the
 is negative across that same range. A measurement artefact does not give that result. We give
 this metric **beside** the TTFT null result. We never give it instead of the null result.
 
-![A secondary metric. It is not a claim. Goodput against the TTFT objective, from 50 ms to 400 ms. The upper shaded band shows what the load term gives against the baseline. The grey band below shows the loss when the load term is off. The policy `roundrobin` is the floor that has no cache data. The marker is at the **documented objective of 150 ms**. It is not at the best point of the sweep.](../figures/fig12-goodput.png){width=62%}
+![A secondary metric. It is not a claim. Goodput against the TTFT objective, from 50 ms to 400 ms. The upper shaded band shows what the load term gives against the baseline. The grey band below shows the loss when the load term is off. The policy `roundrobin` is the floor that has no cache data. The marker is at the **documented objective of 150 ms**. It is not at the best point of the sweep.](../figures/fig12-goodput.png){width=59%}
 
 This is the β grid at the operating point. The values are medians of 20 seeds.
 
@@ -372,7 +372,7 @@ tree. The WAN sweep that we keep gives the same argument from committed data: p1
 101.9 ms, the term that is not from the server 124.6 ms to 48.5 ms, and the fraction of 45% to
 59% above.
 
-![The load balance across the two servers. This is what the policy changes.](../figures/fig6-load-balance.png){width=58%}
+![The load balance across the two servers. This is what the policy changes.](../figures/fig6-load-balance.png){width=56%}
 
 ## The ablation is the important result
 
@@ -423,7 +423,7 @@ servers. It measures each server against its **own** local cache. It does not me
 router selected the server that holds the KV data. Its value is near 0.95 on each arm. This
 includes round-robin. Each hit-rate value in this report is the vLLM prefix-cache counter.
 
-![The TTFT p95 against β at 16 req/s, with the cost in the cache hit rate. The hit rate decreases when β increases, from 91.2% to 86.1%. This is the mechanism of the change of direction at β = 2.0.](../figures/fig7-beta-tradeoff.png){width=60%}
+![The TTFT p95 against β at 16 req/s, with the cost in the cache hit rate. The hit rate decreases when β increases, from 91.2% to 86.1%. This is the mechanism of the change of direction at β = 2.0.](../figures/fig7-beta-tradeoff.png){width=57%}
 
 ## Resource cost
 
@@ -447,7 +447,7 @@ Thus those two series do not exist. A statement about the missing data is a part
 The program `utilization.py` stops if the series coverage is not sufficient. It does not
 calculate an average across the gaps.
 
-![The resource use for each arm. Equal values are the expected result. The policy changes *where* the requests go. It does not change the quantity of work.](../figures/fig10-utilization.png){width=60%}
+![The resource use for each arm. Equal values are the expected result. The policy changes *where* the requests go. It does not change the quantity of work.](../figures/fig10-utilization.png){width=57%}
 
 ## What we did not claim
 
@@ -561,7 +561,7 @@ There are three follow-up tasks. They are in the order of their value:
 # Appendix A: code and data artifacts
 
 You can calculate each figure and each statistic in this report again from the repository. You do
-not need a cluster and you do not need a GPU:
+need no cluster and no GPU:
 
 ```bash
 pip install -r requirements.txt && pytest benchmarks/ tests/ -q && ./scripts/reproduce.sh
