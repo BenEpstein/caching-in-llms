@@ -48,8 +48,9 @@ in the same path as in the container image. Each change has a `LOADAWARE PATCH` 
 
 | Pull request | Status |
 |---|---|
-| [production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029): expose the LMCache controller ports on the router Service | Open |
-| The `loadaware` policy into production-stack | Not sent |
+| [production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029): expose the LMCache controller reply and heartbeat ports on the router Service. Without this fix, the `kvaware` baseline silently degrades to round-robin | Open |
+| [production-stack#1035](https://github.com/vllm-project/production-stack/pull/1035): the `loadaware` routing policy on the current upstream main, with 46 offline tests | Open |
+| [LMCache#4471](https://github.com/LMCache/LMCache/pull/4471): the multi-holder `lookup()` that reports the matched tokens for each server, with new tests | Open |
 
 ### The score
 
