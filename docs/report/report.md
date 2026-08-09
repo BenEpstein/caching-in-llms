@@ -88,12 +88,6 @@ and that it works:
   p95 from 6.78 s to 5.96 s), and 19.0% fewer requests miss a first-token objective of 150 ms
   (p = 0.0021, a declared secondary metric).
 
-We registered two co-primary metrics before the comparison ran: load imbalance and TTFT p95. The
-imbalance result is significant. The paired TTFT test is not (−2.7%, p = 0.1153). We report this
-null result, and the Results section explains it: the fleet never made a queue at this operating
-point, so a better placement had no queueing delay to remove. Both changes are open upstream pull
-requests (see the Conclusion).
-
 ## Related work
 
 LMCache is the KV-cache layer of vLLM. It keeps prefixes in chunks across GPU memory, CPU memory
@@ -102,10 +96,6 @@ between servers. Its default eviction policy is LRU, and `POLICY_MAPPING` can ch
 one-page baseline justification (`docs/baseline-justification.md`) gives the full argument for
 this choice of baseline. The Production Stack supplies the router. Its stock policies are
 `roundrobin`, `session`, `kvaware` and `prefixaware`.
-
-The Dynamo KV-router of NVIDIA attacks the same problem in a different way. It counts the load in
-deduplicated KV blocks instead of requests. We measured our workload against that design and did
-not adopt it. The Discussion gives the reason.
 
 # Extension design
 
@@ -193,7 +183,7 @@ ablation arm in the Results. It shows if the load term does anything.
 This section gives the environment, the workload, the metrics and the statistical rules, so a
 reader can repeat the runs and can judge which parts are portable.
 
-**Vocabulary.** One **arm** is one router configuration (for example `loadaware` with β = 0.5).
+In this report, one **arm** is one router configuration (for example `loadaware` with β = 0.5).
 One **seed** is one replay of the workload with its own request order. One **cell** is one arm
 measured with all 20 seeds, and one **sweep** is a group of cells that ran as one campaign.
 
@@ -218,9 +208,9 @@ measure from the tree, and we never measure a pod with manual changes. **Each ce
 router image with the expected label before it records data.** Second, the two arms differ in the
 router only. The chart, the servers, the workload and the rate are the same.
 
-## Workload and operating point
+## The workload
 
-**Workload.** There is one frozen dataset. It has a pool of **128 shared prefixes of 2048
+There is one frozen dataset. It has a pool of **128 shared prefixes of 2048
 tokens**. Each request selects a prefix with a **Zipf distribution, s = 0.9**, then adds a unique
 suffix of 32 tokens and asks for 64 output tokens. Each seed sends 500 requests. There are **20
 seeds**. All seeds use the same pool. Only the order and the suffixes change. The program builds
@@ -229,7 +219,9 @@ manifest, so a changed workload stops the run instead of invalidating a comparis
 warning. This is the *repetitive-prompt* profile: it stresses the hit/miss ratio, which is the
 condition where placement matters.
 
-**Operating point.** The requests arrive open-loop as a Poisson process at **16 req/s**. A pilot
+## The operating point
+
+The requests arrive open-loop as a Poisson process at **16 req/s**. A pilot
 selected that rate, because at that rate the latency leaves its plateau: the TTFT p95 is 2.69
 times its idle value and the inter-token latency (ITL) p95 is 4.55 times its idle value. An
 earlier sweep at 10.5 req/s gave `num_requests_waiting` = 0.00 on both servers. Nothing made a
@@ -246,9 +238,9 @@ is `vllm:num_requests_running` of the busiest server divided by the most idle se
 rate is the vLLM prefix-cache counter. The throughput comes from the request rate and the token
 rate of the driver, for each seed. The GPU use and the GPU power come from DCGM.
 
-## Statistics and validity rules, registered first
+## Statistics, registered before the comparison ran
 
-**Statistics.** We registered the rules before the comparison ran. One seed replay is **one
+One seed replay is **one
 observation** (n = 20). The requests inside a seed are related through the queue, so we never use
 them as independent data. The tests are one-sided **exact Wilcoxon signed-rank tests** on the
 paired differences of each seed. The effect size is the median relative difference. The
@@ -257,7 +249,9 @@ metrics, TTFT p95 and load imbalance, so the Bonferroni threshold is **0.025**. 
 percentage in this report is the *median of the 20 paired relative differences*, never a ratio
 of pooled means.
 
-**Validity rules.** We also registered them first. We remove failed requests from the latency
+## Validity rules, also registered first
+
+We remove failed requests from the latency
 statistics, but we count them. A comparison is not valid if the error rates of the two arms are
 very different: the limit is a ratio of more than 2 *and* a difference of more than 1 percentage
 point. The command `analyze.py compare` **refuses** to pair two runs with a different rate or a
@@ -282,7 +276,7 @@ follow the order of this table, so they give one argument and not a list of numb
 | 7 | Is there an effect that a user sees? | **19.0% fewer** requests miss a first token at 150 ms (secondary, p = 0.0021). The ablation is null from 50 ms to 400 ms |
 | 8 | Does the gain need more hardware? | **No.** GPU, power, throughput and router CPU do not change. The KV-cache spread goes from 1.70 to 1.18 times |
 
-**The general picture.** Item 1 gives the size of the effect, item 2 shows that we can control
+Together the eight answers give the general picture: item 1 gives the size of the effect, item 2 shows that we can control
 it, items 3 and 4 show that the mechanism is real and repeats, item 5 shows how much of the
 parameter to use, and items 7 and 8 show that the gain is visible from outside and free. Item 6
 shows where the picture stops: the contribution is a mechanism, we measured it, and we give its
