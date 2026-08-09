@@ -257,13 +257,19 @@ Use the root of the repository as the build context. Both Dockerfiles copy files
 export REG=docker.io/<your-username>
 export TAG=$(git rev-parse --short HEAD)
 
-podman build -t $REG/lmstack-router-loadaware:$TAG -f Dockerfile .
-podman build -t $REG/bench-driver:$TAG -f Dockerfile.bench .
+podman build --platform linux/amd64 -t $REG/lmstack-router-loadaware:$TAG -f Dockerfile .
+podman build --platform linux/amd64 -t $REG/bench-driver:$TAG -f Dockerfile.bench .
 
 podman login docker.io
 podman push $REG/lmstack-router-loadaware:$TAG
 podman push $REG/bench-driver:$TAG
 ```
+
+`--platform linux/amd64` is required. The cluster nodes are amd64. A build on an Apple
+Silicon laptop without the flag makes an arm64 image, and the pod dies with
+`exec format error`. Do not fix a bad image by pushing again under the same tag: the pods
+pull with `IfNotPresent`, so a node that cached the bad image never sees the new one. Push
+under a new tag instead.
 
 Make both repositories public. The cluster pulls them with no credentials. For a private
 repository, add an image pull secret to the namespace yourself. The scripts do not make one.
@@ -313,9 +319,15 @@ Then run the sweep:
 benchmarks/run_sweep.sh 16
 ```
 
-If you built your own images in step 2, give their names also:
+If you built your own images in step 2, give their names also. The same four variables work
+for the smoke cell and for the sweep:
 
 ```bash
+ROUTER_REPO=<your-registry>/lmstack-router-loadaware \
+BENCH_REPO=<your-registry>/bench-driver \
+LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> \
+SEEDS="1 2" benchmarks/run_cell.sh loadaware-b0.5 16 results/smoke
+
 ROUTER_REPO=<your-registry>/lmstack-router-loadaware \
 BENCH_REPO=<your-registry>/bench-driver \
 LOADAWARE_TAG=<image-sha> BENCH_TAG=<image-sha> benchmarks/run_sweep.sh 16
