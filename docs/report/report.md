@@ -25,26 +25,38 @@ header-includes:
 
 # Introduction
 
-A KV cache keeps the attention state of a prompt prefix. A later request with the same prefix
-does not calculate that state again. On one server, the cache policy answers one question: which
-data to keep. On a fleet of servers, a different question comes first. **Which server holds the
-cache that can give a hit?** If the router sends a request to server B, the request cannot use a
-prefix that is in the cache of server A. The eviction policy of server A does not help.
+An LLM server answers a request in two phases. In the *prefill* phase, the server reads the full
+prompt and builds an attention state for each token. This state is the KV cache. In the *decode*
+phase, the server makes the output tokens one by one. For a long prompt, the prefill is the
+expensive part. The KV cache removes this cost for repeated content. An example with **one
+server**: many requests share one system prompt of 2048 tokens, and each request adds a short
+question. The first request pays the full prefill. The server keeps the KV state of the shared
+prefix. Each later request reuses that state and pays only for its own question. On one server,
+the cache policy answers one question: which data to keep when the memory is full. That is
+eviction.
 
-Placement is therefore a cache policy. It is not only a load-balancing detail. Our measurements
-show how large this effect is. We used the same workload for two routing policies. Round-robin
-placement gives a median TTFT p95 of **11.004 s**. Cache-aware placement gives **0.320 s**. This
-is a factor of **34**. The routing decision causes all of this difference. The vLLM prefix-cache
-hit rate is **0.682** for round-robin and 0.912 for cache-aware placement.
+Now put **two servers** behind a router. Each server has its own cache. The first request with a
+given prefix goes to server A. Server A pays the prefill and keeps the KV state. Then a second
+request with the same prefix arrives. If the router sends it to server A, the request hits the
+cache. If the router sends it to server B, server B holds nothing for this prefix. Server B pays
+the full 2048-token prefill again. The quality of the eviction policy on server A does not
+matter, because the request never reached server A. On a fleet, a new question therefore comes
+before eviction: **which server holds the cache that can give a hit?** Placement is a cache
+policy. It is not only a load-balancing detail.
+
+Our measurements show how large this effect is. We used the same workload for two routing
+policies. Round-robin placement gives a median TTFT p95 of **11.004 s**. Cache-aware placement
+gives **0.320 s**. This is a factor of **34**. The routing decision causes all of this
+difference. The vLLM prefix-cache hit rate is **0.682** for round-robin and 0.912 for cache-aware
+placement.
 
 The reason is important. Round-robin does not balance the load badly. **Round-robin balances
 better than the cache-aware baseline.** The load imbalance is the number of running requests on
 the busiest server divided by the number on the most idle server. A value of 1.0 is a perfect
-balance. The imbalance of round-robin is 1.490. The imbalance of `kvaware` is 2.358. But round-robin is still 34 times slower. Round-robin makes the number of requests equal.
-It does not make the work equal. If a request goes to the server that does not hold its prefix,
-that server must calculate a full prefill of 2048 tokens. The counts are equal, but the locality
-is lost. You must add load-awareness **to** cache-awareness. You must not replace one with the
-other.
+balance. The imbalance of round-robin is 1.490. The imbalance of `kvaware` is 2.358. But
+round-robin is still 34 times slower. Round-robin makes the number of requests equal. It does
+not make the work equal, because each request on the wrong server pays the full prefill again.
+You must add load-awareness **to** cache-awareness. You must not replace one with the other.
 
 The baseline uses one half of this. The vLLM Production Stack has a `kvaware` router. This router
 asks the LMCache controller which server holds the prefix of a request. Then it sends the request
@@ -272,7 +284,7 @@ replace it. The section *An instrument problem, not a result* gives the diagnosi
 two arm columns are medians of all seeds. The change column is the median of the 20 paired
 differences. Only the paired value is the result.
 
-![The TTFT distribution for each policy, from p50 to p99. The bars are the seed medians of 20 seeds. Both `loadaware` arms are below the baseline at each percentile. The spreads of the seeds overlap. This is the reason that the registered test gives a null result and not a latency improvement.](../figures/fig5-percentiles.png){width=82%}
+![The TTFT distribution for each policy, from p50 to p99. The bars are the seed medians of 20 seeds. Both `loadaware` arms are below the baseline at each percentile. The spreads of the seeds overlap. This is the reason that the registered test gives a null result and not a latency improvement.](../figures/fig5-percentiles.png){width=75%}
 
 We give one secondary metric from the same cells:
 
