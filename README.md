@@ -224,7 +224,7 @@ cd caching-in-llms
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pytest benchmarks/ tests/ -q       # 194 tests
+pytest benchmarks/ tests/ -q       # 197 tests
 ./scripts/reproduce.sh             # calculates each reported number again
 ```
 

@@ -6,10 +6,11 @@ name: Report
 # from the repository on every push, so it can never drift from the figures and numbers
 # it cites, and no reviewer needs a LaTeX toolchain to read it.
 #
-# The §2 cap is a GATE, not a notice: "one-page (max)" is a hard number in the spec, and a limit
-# nobody enforces is a limit that gets exceeded quietly. The report's 8-12 is gated on the FLOOR
-# only - the spec reads "8-12 pages plus any appendices", so a total above 12 is expected once
-# the table of contents and Appendix A are counted, and failing on it would be wrong.
+# Both page caps are GATES, not notices: a limit nobody enforces is a limit that gets exceeded
+# quietly. §2 is "one-page (max)". The report is "a single PDF (8-12 pages) plus any appendices"
+# - the spec would allow the appendix to sit outside the count, but we hold the WHOLE file to 12
+# so the number a grader sees on page 1 of 12 is the number the spec asks for. That is why the
+# report carries no table of contents and Appendix A is one page.
 
 on:
   push:
@@ -83,15 +84,15 @@ jobs:
         run: |
           report_pages=$(pdfinfo report.pdf | awk '/^Pages/{print $2}')
           just_pages=$(pdfinfo baseline-justification.pdf | awk '/^Pages/{print $2}')
-          echo "::notice title=Report length::${report_pages} pages (spec: 8-12 + appendices)"
+          echo "::notice title=Report length::${report_pages} pages (target: 8-12, appendix included)"
           echo "::notice title=§2 length::${just_pages} page(s) (spec: 1 max)"
           fail=0
           if [ "$just_pages" -gt 1 ]; then
             echo "::error title=§2 over budget::baseline-justification.pdf is ${just_pages} pages, the spec caps it at 1"
             fail=1
           fi
-          if [ "$report_pages" -lt 8 ]; then
-            echo "::error title=Report under budget::report.pdf is ${report_pages} pages, the spec asks for 8-12 plus appendices"
+          if [ "$report_pages" -lt 8 ] || [ "$report_pages" -gt 12 ]; then
+            echo "::error title=Report out of budget::report.pdf is ${report_pages} pages; the target is 8-12 including Appendix A"
             fail=1
           fi
           exit $fail
