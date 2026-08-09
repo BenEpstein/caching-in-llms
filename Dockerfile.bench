@@ -42,4 +42,4 @@ ENV PYTHONUNBUFFERED=1 \
 LABEL org.opencontainers.image.title="in-cluster benchmark driver" \
       org.opencontainers.image.description="Replays the frozen benchmark workload against the \
 router's ClusterIP from inside the cluster, so client-side TTFT contains no WAN (BGU final project)" \
-      org.opencontainers.image.source="https://github.com/BenEpstein/caching-in-llms"
+      org.opencontainers.image.source="https://github.com/BenEpstein/loadaware-vllm-router"

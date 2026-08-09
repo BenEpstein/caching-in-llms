@@ -31,4 +31,4 @@ USER 1001
 LABEL org.opencontainers.image.title="lmstack-router with loadaware placement" \
       org.opencontainers.image.description="vLLM production-stack router + LMCache controller, \
 patched with multi-instance lookup and loadaware KV-cache-aware request placement (BGU final project)" \
-      org.opencontainers.image.source="https://github.com/BenEpstein/caching-in-llms"
+      org.opencontainers.image.source="https://github.com/BenEpstein/loadaware-vllm-router"

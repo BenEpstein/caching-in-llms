@@ -109,8 +109,8 @@ rate. Run `load_gate.py` after a cell, to see if the rate made load on the serve
 | `podman` or `docker` | any | Builds the two images |
 
 ```bash
-git clone https://github.com/BenEpstein/caching-in-llms.git
-cd caching-in-llms
+git clone https://github.com/BenEpstein/loadaware-vllm-router.git
+cd loadaware-vllm-router
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -574,7 +574,7 @@ cluster time. More seeds is therefore the cheap way to make the test able to ans
 ### The statistics were selected before the measurement
 
 The test and the threshold are on issue
-[#31](https://github.com/BenEpstein/caching-in-llms/issues/31). Both were agreed before the
+[#31](https://github.com/BenEpstein/loadaware-vllm-router/issues/31). Both were agreed before the
 first cell. The test is a one-sided exact Wilcoxon signed-rank test on the 20 paired seeds. The
 threshold is 0.025. This is the Bonferroni correction for two primary measurements. The effect
 size is the median relative reduction, with a bootstrap confidence interval of 95%.

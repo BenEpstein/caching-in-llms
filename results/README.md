@@ -60,7 +60,7 @@ other five (2026-08-06 14:41). The `sweep_id` guard in `analyze.py compare` ther
 **not** refuse a paired test against it - the protection is convention: `roundrobin` is a
 framing cell for fig12, passed to `plot_results.py` as `--comparator`, **never positionally**,
 and it enters no paired test. Folding it into the sweep was decided on
-[#75](https://github.com/BenEpstein/caching-in-llms/issues/75); the window provenance survives
+[#75](https://github.com/BenEpstein/loadaware-vllm-router/issues/75); the window provenance survives
 in its `run.json` timestamps.
 
 ## Generation 3 - the 7-cell sweep (`gen3-7cell/`)
@@ -124,12 +124,12 @@ every run; a mismatch fails the build.
 
 The 2026-08-03 characterization sweeps (7.5–16 req/s), the 2026-08-04 absolute-β cells, and the
 pilots, probes and aborted runs were pruned by
-[#57](https://github.com/BenEpstein/caching-in-llms/issues/57). They used the pre-normalization
+[#57](https://github.com/BenEpstein/loadaware-vllm-router/issues/57). They used the pre-normalization
 policy or a worse instrument. They are in git history - `git log - results/` finds them.
 The flat pre-#75 layout (`results/<run>/` with the generations interleaved) is also in history;
 paths in CHANGELOG entries and closed tickets from before 2026-08-08 use it.
 
 Two numbers in the report are measured on the 2026-08-04 cells and are **not** recomputable
 here: the 240.6 ms TTFT p10 floor and the ~226 → ~21 ms non-engine collapse. Tracked on
-[#8](https://github.com/BenEpstein/caching-in-llms/issues/8), and flagged in the report beside
+[#8](https://github.com/BenEpstein/loadaware-vllm-router/issues/8), and flagged in the report beside
 the numbers themselves.
