@@ -63,7 +63,7 @@ balance pull in opposite directions. The standard router pulls in one direction 
    controls the policy. The parameter has no unit.
 
 **What the six-cell sweep shows.** The policy decreases the load imbalance by **48.1%**
-(p < 0.0001, n = 20 paired seeds). An independent sweep two days later gives **49.4%**. The
+(p < 0.0001, n = 20 paired seeds). An independent sweep gives **49.4%**. The
 latency medians also improve: TTFT p95 goes from 320 ms to 295 ms, and end-to-end p95 goes from
 6.78 s to 5.96 s. On goodput, a declared secondary metric, 19.0% fewer requests miss a
 first-token objective of 150 ms (p = 0.0021). An ablation shows that the mechanism is correct.
@@ -272,7 +272,7 @@ replace it. The section *An instrument problem, not a result* gives the diagnosi
 two arm columns are medians of all seeds. The change column is the median of the 20 paired
 differences. Only the paired value is the result.
 
-![The TTFT distribution for each policy, from p50 to p99. The bars are the seed medians of 20 seeds. Both `loadaware` arms are below the baseline at each percentile. The spreads of the seeds overlap. This is the reason that the registered arm is a null result and not a latency improvement.](../figures/fig5-percentiles.png){width=88%}
+![The TTFT distribution for each policy, from p50 to p99. The bars are the seed medians of 20 seeds. Both `loadaware` arms are below the baseline at each percentile. The spreads of the seeds overlap. This is the reason that the registered test gives a null result and not a latency improvement.](../figures/fig5-percentiles.png){width=82%}
 
 We give one secondary metric from the same cells:
 
@@ -289,7 +289,7 @@ shows 50 ms to 400 ms. The arms are different across the full range. Second, the
 is negative across that same range. A measurement artefact does not give that result. We give
 this metric **beside** the TTFT null result. We never give it instead of the null result.
 
-![A secondary metric. It is not a claim. Goodput against the TTFT objective, from 50 ms to 400 ms. The upper shaded band shows what the load term gives against the baseline. The grey band below shows the loss when the load term is off. The policy `roundrobin` is the floor that has no cache data. The marker is at the **documented objective of 150 ms. It is not at the best point of the sweep**.](../figures/fig12-goodput.png){width=54%}
+![A secondary metric. It is not a claim. Goodput against the TTFT objective, from 50 ms to 400 ms. The upper shaded band shows what the load term gives against the baseline. The grey band below shows the loss when the load term is off. The policy `roundrobin` is the floor that has no cache data. The marker is at the **documented objective of 150 ms**. It is not at the best point of the sweep.](../figures/fig12-goodput.png){width=62%}
 
 This is the β grid at the operating point. The values are medians of 20 seeds.
 
@@ -307,7 +307,7 @@ the best imbalance value. We set β at the point where the cost in locality is a
 
 ## The headline result repeats
 
-We did the full grid again on 2026-08-08. This was an independent sweep of seven cells. It used
+We did the full grid again as an independent sweep of seven cells. It used
 the same rate, the same frozen workload and the same router and driver images. The data is in
 `results/gen3-7cell/`. The policy did not change. Only the set of cells and the time changed.
 
@@ -355,12 +355,12 @@ operating point. It is not evidence against the policy. The correct statement is
 above. It is not a metric that we select after the test.
 
 [^wan]: These two values are the one exception to "each number here regenerates from committed
-data". They come from the cells of 2026-08-04. Those cells are in the git history and not in the
+data". They come from earlier cells. Those cells are in the git history and not in the
 tree. The WAN sweep that we keep gives the same argument from committed data: p10 157.4 ms to
 101.9 ms, the term that is not from the server 124.6 ms to 48.5 ms, and the fraction of 45% to
 59% above.
 
-![The load balance across the two servers. This is what the policy changes.](../figures/fig6-load-balance.png){width=50%}
+![The load balance across the two servers. This is what the policy changes.](../figures/fig6-load-balance.png){width=58%}
 
 ## The ablation is the important result
 
@@ -411,7 +411,7 @@ servers. It measures each server against its **own** local cache. It does not me
 router selected the server that holds the KV data. Its value is near 0.95 on each arm. This
 includes round-robin. Each hit-rate value in this report is the vLLM prefix-cache counter.
 
-![The TTFT p95 against β at 16 req/s, with the cost in the cache hit rate. The hit rate decreases when β increases, from 91.2% to 86.1%. This is the mechanism of the change of direction at β = 2.0.](../figures/fig7-beta-tradeoff.png){width=52%}
+![The TTFT p95 against β at 16 req/s, with the cost in the cache hit rate. The hit rate decreases when β increases, from 91.2% to 86.1%. This is the mechanism of the change of direction at β = 2.0.](../figures/fig7-beta-tradeoff.png){width=60%}
 
 ## Resource cost
 
@@ -435,7 +435,7 @@ Thus those two series do not exist. A statement about the missing data is a part
 The program `utilization.py` stops if the series coverage is not sufficient. It does not
 calculate an average across the gaps.
 
-![The resource use for each arm. Equal values are the expected result. The policy changes *where* the requests go. It does not change the quantity of work.](../figures/fig10-utilization.png){width=52%}
+![The resource use for each arm. Equal values are the expected result. The policy changes *where* the requests go. It does not change the quantity of work.](../figures/fig10-utilization.png){width=60%}
 
 ## What we did not claim
 
@@ -475,12 +475,13 @@ But this experiment did not measure a burst that uses that capacity.
 **β used raw concurrency, and that was the largest defect of the design.** The first version of
 the load term used the raw counts of requests in flight. Thus the correct β changed with the
 offered rate. Two calibration probes at the *same* rate gave β = 0.034 and β = 0.013. A parameter
-that you must calculate again for each deployment is not a tunable parameter. It is a risk. This
-is worse when the probe does not agree with itself. The correction was to divide the load by the
-fleet mean. The benefit term already used the prompt length in the same way. This made both terms
-fractions. It made β an exchange rate. It also removed α. **This is the one design change that we
-made because of a measured weakness and not because of a result.** It did not follow a p-value.
-It gave a meaning to the parameter.
+that you must calculate again for each deployment is not a tunable parameter. It is a risk. The
+correction was to divide the load by the fleet mean. The benefit term already used the prompt
+length in the same way. This made both terms fractions. It made β an exchange rate. It also
+removed a second weight, α, that the first design put on the benefit term. A benefit that is
+already a fraction does not need its own weight. **This is the one design change that we made
+because of a measured weakness and not because of a result.** It did not follow a p-value. It
+gave a meaning to the parameter.
 
 **Load counted in deduplicated blocks, and why we did not use it.** The Dynamo KV-router of
 NVIDIA counts the load in deduplicated blocks and not in requests. We measured the deduplication
@@ -495,9 +496,9 @@ not call `on_request_complete`. Thus the gauge of the requests in flight moves b
 server during a run. This is against the extension. It is approximately 10 times smaller than the
 reported effect. A cell with no failures gives the same result. Second, the KV registry of
 LMCache loses admissions for approximately 40 s after each restart of the router. A prefix that
-the system stores in that time stays invisible to the controller. It stays invisible for the full
-life of the server process. Both arms then use QPS routing and look the same for the wrong
-reason. Each run here uses a probe. The probe must pass before the warm-up.
+the system stores in that time stays invisible to the controller for the full life of the server
+process. Both arms then use QPS routing and look the same for the wrong reason. Each run here
+uses a probe. The probe must pass before the warm-up.
 
 # Conclusion and future work
 
@@ -522,20 +523,21 @@ chart. The chart `vllm-stack` does not expose the reply port and the heartbeat p
 LMCache controller (9001 and 9002) on the router Service. Thus no server registers and each
 lookup fails. There is no error message. The KV-aware baseline becomes round-robin routing
 without a warning. This would make both arms of this experiment look the same for the wrong
-reason. We opened
-[production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029) to correct
-the chart. Each cell here applies the same patch before its first request. We also wrote the
-policy for upstream use. The policy `kvaware` does not change. The policy `loadaware` is a new
-enum member, a new factory branch and a new class. The controller change keeps the return shape
-for the callers that exist.
+reason. [production-stack#1029](https://github.com/vllm-project/production-stack/pull/1029)
+corrects the chart. Each cell here applies the same patch before its first request. The two
+changes of this project are also upstream PRs.
+[production-stack#1035](https://github.com/vllm-project/production-stack/pull/1035) gives the
+`loadaware` policy on the current upstream main, with 46 offline tests.
+[LMCache#4471](https://github.com/LMCache/LMCache/pull/4471) gives the multi-holder lookup, with
+new tests. Both keep the existing interfaces: `kvaware` does not change, and `lookup()` keeps
+its return shape for the callers that exist.
 
 There are three follow-up tasks. They are in the order of their value:
 
 1. **Fleets with more than two servers.** The formula uses the fleet mean and not a second
-   server. Thus it generalises on paper. But each measurement here uses two servers. With two
-   servers, one server above the mean puts one server below the mean. With three or more servers,
-   the selection can move to one idle server. We did not test if β must change with the size of
-   the fleet.
+   server. Thus it generalises on paper. But each measurement here uses two servers. With three
+   or more servers, the selection can move to one idle server. We did not test if β must change
+   with the size of the fleet.
 2. **Measurement with a cache that is too small.** Each effect here must become larger when the
    cache cannot hold the working set. Deduplicated-block accounting gives a benefit in that
    condition.
@@ -571,7 +573,7 @@ Each cell ran at 16 req/s with 20 seeds against the same frozen workload.
 | Sweep | Directory | Function |
 |:-------|:------------------------|:----------------------------------------------|
 | gen-2 | `results/gen2-confirmatory/` | **The reported results**, and `docs/figures/`. Six cells: `kvaware` (`20260805-230541`), β = 0 (`20260806-002645`), β = 0.5 (`20260805-232541`, headline), β = 1.0 (`20260805-234559`), β = 2.0 (`20260806-000626`), `roundrobin` (`20260806-144135`) |
-| gen-3 | `results/gen3-7cell/` | The independent repetition, two days later. The same arms and β = 0.25. It has its own tables and `docs/figures-gen3/` |
+| gen-3 | `results/gen3-7cell/` | The independent repetition. The same arms and β = 0.25. It has its own tables and `docs/figures-gen3/` |
 | gen-1 | `results/gen1-wan/` | The superseded WAN sweep. **Not a result.** It is the evidence for *An instrument problem* |
 
 We do not pool gen-3 with gen-2. Two different time windows increase `n`, but the seeds are not
