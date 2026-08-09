@@ -220,8 +220,8 @@ This procedure calculates each reported number again from the data in this repos
 no GPU and no cluster. It takes approximately two minutes.
 
 ```bash
-git clone https://github.com/BenEpstein/caching-in-llms.git
-cd caching-in-llms
+git clone https://github.com/BenEpstein/loadaware-vllm-router.git
+cd loadaware-vllm-router
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -238,8 +238,8 @@ disagree with its data.
 To get the two PDF documents, use these commands:
 
 ```bash
-gh run download -n report-pdf                 -R BenEpstein/caching-in-llms
-gh run download -n baseline-justification-pdf -R BenEpstein/caching-in-llms
+gh run download -n report-pdf                 -R BenEpstein/loadaware-vllm-router
+gh run download -n baseline-justification-pdf -R BenEpstein/loadaware-vllm-router
 ```
 
 ### Option 2: run the full benchmark on a cluster
